@@ -665,7 +665,9 @@ No toca ni un archivo de los que hoy funcionan.
 
 **Ninguno funcional.** Ni una línea de código, configuración o dato del proyecto fue modificada.
 
-Lo único que se añade es **este archivo de informe** (`AUDITORIA_ETAPA0_Plataforma_PMTs.md`), que es documentación y no afecta a nada.
+Se añaden dos archivos, ambos sin efecto sobre el funcionamiento:
+- **`AUDITORIA_ETAPA0_Plataforma_PMTs.md`** — este informe. Es documentación.
+- **`.gitignore`** — al verificar la sintaxis de `proceso_pmt_qgis.py`, Python dejó una carpeta temporal `__pycache__/`. La borré y añadí este archivo para que esos temporales no vuelvan a colarse al repositorio. Resuelve además parte del hallazgo B-5.
 
 **Cambios incidentales fuera del proyecto**, todos en carpetas temporales de esta sesión y sin efecto sobre el repositorio:
 - Clon de solo lectura de `Control-y-Articulacion-de-PMTs-EPM` en `/home/user/acgst-epm/` (no se puede escribir en él desde esta sesión).

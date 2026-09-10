@@ -1,0 +1,12 @@
+# Artefactos temporales de Python (los genera cualquier verificación de sintaxis)
+__pycache__/
+*.py[cod]
+
+# Sistema operativo
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Temporales de edición
+*~
+*.tmp
