@@ -1,0 +1,20 @@
+[
+  {
+    "contrato": "CW323402",
+    "contratista": "CONSORCIO_INFRAESTRUCTURA_DE_AGUAS_2024",
+    "proyecto": "ORFELINATO",
+    "municipios": ["Medellín"]
+  },
+  {
+    "contrato": "CW322377",
+    "contratista": "Consorcio AMT24",
+    "proyecto": "AMPLIACION_TANQUES",
+    "municipios": ["Medellín", "Envigado"]
+  },
+  {
+    "contrato": "CW328120",
+    "contratista": "SANEAR S.A.S",
+    "proyecto": "EDIE1",
+    "municipios": ["Medellín"]
+  }
+]
