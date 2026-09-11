@@ -37,6 +37,7 @@
  */
 
 import { aEcef, gradARad } from './elipsoide.js';
+import { unir } from './cajas.js';
 
 /**
  * Crea un plano tangente local centrado en (lonG, latG).
@@ -77,19 +78,8 @@ export function planoLocal(lonG, latG) {
  * @param {Array<{minLon:number,minLat:number,maxLon:number,maxLat:number}>} cajas
  */
 export function planoParaCajas(cajas) {
-  let minLat = Infinity, maxLat = -Infinity;
-  let minLon = Infinity, maxLon = -Infinity;
-  for (const c of cajas) {
-    if (c.minLat < minLat) minLat = c.minLat;
-    if (c.maxLat > maxLat) maxLat = c.maxLat;
-    if (c.minLon < minLon) minLon = c.minLon;
-    if (c.maxLon > maxLon) maxLon = c.maxLon;
-  }
+  const { minLat, maxLat, minLon, maxLon } = cajas.reduce(unir);
   const latRef = (minLat + maxLat) / 2;
   let lonRef = (minLon + maxLon) / 2;
-  // Si el arco es más corto por el antimeridiano, el centro está al otro lado.
-  if (maxLon - minLon > 180) {
-    lonRef = lonRef > 0 ? lonRef - 180 : lonRef + 180;
-  }
   return planoLocal(lonRef, latRef);
 }

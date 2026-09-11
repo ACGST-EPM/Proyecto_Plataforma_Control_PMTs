@@ -139,13 +139,15 @@ test('ANTIMERIDIANO: con lineas, no solo con puntos', async () => {
 });
 
 test('ANTIMERIDIANO: dos trazados realmente lejanos NO se relacionan', async () => {
-  // Control negativo: el arreglo no puede consistir en dejar pasar todo.
+  // Control negativo: no inventar cercania. La poda angular se retiro en 1.3;
+  // este par excede el dominio y debe conservarse como no evaluable.
   const r = await analizar([archivo('m.kmz', [
     F.placemark('ESTE', desc({ contrato: 'CW1' }), F.punto([179.0, 10.0])),
     F.placemark('OESTE', desc({ contrato: 'CW2' }), F.punto([-179.0, 10.0])),
   ])]);
   assert.equal(r.relaciones.length, 0, 'estan a ~220 km: no deben relacionarse');
-  assert.equal(r.estadisticas.paresDescartadosPorCaja, 1);
+  assert.equal(r.estadisticas.paresDescartadosPorCaja, 0);
+  assert.equal(r.estadisticas.paresNoEvaluablesEspacialmente, 1);
 });
 
 test('ANTIMERIDIANO: tambien funciona cerca de los polos', async () => {

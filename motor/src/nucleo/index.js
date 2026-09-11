@@ -37,7 +37,8 @@ const esKml = (n) => /\.kml$/i.test(n ?? '');
  */
 export async function leerArchivo(archivo, config = {}) {
   const nombre = archivo?.nombre ?? '(sin nombre)';
-  const informe = { nombre, ok: false, registros: [], errores: [], avisos: [], placemarks: 0 };
+  const informe = { nombre, ok: false, estadoLectura: 'fallida', coberturaCompleta: false,
+    motivosCobertura: [], registros: [], errores: [], avisos: [], placemarks: 0 };
   try {
     if (!archivo || archivo.datos == null) {
       informe.errores.push('no se recibio contenido para este archivo');
@@ -50,6 +51,7 @@ export async function leerArchivo(archivo, config = {}) {
       const r = await extraerKml(archivo.datos);
       textoKml = r.texto;
       informe.avisos.push(...r.avisos);
+      if (r.otrosKml.length) informe.motivosCobertura.push(...r.avisos);
     } else if (esKml(nombre)) {
       const d = decodificarTexto(archivo.datos);
       textoKml = d.texto;
@@ -59,14 +61,17 @@ export async function leerArchivo(archivo, config = {}) {
       return informe;
     }
 
-    const { placemarks, errores, avisosDocumento } = leerKml(textoKml, nombre);
+    const { placemarks, errores, avisosDocumento, motivosCobertura } = leerKml(textoKml, nombre);
     informe.errores.push(...errores);
     informe.avisos.push(...avisosDocumento);
+    informe.motivosCobertura.push(...motivosCobertura);
     informe.placemarks = placemarks.length;
 
     const opciones = resolverConfig(config);
     informe.registros = placemarks.map((p) => aRegistro(p, opciones));
-    informe.ok = informe.errores.length === 0;
+    informe.estadoLectura = informe.errores.length ? 'fallida' : informe.motivosCobertura.length ? 'parcial' : 'completa';
+    informe.coberturaCompleta = informe.estadoLectura === 'completa';
+    informe.ok = informe.coberturaCompleta;
     return informe;
   } catch (e) {
     informe.errores.push(e?.message ? String(e.message) : String(e));
@@ -93,15 +98,21 @@ export async function analizar(archivos, config = {}) {
   const msLectura = Date.now() - t0;
 
   const desamb = desambiguar(registros);
-  const { relaciones, estadisticas } = calcularRelaciones(registros, cfg);
+  const { relaciones, paresNoEvaluablesEspacialmente, estadisticas } = calcularRelaciones(registros, cfg);
 
   return {
     config: cfg,
     archivos: informes,
     registros,
     relaciones,
+    paresNoEvaluablesEspacialmente,
+    coberturaCompleta: informes.length > 0 && informes.every((a) => a.coberturaCompleta),
     calidad: {
       ...resumenCalidad(registros),
+      archivosCompletos: informes.filter((a) => a.estadoLectura === 'completa').length,
+      archivosParciales: informes.filter((a) => a.estadoLectura === 'parcial').length,
+      archivosFallidos: informes.filter((a) => a.estadoLectura === 'fallida').length,
+      paresNoEvaluablesEspacialmente: paresNoEvaluablesEspacialmente.length,
       duplicadosDesambiguados: desamb.duplicadosExactos,
       idsRepetidosEnOrigen: desamb.idsRepetidos,
       idsUnicos: new Set(registros.map((r) => r.id)).size === registros.length,
@@ -123,21 +134,28 @@ export async function analizar(archivos, config = {}) {
 export async function ejecutarLegado(archivos) {
   let placemarks = [];
   const errores = [];
+  const motivosCobertura = [];
   for (const a of archivos) {
     try {
       let texto;
-      if (/\.kmz$/i.test(a.nombre)) texto = (await extraerKml(a.datos)).texto;
+      if (/\.kmz$/i.test(a.nombre)) {
+        const z = await extraerKml(a.datos);
+        texto = z.texto;
+        if (z.otrosKml.length) motivosCobertura.push(...z.avisos.map((m) => `${a.nombre}: ${m}`));
+      }
       else if (typeof a.datos === 'string') texto = a.datos;
       else texto = decodificarTexto(a.datos).texto;
       const r = leerKml(texto, a.nombre);
       errores.push(...r.errores.map((e) => `${a.nombre}: ${e}`));
+      motivosCobertura.push(...r.motivosCobertura.map((m) => `${a.nombre}: ${m}`));
       placemarks = placemarks.concat(r.placemarks);
     } catch (e) {
       errores.push(`${a.nombre}: ${e?.message ?? e}`);
     }
   }
   const { filas, resumen, noContrastables } = analizarLegado(placemarks);
-  return { filas, resumen, errores, noContrastables, placemarks: placemarks.length };
+  return { filas, resumen, errores, noContrastables, placemarks: placemarks.length,
+    motivosCobertura, coberturaCompleta: archivos.length > 0 && !errores.length && !motivosCobertura.length };
 }
 
 /** Exporta los registros como FeatureCollection GeoJSON estandar. */

@@ -330,7 +330,8 @@ function pintarResumen(ms) {
     <ul class="limpia">
       <li>${marca(c.coinciden)} Los dos caminos de reproducción de QGIS dan lo mismo, alerta por alerta.</li>
       <li>${marca(c.hayEntrada)} La entrada contiene trazados legibles (${c.trazadosMotor}).</li>
-      <li>${marca(c.lecturaLimpia)} Todos los archivos se leyeron sin errores.</li>
+      <li>${marca(c.lecturaLimpia)} Lectura completa, sin errores ni contenido omitido.</li>
+      <li>${marca(!c.paresNoEvaluablesEspacialmente)} Todos los pares del cotejo son evaluables espacialmente.</li>
       <li>${marca(c.alcanceContrastado)} Todas las geometrías son de un tipo contrastado contra QGIS.</li>
     </ul>`;
 
@@ -359,6 +360,8 @@ function pintarResumen(ms) {
 
   $('tarjetasNuevo').innerHTML =
     tarjeta(N.length, 'relaciones dentro del umbral') +
+    tarjeta(RESULTADO.estadisticas.paresEvaluadosFueraDelUmbral, 'pares evaluados fuera del umbral', 'gris') +
+    tarjeta(RESULTADO.paresNoEvaluablesEspacialmente.length, 'pares no evaluables espacialmente', 'naranja') +
     tarjeta(ni, 'con contacto físico real', 'rojo') +
     tarjeta(nt, 'con coincidencia en el tiempo', 'naranja') +
     tarjeta(sinCoincidir, 'sin coincidencia en el tiempo', 'azul') +
@@ -400,6 +403,7 @@ function pintarResumen(ms) {
 const par = (r) => [r.idA, r.idB].sort().join('|');
 
 function estadoDe(r) {
+  if (r.espacialEvaluable === false) return { t: 'no evaluable espacialmente', c: 'p-gris' };
   // "No evaluable" es un estado propio: significa que las fechas del trazado no
   // permiten decidirlo. No es lo mismo que "no coinciden".
   if (!r.traslapeEvaluable) return { t: 'temporalidad no evaluable', c: 'p-gris' };
@@ -410,7 +414,8 @@ function estadoDe(r) {
 }
 
 const FILTROS = [
-  ['todas', 'Todas'],
+  ['todas', 'Dentro del umbral'],
+  ['espacial', 'No evaluables espacialmente'],
   ['tocan', 'Se tocan físicamente'],
   ['tiempo', 'Coinciden en el tiempo'],
   ['noeval', 'Temporalidad no evaluable'],
@@ -436,7 +441,8 @@ function pintarRelaciones() {
   const idN = new Set(RESULTADO.relaciones.map(par));
   const idL = new Set(LEGADO.relaciones.map(par));
   let filas;
-  if (FILTRO === 'desaparecen') filas = LEGADO.relaciones.filter((r) => !idN.has(par(r)));
+  if (FILTRO === 'espacial') filas = RESULTADO.paresNoEvaluablesEspacialmente;
+  else if (FILTRO === 'desaparecen') filas = LEGADO.relaciones.filter((r) => !idN.has(par(r)));
   else if (FILTRO === 'aparecen') filas = RESULTADO.relaciones.filter((r) => !idL.has(par(r)));
   else {
     filas = RESULTADO.relaciones.filter((r) =>
@@ -457,11 +463,11 @@ function pintarRelaciones() {
   $('cuerpoRel').innerHTML = filas.map((r) => {
     const e = estadoDe(r);
     return `<tr>
-      <td><span class="pastilla ${e.c}">${e.t}</span></td>
+      <td><span class="pastilla ${e.c}">${e.t}</span>${r.motivoNoEvaluableEspacial ? '<br>' + escapar(r.motivoNoEvaluableEspacial) : ''}</td>
       <td class="mono">${escapar(r.contratoA)}<br>${escapar(r.contratoB)}</td>
-      <td>${escapar(r.frenteA ?? '—')}<br>${escapar(r.frenteB ?? '—')}</td>
+      <td>${escapar(r.frenteA ?? '—')}<br>${escapar(r.frenteB ?? '—')}${r.espacialEvaluable === false ? '<br><small>' + escapar(r.idA) + '<br>' + escapar(r.idB) + '</small>' : ''}</td>
       <td class="num">${r.distanciaMetros === null ? '—' : r.distanciaMetros.toFixed(1) + ' m'}</td>
-      <td>${r.intersecanFisicamente ? '<b style="color:var(--rojo)">Sí</b>' : 'No'}</td>
+      <td>${r.espacialEvaluable === false ? 'No se puede saber' : r.intersecanFisicamente ? '<b style="color:var(--rojo)">Sí</b>' : 'No'}</td>
       <td>${r.hayTraslapeTemporal
         ? '<b style="color:var(--naranja)">Sí</b>'
         : (r.traslapeEvaluable
@@ -479,6 +485,9 @@ function pintarRelaciones() {
 function pintarCalidad() {
   const c = RESULTADO.calidad;
   $('tarjetasCalidad').innerHTML =
+    tarjeta(c.archivosCompletos, 'archivos completos', 'verde') +
+    tarjeta(c.archivosParciales, 'archivos parciales', c.archivosParciales ? 'naranja' : '') +
+    tarjeta(c.archivosFallidos, 'archivos fallidos', c.archivosFallidos ? 'rojo' : '') +
     tarjeta(c.total, 'trazados leídos') +
     tarjeta(c.analizables, 'completos y analizables', 'verde') +
     tarjeta(c.sinVigenciaValida, 'con fechas inservibles', c.sinVigenciaValida ? 'rojo' : '') +
@@ -493,9 +502,10 @@ function pintarCalidad() {
   $('detalleCalidad').innerHTML =
     (fallidos.length
       ? `<div class="aviso error"><b>${fallidos.length} archivo(s) no se pudieron leer completos:</b><ul class="limpia">` +
-        fallidos.map((a) => `<li>${escapar(a.nombre)}: ${escapar(a.errores.join('; '))}</li>`).join('') +
+        fallidos.map((a) => `<li>${escapar(a.nombre)} — lectura ${escapar(a.estadoLectura)}: ${escapar([...a.errores, ...a.motivosCobertura].join('; '))}</li>`).join('') +
         '</ul>Los demás archivos se procesaron con normalidad.</div>'
-      : '<div class="aviso ok">Todos los archivos se leyeron sin errores.</div>') +
+      : '<div class="aviso ok">Todos los archivos se leyeron completos, sin errores ni contenido omitido.</div>') +
+    (c.paresNoEvaluablesEspacialmente ? `<div class="aviso"><b>${c.paresNoEvaluablesEspacialmente} par(es) no evaluables espacialmente.</b> No se ha determinado si existe cercanía. Consulte sus identificadores y motivos en «No evaluables espacialmente» y descargue esa tabla para conservar el diagnóstico.</div>` : '') +
     (avisos.length
       ? `<details open><summary>Avisos por frecuencia (${avisos.length} tipos)</summary>
          <table style="margin-top:8px"><thead><tr><th class="num">Veces</th><th>Aviso</th></tr></thead><tbody>` +
@@ -518,18 +528,18 @@ function descargarCsv(filas) {
   const cab = ['ESTADO', 'CONTRATO_A', 'CONTRATO_B', 'FRENTE_A', 'FRENTE_B', 'ID_A', 'ID_B',
     'DISTANCIA_M', 'SE_TOCAN', 'COINCIDEN_EN_TIEMPO', 'TRASLAPE_INICIO', 'TRASLAPE_FIN',
     'TRASLAPE_DIAS', 'TRASLAPE_HORAS', 'VIGENCIA_A_INICIO', 'VIGENCIA_A_FIN',
-    'VIGENCIA_B_INICIO', 'VIGENCIA_B_FIN', 'UMBRAL_APLICADO_M'];
+    'VIGENCIA_B_INICIO', 'VIGENCIA_B_FIN', 'UMBRAL_APLICADO_M', 'ESTADO_ESPACIAL', 'MOTIVO_ESPACIAL', 'AVISOS'];
   const esc = (v) => {
     const s = v === null || v === undefined ? '' : String(v);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
   const cuerpo = filas.map((r) => [
     estadoDe(r).t, r.contratoA, r.contratoB, r.frenteA, r.frenteB, r.idA, r.idB,
-    r.distanciaMetros, r.intersecanFisicamente ? 'si' : 'no',
+    r.distanciaMetros, r.espacialEvaluable === false ? 'no evaluable' : r.intersecanFisicamente ? 'si' : 'no',
     r.hayTraslapeTemporal ? 'si' : (r.traslapeEvaluable ? 'no' : 'no evaluable'),
     r.traslapeInicio, r.traslapeFin, r.traslapeDias, r.traslapeHoras,
     r.vigenciaA.inicio, r.vigenciaA.fin, r.vigenciaB.inicio, r.vigenciaB.fin,
-    r.umbralAplicadoMetros,
+    r.umbralAplicadoMetros, r.estadoEspacial, r.motivoNoEvaluableEspacial, r.avisos.join('; '),
   ].map(esc).join(','));
   bajar('﻿' + [cab.join(','), ...cuerpo].join('\n'), 'comparacion_motores.csv', 'text/csv');
 }

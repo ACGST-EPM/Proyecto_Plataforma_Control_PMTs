@@ -69,19 +69,26 @@ export function separacionLatitud(a, b) {
  * metros de distancia real.
  */
 export function cotaInferiorMetros(a, b) {
-  const dLatGrados = separacionLatitud(a, b);
-  const dLonGrados = separacionLongitud(a.minLon, a.maxLon, b.minLon, b.maxLon);
-  if (dLatGrados === 0 && dLonGrados === 0) return 0;
+  // Las cajas en grados no acotan los segmentos proyectados en ENU. La
+  // conversion anterior sobreestimaba incluso pares de puntos en los polos.
+  // Cero es una cota demostrable para TODOS los tipos: desactiva esa poda.
+  return 0;
+}
 
-  const latMasExtrema = Math.max(
-    Math.abs(a.minLat), Math.abs(a.maxLat),
-    Math.abs(b.minLat), Math.abs(b.maxLat)
-  );
-  const cosMin = Math.max(0, Math.cos((Math.min(90, latMasExtrema) * Math.PI) / 180));
-
-  const metrosLat = dLatGrados * METROS_POR_GRADO_LAT_MIN;
-  const metrosLon = dLonGrados * METROS_POR_GRADO_LON_ECUADOR * cosMin;
-  return Math.hypot(metrosLat, metrosLon);
+/** Arco circular menor que contiene los vertices; puede terminar sobre 180°. */
+export function cajaCircular(vertices) {
+  if (!vertices.length) return null;
+  const lons = vertices.map((p) => p[0]).sort((a, b) => a - b);
+  let inicio = 0, mayorHueco = lons[0] + 360 - lons.at(-1);
+  for (let i = 1; i < lons.length; i++) {
+    const hueco = lons[i] - lons[i - 1];
+    if (hueco > mayorHueco) { mayorHueco = hueco; inicio = i; }
+  }
+  return {
+    minLon: lons[inicio], maxLon: inicio ? lons[inicio - 1] + 360 : lons.at(-1),
+    minLat: vertices.reduce((n, p) => Math.min(n, p[1]), Infinity),
+    maxLat: vertices.reduce((n, p) => Math.max(n, p[1]), -Infinity),
+  };
 }
 
 /** Union de dos cajas, tratando correctamente el cruce del antimeridiano. */
@@ -112,7 +119,9 @@ export function radioAproximadoMetros(caja) {
   const latMasCercana = Math.min(Math.abs(caja.minLat), Math.abs(caja.maxLat));
   const cruzaEcuador = caja.minLat <= 0 && caja.maxLat >= 0;
   const cosMax = cruzaEcuador ? 1 : Math.cos((latMasCercana * Math.PI) / 180);
-  const alto = altoGrados * 111694;                       // metros por grado de latitud, maximo
-  const ancho = anchoGrados * METROS_POR_GRADO_LON_ECUADOR * cosMax;
-  return Math.hypot(alto, ancho) / 2;
+  // Longitud de un camino meridiano + paralelo desde el centro: cota superior
+  // (la hipotenusa no era una demostracion sobre una superficie curva).
+  const alto = altoGrados * 111700;
+  const ancho = anchoGrados * 111700 * cosMax;
+  return (alto + ancho) / 2;
 }

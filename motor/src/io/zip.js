@@ -113,6 +113,7 @@ function leerDirectorio(datos, limites) {
     if (p + 46 > u8.byteLength || dv.getUint32(p, true) !== FIRMA_CEN) {
       throw new Error(`directorio central danado en la entrada ${k + 1} de ${nEntradas}`);
     }
+    const flags = dv.getUint16(p + 8, true);
     const metodo = dv.getUint16(p + 10, true);
     const crcEsperado = dv.getUint32(p + 16, true);
     const tamComprimido = dv.getUint32(p + 20, true);
@@ -122,7 +123,8 @@ function leerDirectorio(datos, limites) {
     const lComent = dv.getUint16(p + 32, true);
     const despLocal = dv.getUint32(p + 42, true);
     const nombre = new TextDecoder('utf-8').decode(u8.subarray(p + 46, p + 46 + lNombre));
-    entradas.push({ nombre, metodo, crcEsperado, tamComprimido, tamOriginal, despLocal });
+    if (p + 46 + lNombre + lExtra + lComent > eocd) throw new Error('directorio central truncado');
+    entradas.push({ nombre, flags, metodo, crcEsperado, tamComprimido, tamOriginal, despLocal, inicioCen });
     p += 46 + lNombre + lExtra + lComent;
   }
   return { entradas, u8, dv };
@@ -155,28 +157,43 @@ async function extraerEntrada(e, u8, dv, limites, estado) {
   const lNombre = dv.getUint16(d + 26, true);
   const lExtra = dv.getUint16(d + 28, true);
   const ini = d + 30 + lNombre + lExtra;
-  if (ini + e.tamComprimido > u8.byteLength) {
+  if (ini + e.tamComprimido > e.inicioCen || ini + e.tamComprimido > u8.byteLength) {
     throw new Error(`"${e.nombre}" esta truncado: el archivo termina antes de sus datos`);
   }
+  const flagsLocal = dv.getUint16(d + 6, true);
+  if ((e.flags & 1) || (e.flags & 64)) throw new Error('ZIP cifrado no soportado');
+  if (flagsLocal !== e.flags || dv.getUint16(d + 8, true) !== e.metodo ||
+      new TextDecoder('utf-8').decode(u8.subarray(d + 30, d + 30 + lNombre)) !== e.nombre) {
+    throw new Error('cabeceras local y central incoherentes');
+  }
+  // Bit 3: los valores locales pueden ser cero; el directorio central sigue
+  // siendo obligatorio y SIEMPRE se contrasta contra el contenido extraido.
+  if (!(e.flags & 8) && (dv.getUint32(d + 14, true) !== e.crcEsperado ||
+      dv.getUint32(d + 18, true) !== e.tamComprimido || dv.getUint32(d + 22, true) !== e.tamOriginal)) {
+    throw new Error('CRC o tamanos incoherentes entre cabeceras ZIP local y central');
+  }
   const crudo = u8.subarray(ini, ini + e.tamComprimido);
+  const maximoReal = Math.min(limites.bytesEntradaDescomprimida,
+    limites.bytesTotalDescomprimido - estado.total, e.tamComprimido * limites.factorExpansion);
 
   let bytes;
   if (e.metodo === 0) {
+    if (crudo.length > maximoReal) throw new Error('contenido almacenado supera el limite real de tamano');
     bytes = crudo;
   } else if (e.metodo === 8) {
     if (!hayDescompresor()) {
       throw new Error('este navegador no puede descomprimir KMZ (falta DecompressionStream); actualicelo o use un .kml sin comprimir');
     }
-    bytes = await inflar(crudo, Math.min(limites.bytesEntradaDescomprimida,
-      limites.bytesTotalDescomprimido - estado.total), e.nombre);
+    bytes = await inflar(crudo, maximoReal, e.nombre);
   } else {
     throw new Error(`"${e.nombre}" usa un metodo de compresion no soportado (${e.metodo})`);
   }
 
   // INTEGRIDAD. El CRC viene en la cabecera del propio ZIP; si el contenido se
   // manipulo sin recalcularlo, aqui se detecta.
+  if (bytes.length !== e.tamOriginal) throw new Error('tamano descomprimido real no coincide con el declarado');
   const crcReal = crc32(bytes);
-  if (e.crcEsperado !== 0 && crcReal !== e.crcEsperado) {
+  if (crcReal !== e.crcEsperado) {
     throw new Error(
       `"${e.nombre}" no supera la comprobacion de integridad (CRC-32): el contenido no coincide ` +
       `con el que declara el archivo. Puede estar corrupto o haber sido alterado.`

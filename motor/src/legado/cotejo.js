@@ -101,12 +101,14 @@ export function cotejarFidelidad(replica, motorLegado) {
 
   // ---- COBERTURA DE LA ENTRADA ----
   const archivos = motorLegado.archivos ?? [];
-  const archivosConError = archivos.filter((a) => !a.ok);
+  const archivosConError = archivos.filter((a) => !a.ok || a.coberturaCompleta === false);
   const erroresReplica = replica.errores ?? [];
   const placemarksLeidos = archivos.reduce((n, a) => n + (a.placemarks ?? 0), 0);
   const registrosSinGeometria = (motorLegado.registros ?? []).filter((r) => !r.tieneGeometria).length;
 
-  const lecturaLimpia = archivosConError.length === 0 && erroresReplica.length === 0;
+  const coberturaCompleta = motorLegado.coberturaCompleta !== false && replica.coberturaCompleta !== false && !archivosConError.length;
+  const paresNoEvaluablesEspacialmente = motorLegado.paresNoEvaluablesEspacialmente?.length ?? 0;
+  const lecturaLimpia = coberturaCompleta && erroresReplica.length === 0;
   const hayEntrada = (motorLegado.registros?.length ?? 0) > 0;
 
   // ---- ALCANCE GEOMETRICO CONTRASTADO ----
@@ -118,15 +120,18 @@ export function cotejarFidelidad(replica, motorLegado) {
 
   // FIDELIDAD: ademas, la entrada se leyo entera y todas sus geometrias son de
   // un tipo cuya equivalencia con QGIS esta contrastada.
-  const completo = coinciden && lecturaLimpia && hayEntrada && alcanceContrastado;
+  const completo = coinciden && lecturaLimpia && hayEntrada && alcanceContrastado && !registrosSinGeometria && !paresNoEvaluablesEspacialmente;
 
   return {
     completo,
     coinciden,
     lecturaLimpia,
+    coberturaCompleta,
+    paresNoEvaluablesEspacialmente,
     hayEntrada,
     alcanceContrastado,
-    archivosConError: archivosConError.map((a) => ({ nombre: a.nombre, errores: a.errores })),
+    archivosConError: archivosConError.map((a) => ({ nombre: a.nombre, estadoLectura: a.estadoLectura,
+      errores: [...(a.errores ?? []), ...(a.motivosCobertura ?? [])] })),
     erroresReplica,
     placemarksLeidos,
     registrosSinGeometria,
@@ -174,6 +179,9 @@ export function resumirCotejo(c) {
   }
 
   const partes = [];
+  if (c.paresNoEvaluablesEspacialmente) partes.push(`${c.paresNoEvaluablesEspacialmente} par(es) no evaluables espacialmente.`);
+  if (c.registrosSinGeometria) partes.push(`${c.registrosSinGeometria} registro(s) sin geometría utilizable.`);
+  if (c.coberturaCompleta === false) partes.push('Cobertura de entrada incompleta: no se ha procesado todo el contenido.');
 
   // Lo primero que hay que decir es si la entrada se pudo leer, porque sin eso
   // el resto de la comparacion no significa nada.

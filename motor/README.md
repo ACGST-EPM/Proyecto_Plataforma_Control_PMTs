@@ -335,7 +335,7 @@ que nadie dibujó— y el registro se conserva con su diagnóstico para poder co
 | `<NetworkLink>` a otros documentos | **No se sigue.** Si el documento no tiene Placemarks propios es un **error**; si los tiene, es un aviso. Nunca se presenta como una lectura correcta de 0 frentes. |
 | Varios `.kml` dentro del KMZ | Se procesa `doc.kml` (o el primero) y se **nombran los que no se procesaron**. |
 | Coordenada ilegible o fuera del planeta | Se excluye la geometría; el registro se conserva con el diagnóstico. |
-| Par que abarca más de 50 km | No se mide: `metros: null` y error explícito. |
+| Par que abarca más de 50 km | Se comparan segmentos locales; si no basta para decidir, queda como `no_evaluable` con identidad, motivo y contador. |
 | Zona horaria en la fecha | Vigencia inválida, con el sufijo nombrado. |
 
 ### 7. Cómo se comprueba que la réplica del legado es fiel

@@ -63,9 +63,11 @@ let placemarks = [];
 const erroresLectura = [];
 for (const a of archivos) {
   try {
-    const { texto } = await extraerKml(a.datos);
+    const { texto, otrosKml, avisos } = await extraerKml(a.datos);
+    if (otrosKml.length) erroresLectura.push(`${a.nombre}: ${avisos.join('; ')}`);
     const r = leerKml(texto, a.nombre);
     if (r.errores.length) erroresLectura.push(`${a.nombre}: ${r.errores.join('; ')}`);
+    if (!r.coberturaCompleta) erroresLectura.push(`${a.nombre}: ${r.motivosCobertura.join('; ')}`);
     placemarks = placemarks.concat(r.placemarks);
   } catch (e) {
     erroresLectura.push(`${a.nombre}: ${e.message}`);
@@ -82,7 +84,7 @@ tabla('1 · REPLICA DEL MOTOR LEGADO (reproduce QGIS, errores incluidos)', [
 // Cotejo alerta por alerta entre los dos caminos de reproduccion del legado.
 {
   const motorLegado = await analizar(archivos, PERFIL_LEGADO);
-  const c = cotejarFidelidad({ filas: legado.filas, resumen: legado.resumen }, motorLegado);
+  const c = cotejarFidelidad({ ...legado, errores: erroresLectura, coberturaCompleta: !erroresLectura.length }, motorLegado);
   tabla('1a · COTEJO ALERTA POR ALERTA (replica vs motor nuevo en perfil legado)', [
     ['Alertas en la replica de QGIS', c.alertasReplica],
     ['Alertas en el motor nuevo (perfil legado)', c.alertasMotor],
@@ -124,6 +126,9 @@ for (const p of PERFILES) {
     ['Registros leidos', r.registros.length],
     ['Registros analizables', r.calidad.analizables],
     ['Relaciones dentro del umbral', r.relaciones.length],
+    ['Pares no evaluables espacialmente', r.estadisticas.paresNoEvaluablesEspacialmente],
+    ['Pares evaluados fuera del umbral', r.estadisticas.paresEvaluadosFueraDelUmbral],
+    ['Archivos completos / parciales / fallidos', `${r.calidad.archivosCompletos} / ${r.calidad.archivosParciales} / ${r.calidad.archivosFallidos}`],
     ['  con traslape temporal', r.relaciones.filter((x) => x.hayTraslapeTemporal).length],
     ['  sin traslape temporal', r.relaciones.filter((x) => !x.hayTraslapeTemporal && x.traslapeEvaluable).length],
     ['  no evaluables por fechas', r.relaciones.filter((x) => !x.traslapeEvaluable).length],

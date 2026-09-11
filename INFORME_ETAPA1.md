@@ -4,6 +4,16 @@
 > (endurecimiento) y 1.2 (hallazgos de la auditoría). Detenida de nuevo para revisión.
 > **No se avanza a la Etapa 2.**
 > **Fecha:** 11 de septiembre de 2026
+
+## Cierre Etapa 1.3
+
+Se corrigieron los cinco bloqueos de la re-auditoría: prefiltro conservador, antimeridiano,
+polígonos corruptos, integridad ZIP completa y cobertura parcial. Los pares no medibles se
+conservan con identidad, motivo y contador `paresNoEvaluablesEspacialmente`, y el verificador los
+muestra separados de los pares fuera del umbral. La regresión real mantiene 460 registros,
+708/708 filas legado, 248 alertas (84 interferencias y 164 cercanías), 174 relaciones nuevas,
+68 traslapes, 6 contactos físicos y 74/74 desapariciones explicadas por distancia >120 m.
+La suite queda en 218 pruebas pasando, incluidas 33 adversariales nuevas. No se inicia Etapa 2.
 > **Alcance:** se construyó un motor nuevo que corre **en paralelo**. No se tocó ni un archivo del sistema actual.
 
 ---

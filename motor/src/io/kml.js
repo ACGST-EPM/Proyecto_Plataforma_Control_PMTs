@@ -130,7 +130,8 @@ function geometriaDe(nodo, avisos) {
       const huecos = [];
       for (const h of buscarTodos(nodo, 'innerBoundaryIs')) {
         const a = anilloDe(h, avisos);
-        if (a) huecos.push(a);
+        if (!a) { avisos.push('Polygon descartado entero: un hueco es invalido'); return null; }
+        huecos.push(a);
       }
       return { type: 'Polygon', coordinates: [extAnillo, ...huecos] };
     }
@@ -229,11 +230,18 @@ function rutaDeCarpetas(raiz) {
 export function leerKml(textoKml, origen = '(sin nombre)') {
   const errores = [];
   const avisosDocumento = [];
+  const motivosCobertura = [];
+  const resultado = (placemarks) => ({
+    placemarks, errores, avisosDocumento, motivosCobertura,
+    estadoLectura: errores.length ? 'fallida' : motivosCobertura.length ? 'parcial' : 'completa',
+    coberturaCompleta: !errores.length && !motivosCobertura.length,
+  });
   let raiz;
   try {
     raiz = analizarXml(textoKml);
   } catch (e) {
-    return { placemarks: [], errores: [`no se pudo leer el KML: ${e.message}`], avisosDocumento };
+    errores.push(`no se pudo leer el KML: ${e.message}`);
+    return resultado([]);
   }
 
   const carpetas = rutaDeCarpetas(raiz);
@@ -245,13 +253,14 @@ export function leerKml(textoKml, origen = '(sin nombre)') {
   if (enlaces.length) {
     const m = `el documento tiene ${enlaces.length} <NetworkLink>: este motor no sigue enlaces a ` +
       `otros documentos, asi que su contenido NO entra en el analisis`;
+    motivosCobertura.push(m);
     if (!buscarTodos(raiz, 'Placemark').length) errores.push(m); else avisosDocumento.push(m);
   }
 
   const nodos = buscarTodos(raiz, 'Placemark');
   if (!nodos.length) {
     if (!enlaces.length) errores.push('el KML no contiene ningun <Placemark>');
-    return { placemarks: [], errores, avisosDocumento };
+    return resultado([]);
   }
 
   const placemarks = [];
@@ -267,8 +276,9 @@ export function leerKml(textoKml, origen = '(sin nombre)') {
         if (nodosGeom.length > 1) {
           avisos.push(`el Placemark trae ${nodosGeom.length} geometrias sueltas; se combinan todas`);
         }
-        const partes = nodosGeom.map((g) => geometriaDe(g, avisos)).filter(Boolean);
-        geometria = agruparMultiGeometria(partes, avisos);
+        const partes = nodosGeom.map((g) => geometriaDe(g, avisos));
+        if (partes.some((p) => !p)) avisos.push('geometria completa descartada: no se eliminan partes invalidas');
+        else geometria = agruparMultiGeometria(partes, avisos);
       }
     } catch (e) {
       avisos.push(`error leyendo la geometria: ${e.message}`);
@@ -285,5 +295,5 @@ export function leerKml(textoKml, origen = '(sin nombre)') {
       avisos,
     });
   }
-  return { placemarks, errores, avisosDocumento };
+  return resultado(placemarks);
 }

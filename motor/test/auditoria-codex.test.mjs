@@ -36,7 +36,7 @@ test('H1: dos geometrias antipodas NO se declaran en contacto', () => {
   const a = { type: 'LineString', coordinates: [[0, 0], [0.001, 0]] };
   const b = { type: 'Point', coordinates: [180, 0] };
   const r = medir(a, b);
-  assert.equal(r.intersecan, false, 'jamas puede decir que se tocan');
+  assert.equal(r.intersecan, null, 'fuera del dominio no se afirma ni se niega contacto');
   assert.equal(r.metros, null, 'no se inventa una distancia que no sabe medir');
   assert.equal(r.dominioValido, false);
   assert.ok(r.errores.some((e) => e.includes('dominio')), r.errores.join(' | '));

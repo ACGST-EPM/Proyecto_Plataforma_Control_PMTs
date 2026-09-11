@@ -49,6 +49,8 @@ export function hechosDelPar(a, b, configParcial = {}) {
   const m = medir(a.geometria, b.geometria);
   const t = traslape(a.vigencia, b.vigencia, { toleranciaMinutos: config.toleranciaMinutos });
   const umbralEfectivo = alcanceMetros(config);
+  const espacialEvaluable = m.metros !== null && m.dominioValido;
+  const dentro = espacialEvaluable ? m.metros <= umbralEfectivo : null;
   return {
     idA: a.id, idB: b.id,
     frenteA: a.frente, frenteB: b.frente,
@@ -59,9 +61,13 @@ export function hechosDelPar(a, b, configParcial = {}) {
     tipoGeometriaA: a.tipoGeometria, tipoGeometriaB: b.tipoGeometria,
 
     // --- hechos espaciales ---
-    distanciaMetros: m.metros === null ? null : Math.round(m.metros * 1000) / 1000,
-    intersecanFisicamente: m.intersecan,
-    dentroDelUmbral: m.metros !== null && m.metros <= umbralEfectivo,
+    distanciaMetros: espacialEvaluable ? Math.round(m.metros * 1000) / 1000 : null,
+    espacialEvaluable,
+    dominioValido: m.dominioValido,
+    estadoEspacial: !espacialEvaluable ? 'no_evaluable' : dentro ? 'dentro_del_umbral' : 'fuera_del_umbral',
+    motivoNoEvaluableEspacial: espacialEvaluable ? null : m.errores.join('; '),
+    intersecanFisicamente: espacialEvaluable ? m.intersecan : null,
+    dentroDelUmbral: dentro,
     umbralAplicadoMetros: umbralEfectivo,
 
     // --- hechos temporales ---
@@ -112,11 +118,14 @@ export function calcularRelaciones(registros, configParcial = {}) {
     conTraslape: 0,
     conInterseccion: 0,
     noEvaluablesPorFechas: 0,
+    paresNoEvaluablesEspacialmente: 0,
+    paresEvaluadosFueraDelUmbral: 0,
     msTotal: 0,
   };
 
   const t0 = Date.now();
   const relaciones = [];
+  const paresNoEvaluablesEspacialmente = [];
   for (let i = 0; i < utiles.length; i++) {
     for (let j = i + 1; j < utiles.length; j++) {
       const a = utiles[i], b = utiles[j];
@@ -145,7 +154,12 @@ export function calcularRelaciones(registros, configParcial = {}) {
 
       est.distanciasCalculadas++;
       const h = hechosDelPar(a, b, config);
-      if (!h.dentroDelUmbral) continue;
+      if (!h.espacialEvaluable) {
+        paresNoEvaluablesEspacialmente.push(h);
+        est.paresNoEvaluablesEspacialmente++;
+        continue;
+      }
+      if (!h.dentroDelUmbral) { est.paresEvaluadosFueraDelUmbral++; continue; }
 
       relaciones.push(h);
       est.relaciones++;
@@ -155,5 +169,5 @@ export function calcularRelaciones(registros, configParcial = {}) {
     }
   }
   est.msTotal = Date.now() - t0;
-  return { relaciones, estadisticas: est, config };
+  return { relaciones, paresNoEvaluablesEspacialmente, estadisticas: est, config };
 }

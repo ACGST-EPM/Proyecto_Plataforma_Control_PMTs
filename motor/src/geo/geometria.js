@@ -36,7 +36,8 @@
  */
 
 import { planoParaCajas } from './plano-local.js';
-import { cotaInferiorMetros, unir, radioAproximadoMetros } from './cajas.js';
+import { cajaCircular, unir, radioAproximadoMetros } from './cajas.js';
+import { aEcef } from './elipsoide.js';
 import {
   distPuntoSegmento, distSegmentoSegmento,
   puntoEnAnillo, distPuntoAnillo,
@@ -78,9 +79,9 @@ export function descomponer(geom, errores = []) {
   const c = geom.coordinates;
   switch (geom.type) {
     case 'Point': if (valido(c)) r.puntos.push(c); else errores.push('Point con coordenadas invalidas'); break;
-    case 'MultiPoint': for (const p of c ?? []) if (valido(p)) r.puntos.push(p); break;
+    case 'MultiPoint': for (const p of c ?? []) if (valido(p)) r.puntos.push(p); else errores.push('MultiPoint con parte invalida'); break;
     case 'LineString': if (lineaValida(c)) r.lineas.push(c); else errores.push('LineString con menos de 1 vertice valido'); break;
-    case 'MultiLineString': for (const l of c ?? []) if (lineaValida(l)) r.lineas.push(l); break;
+    case 'MultiLineString': for (const l of c ?? []) if (lineaValida(l)) r.lineas.push(l); else errores.push('MultiLineString con parte invalida'); break;
     case 'Polygon': agregarPoligono(r, c, errores); break;
     case 'MultiPolygon': for (const pg of c ?? []) agregarPoligono(r, pg, errores); break;
     case 'GeometryCollection': {
@@ -96,23 +97,47 @@ export function descomponer(geom, errores = []) {
   return r;
 }
 
-const valido = (p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]);
-const lineaValida = (l) => Array.isArray(l) && l.filter(valido).length >= 1;
+const valido = (p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]) && Math.abs(p[0]) <= 180 && Math.abs(p[1]) <= 90;
+const lineaValida = (l) => Array.isArray(l) && l.length >= 1 && l.every(valido);
 
 function agregarPoligono(r, anillos, errores) {
   if (!Array.isArray(anillos) || !anillos.length) { errores.push('Polygon sin anillos'); return; }
-  const limpios = anillos.map((a) => (a ?? []).filter(valido)).filter((a) => a.length >= 3);
-  if (!limpios.length) { errores.push('Polygon sin un anillo exterior valido'); return; }
-  r.poligonos.push({ exterior: limpios[0], huecos: limpios.slice(1) });
+  if (!anillos.every((a) => Array.isArray(a) && a.length >= 3 && a.every(valido))) {
+    errores.push('Polygon invalido: no se pueden eliminar vertices ni anillos'); return;
+  }
+  r.poligonos.push({ exterior: anillos[0], huecos: anillos.slice(1) });
 }
 
 function cajaDeVertices(vertices) {
-  let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
-  for (const [x, y] of vertices) {
-    if (x < minLon) minLon = x; if (x > maxLon) maxLon = x;
-    if (y < minLat) minLat = y; if (y > maxLat) maxLat = y;
-  }
-  return minLon === Infinity ? null : { minLon, minLat, maxLon, maxLat };
+  return cajaCircular(vertices);
+}
+
+function verticesDe(p) {
+  return p.tipo === 'punto' ? [p.dato] : p.tipo === 'linea' ? p.dato : [p.dato.exterior, ...p.dato.huecos].flat();
+}
+
+// Solo para certificar que una parte compacta lejana no puede mejorar un
+// minimo local ya obtenido. Envolventes cartesianas de las cuerdas ECEF:
+// el casco convexo contiene segmentos y superficies del modelo. Se restan
+// 1000 m de margen, mayor que la excursion normal de dos partes locales de
+// radio <=50 km (<400 m cada una, R minimo WGS84 >6300 km). NO se usa esta
+// cota para inventar una distancia ni para proyectar un par fuera de dominio.
+function cotaPartesCompactas(a, b) {
+  if ([a, b].some((p) => radioAproximadoMetros(p.caja) > RADIO_DOMINIO_METROS)) return 0;
+  const cajas = [a, b].map((p) => {
+    const vs = verticesDe(p).map(([lon, lat]) => aEcef(lon, lat));
+    return [0, 1, 2].map((i) => [Math.min(...vs.map((v) => v[i])), Math.max(...vs.map((v) => v[i]))]);
+  });
+  return Math.max(0, Math.hypot(...[0, 1, 2].map((i) =>
+    Math.max(0, cajas[0][i][0] - cajas[1][i][1], cajas[1][i][0] - cajas[0][i][1]))) - 1000);
+}
+
+function tramos(p) {
+  if (p.tipo !== 'linea' || p.dato.length <= 2) return [p];
+  return p.dato.slice(1).map((v, i) => {
+    const dato = [p.dato[i], v];
+    return { tipo: 'linea', dato, caja: cajaDeVertices(dato) };
+  });
 }
 
 /** Caja envolvente geografica de una geometria ya descompuesta. */
@@ -250,44 +275,49 @@ export function medir(geomA, geomB) {
   const errores = [];
   const partesA = enumerarPartes(descomponer(geomA, errores));
   const partesB = enumerarPartes(descomponer(geomB, errores));
-  if (!partesA.length || !partesB.length) {
-    return { metros: null, intersecan: false, dominioValido: true, errores };
+  if (errores.length || !partesA.length || !partesB.length) {
+    if (!errores.length) errores.push('geometria sin partes utilizables');
+    return { metros: null, intersecan: null, dominioValido: false, errores };
   }
 
   let min = Infinity;
-  let dominioValido = true;
+  const pendientes = [];
+
+  function comparar(pa, pb, permitirTramos = true) {
+    const radio = radioAproximadoMetros(unir(pa.caja, pb.caja));
+    if (radio > RADIO_DOMINIO_METROS) {
+      const aa = tramos(pa), bb = tramos(pb);
+      if (permitirTramos && (aa.length > 1 || bb.length > 1)) {
+        for (const a of aa) for (const b of bb) {
+          comparar(a, b, false);
+          if (min === 0) return;
+        }
+      } else pendientes.push({ pa, pb, radio });
+      return;
+    }
+    const plano = planoParaCajas([pa.caja, pb.caja]);
+    min = Math.min(min, distanciaPartes(proyectarParte(pa, plano), proyectarParte(pb, plano)));
+  }
 
   for (const pa of partesA) {
     for (const pb of partesB) {
-      // Poda por cota inferior: si ya sabemos que no puede mejorar el minimo,
-      // no hace falta proyectar ni medir.
-      if (cotaInferiorMetros(pa.caja, pb.caja) >= min) continue;
-
-      // Dominio: el plano se construye para ESTE par, con origen en su centro.
-      const union = unir(pa.caja, pb.caja);
-      const radio = radioAproximadoMetros(union);
-      if (radio > RADIO_DOMINIO_METROS) {
-        dominioValido = false;
-        errores.push(
-          `par de geometrias fuera del dominio de la proyeccion local: abarca ~${Math.round(radio / 1000)} km ` +
-          `de radio y el limite es ${RADIO_DOMINIO_METROS / 1000} km; no se mide`
-        );
-        continue;
-      }
-
-      const plano = planoParaCajas([pa.caja, pb.caja]);
-      const d = distanciaPartes(proyectarParte(pa, plano), proyectarParte(pb, plano));
-      if (d < min) min = d;
+      comparar(pa, pb);
       if (min === 0) break;
     }
     if (min === 0) break;
   }
 
-  if (!Number.isFinite(min)) {
-    return { metros: null, intersecan: false, dominioValido, errores };
+  // Un contacto local prueba el minimo absoluto 0. Un minimo positivo solo
+  // vale si ninguna parte pendiente puede mejorarlo, independientemente del orden.
+  const sinResolver = min === 0 ? [] : pendientes.filter(({ pa, pb }) =>
+    !Number.isFinite(min) || cotaPartesCompactas(pa, pb) <= min);
+  if (!Number.isFinite(min) || sinResolver.length) {
+    for (const { radio } of sinResolver) errores.push(
+      `par no evaluable espacialmente, fuera del dominio: una parte abarca ~${Math.round(radio / 1000)} km de radio; limite 50 km`);
+    return { metros: null, intersecan: null, dominioValido: false, errores };
   }
   const metros = ajustarACero(min);
-  return { metros, intersecan: metros === 0, dominioValido, errores };
+  return { metros, intersecan: metros === 0, dominioValido: true, errores };
 }
 
 /** Caja envolvente geografica de una geometria GeoJSON sin descomponer antes. */
