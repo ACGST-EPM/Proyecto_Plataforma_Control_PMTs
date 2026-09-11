@@ -1,7 +1,17 @@
 /** Utilidades minimas de DOM. Deliberadamente pequenas: no hay framework. */
 
-export const $ = (id) => document.getElementById(id);
-export const $$ = (sel, raiz = document) => [...raiz.querySelectorAll(sel)];
+/**
+ * Busca un elemento por su identificador.
+ *
+ * Tolera que NO haya documento: asi los modulos de interfaz se pueden importar
+ * desde Node para probar su logica sin arrastrar un navegador entero. En el
+ * navegador el comportamiento es exactamente el de `getElementById`.
+ */
+export const $ = (id) => (typeof document === 'undefined' ? null : document.getElementById(id));
+export const $$ = (sel, raiz = null) => {
+  if (typeof document === 'undefined') return [];
+  return [...(raiz ?? document).querySelectorAll(sel)];
+};
 
 /** Escapa texto antes de inyectarlo como HTML. Todo dato de archivo pasa por aqui. */
 export function esc(s) {

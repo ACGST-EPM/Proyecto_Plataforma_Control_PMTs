@@ -164,8 +164,45 @@ export function opcionesFacetadas(todas, f, origen = null) {
 }
 
 /**
- * PMT vigentes en un instante dado. Es lo que mueve el recorrido temporal.
- * Un PMT sin vigencia valida NO es "vigente": no se puede afirmar que lo sea.
+ * SEMANTICA TEMPORAL DE LA INTERFAZ — decidida en la Etapa 2.2.
+ *
+ * El recorrido muestra UN DIA, y "un dia" significa **el dia calendario entero**:
+ * entra todo PMT cuya vigencia toque ese dia en algun momento.
+ *
+ * POR QUE SE CAMBIO: antes se consultaba un INSTANTE (el que resultara de sumar
+ * dias al inicio del rango, tipicamente las 06:00) mientras la etiqueta decia
+ * "PMT vigentes ese dia". Una obra de 10:00 a 12:00 desaparecia del mapa en su
+ * propio dia. La etiqueta prometia una cosa y el calculo hacia otra.
+ *
+ * IMPORTANTE: esto es SOLO la vista. El motor sigue calculando el traslape
+ * entre PMT con **fecha y hora exactas**, que es la regla canonica aprobada en
+ * la Etapa 1 y no se toca. Aqui se decide que se enseña, no que se calcula.
+ *
+ * Si alguna vez hace falta consultar un instante exacto, sera un modo aparte y
+ * con su propia etiqueta: nunca las dos cosas bajo el mismo nombre.
+ */
+export const MS_DIA = 86400000;
+
+/** Primer y ultimo milisegundo del dia calendario (UTC) que contiene a `ms`. */
+export function limitesDelDia(ms) {
+  const inicio = Math.floor(ms / MS_DIA) * MS_DIA;
+  return { inicio, fin: inicio + MS_DIA - 1 };
+}
+
+/**
+ * PMT que tienen actividad en el DIA CALENDARIO que contiene a `ms`.
+ * Un PMT sin vigencia valida NO cuenta: no se puede afirmar que este vigente.
+ */
+export function vigentesEnDia(filas, ms) {
+  const { inicio, fin } = limitesDelDia(ms);
+  return filas.filter((x) => x.vigenciaValida && x.inicioMs !== null && x.finMs !== null &&
+    x.inicioMs <= fin && x.finMs >= inicio);
+}
+
+/**
+ * PMT vigentes en un INSTANTE exacto. Se conserva porque es la primitiva sobre
+ * la que se apoya lo demas y porque puede hacer falta un modo instante
+ * explicito, pero la interfaz NO la usa para el recorrido diario.
  */
 export function vigentesEn(filas, ms) {
   return filas.filter((x) => x.vigenciaValida && x.inicioMs !== null && x.finMs !== null &&

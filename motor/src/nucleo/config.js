@@ -89,3 +89,28 @@ export function resolverConfig(parcial = {}) {
 export function alcanceMetros(config) {
   return config.modoDistancia === 'legado' ? config.umbralMetros * 2 : config.umbralMetros;
 }
+
+/**
+ * VERSION DE LAS REGLAS DEL MOTOR.
+ *
+ * Identifica el conjunto de reglas canonicas con el que se produjo un
+ * resultado. Sirve para que un proyecto guardado pueda detectar que se abrio
+ * con un motor distinto del que lo genero y avisar en vez de mezclar criterios
+ * en silencio.
+ *
+ * SE SUBE cuando cambia algo que altera los resultados: umbral, semantica
+ * temporal, regla de exclusion, dominio espacial o la definicion de traslape.
+ * NO se sube por cambios internos que no muevan ninguna cifra.
+ */
+export const VERSION_REGLAS = '1.2.0';
+
+/** Resumen legible de las reglas vigentes, para dejarlo escrito en informes y proyectos. */
+export const REGLAS_CANONICAS = Object.freeze({
+  version: VERSION_REGLAS,
+  distancia: 'minima real entre las geometrias originales',
+  umbralPorDefecto: 120,
+  temporal: 'fecha y hora reales',
+  toleranciaPorDefecto: 0,
+  exclusion: 'frentes del mismo contrato no son interferencia entre contratos',
+  dominioEspacialKm: 50,
+});

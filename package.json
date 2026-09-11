@@ -11,7 +11,7 @@
     "preparar": "cd motor && npm ci",
     "test": "npm run test:motor && npm run test:app",
     "test:motor": "cd motor && npm test",
-    "test:app": "node --test app/test/app.test.mjs",
+    "test:app": "node --test app/test/app.test.mjs app/test/auditoria-22.test.mjs",
     "construir": "node herramientas/construir-app.mjs && cd motor && npm run construir",
     "construir:app": "node herramientas/construir-app.mjs",
     "comparar": "cd motor && npm run comparar",

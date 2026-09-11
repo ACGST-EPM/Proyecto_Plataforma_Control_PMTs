@@ -34,20 +34,34 @@ que un cambio de origen sea un módulo nuevo y no una reescritura.
 
 ## Propuestas, ordenadas por relación valor/esfuerzo
 
-### A. Carpeta de entrada vigilada · **empezar por aquí**
+### A. Carpeta de entrada, releída con un clic · **empezar por aquí**
 
-Que la aplicación lea una carpeta (local o de red) y detecte por sí sola los KMZ
-nuevos o modificados, en vez de arrastrarlos.
+Que la aplicación recuerde una carpeta que la usuaria haya elegido y, al volver,
+relea sus KMZ para detectar los nuevos o modificados sin arrastrarlos otra vez.
 
-- **Técnicamente posible:** sí. `showDirectoryPicker()` existe en Chrome y Edge
-  de escritorio, con permiso explícito del usuario y recordable entre sesiones.
-- **Dependencia/licencia:** ninguna. Es parte del navegador.
-- **Permiso requerido:** solo el del propio usuario, al elegir la carpeta.
+> **CORRECCIÓN.** Una versión anterior de este documento llamaba a esto «carpeta
+> vigilada sin permisos». Las dos cosas eran inexactas y conviene separarlas con
+> cuidado, porque de ahí salen expectativas que luego no se cumplen:
+
+| Qué es | Qué exige | ¿Disponible? |
+|---|---|---|
+| **Acceso local iniciado por la usuaria** — ella elige la carpeta en un diálogo | Nada más que su clic | Sí, hoy |
+| **Permiso persistente del navegador** — recordar esa carpeta entre sesiones | Que el navegador lo ofrezca **y** que la usuaria lo conceda; puede caducar o revocarse; una política corporativa puede desactivarlo | **Por confirmar en el equipo real de EPM** |
+| **Relectura con la aplicación abierta** | La pestaña abierta. No hay «vigilancia» en segundo plano | Sí, con lo anterior |
+| **Ejecución autónoma/desatendida** — que se procese sin nadie delante | Que el análisis salga del navegador a un servicio, con su custodia de datos y su autenticación | **No, y no es esta etapa** |
+
+- **Dependencia/licencia:** ninguna de terceros. Usa la API de acceso al sistema
+  de archivos del propio navegador.
+- **Permisos:** el de la usuaria sobre su carpeta. **No** da acceso a nada más.
+  Si TI aplica políticas de navegador, pueden bloquear esta API: hay que
+  comprobarlo en un equipo real antes de prometer nada.
 - **Seguridad:** los datos no salen del equipo. Es el modelo actual.
 - **Valor:** alto — elimina el paso manual más repetitivo.
-- **Complejidad:** baja (1-2 días).
-- **Limitación honesta:** Firefox no lo soporta, y desde `file://` puede estar
-  restringido; habría que servir la aplicación por HTTP(S).
+- **Complejidad:** baja (1-2 días) más la comprobación en el equipo de la usuaria.
+- **Limitaciones honestas:** Firefox no soporta esta API; desde `file://` puede
+  estar restringida, así que probablemente haya que servir la aplicación por
+  HTTP(S) —lo que a su vez depende de la etapa de publicación corporativa—; y
+  **nunca** habrá procesamiento mientras la aplicación esté cerrada.
 
 ### B. Histórico de proyectos y comparación entre versiones
 
@@ -68,6 +82,11 @@ corregida del mismo frente.
 - **Técnicamente posible:** sí. El motor ya calcula una huella de contenido
   (`huellaContenido`) y detecta duplicados exactos.
 - **Valor:** medio-alto. **Complejidad:** baja.
+
+> **Sobre Microsoft 365, OneDrive, SharePoint, Teams y Power Automate:** este
+> documento **no afirma que ninguno esté habilitado en el tenant de EPM**, ni con
+> qué licencia, ni con qué políticas. Todo lo que sigue es lo que sería posible
+> *si* lo estuviera, y cada punto queda **pendiente de validación con TI/EPM**.
 
 ### D. Biblioteca corporativa de documentos como origen
 
@@ -111,7 +130,9 @@ interferencia nueva.
 
 ## Orden recomendado
 
-1. **A** (carpeta vigilada) y **C** (deduplicación) — semanas, sin permisos.
+1. **A** (carpeta releída con un clic) y **C** (deduplicación) — semanas. **A**
+   necesita comprobar antes, en el equipo real de la usuaria, si la política de
+   navegador de EPM permite el permiso persistente de carpeta.
 2. **B** (histórico y comparación) — valor alto, sin infraestructura.
 3. Decisión de **criticidad** — bloquea E y condiciona el informe.
 4. Publicación corporativa — bloquea D, E y F.

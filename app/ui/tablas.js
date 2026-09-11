@@ -256,3 +256,42 @@ export function pintarCalidad(diagnosticos, resumen, avisosPorPmt) {
 
   caja.innerHTML = trozos.join('');
 }
+
+/**
+ * PARES ESPACIALMENTE NO EVALUABLES.
+ *
+ * El motor los conserva con su motivo, pero la Etapa 2.1 los perdia por el
+ * camino: solo quedaba un contador. Un par no evaluable NO es "lejos" ni "sin
+ * relacion": es una comprobacion que no se pudo hacer, y quien decide necesita
+ * poder mirarla una por una.
+ */
+export function pintarNoEvaluables(pares, porId) {
+  const caja = $('panelNoEval');
+  if (!caja) return;
+  if (!pares.length) {
+    caja.innerHTML = `<div class="frase"><b>No hay ningún par sin evaluar.</b> Todas las parejas de
+      contratos distintos se pudieron medir.</div>`;
+    return;
+  }
+  const filas = pares.map((h) => {
+    const a = porId.get(h.idA), b = porId.get(h.idB);
+    const motivo = (h.avisos ?? h.errores ?? []).join(' · ') || h.motivoNoEvaluable || 'sin motivo registrado';
+    return `<tr>
+      <td class="mono">${esc(h.contratoA ?? a?.contrato ?? '—')}</td>
+      <td>${esc(h.frenteA ?? a?.frente ?? '—')}</td>
+      <td class="mono">${esc(h.contratoB ?? b?.contrato ?? '—')}</td>
+      <td>${esc(h.frenteB ?? b?.frente ?? '—')}</td>
+      <td><span class="pastilla p-nosabe">No se pudo medir</span></td>
+      <td><small>${esc(motivo)}</small></td>
+    </tr>`;
+  }).join('');
+  caja.innerHTML = `
+    <div class="frase atencion">
+      <b>${num(pares.length)} pareja(s) cuya distancia no se pudo determinar.</b>
+      Esto <b>no</b> significa que estén lejos ni que no haya interferencia: significa que
+      <b>no se pudo comprobar</b>. Revíselas una a una y, si hace falta, corrija los trazados en origen.
+    </div>
+    <div class="tabla-caja"><table class="datos">
+      <thead><tr><th>Contrato A</th><th>Frente A</th><th>Contrato B</th><th>Frente B</th><th>Estado</th><th>Motivo</th></tr></thead>
+      <tbody>${filas}</tbody></table></div>`;
+}

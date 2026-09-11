@@ -29,7 +29,28 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
 Repo publicado: `ACGST-EPM/Control-y-Articulacion-de-PMTs-EPM` (GitHub Pages).
 Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada`, `02_Proyecto_QGIS`, `Control-y-Articulacion-de-PMTs-EPM`).
 
-## Estado de la migración (Etapa 2.1 implementada; en pausa para auditoría)
+## Estado de la migración (Etapa 2.2 implementada; en pausa para auditoría)
+- **Un `.pmt.json` NUNCA dicta resultados.** Guarda trazados (entrada), procedencia, configuración y
+  una instantánea de recuentos marcada como informativa. Las relaciones **se recalculan siempre** al
+  abrir. `leerProyecto()` valida esquema (rechaza 0, −1 y futuros), IDs duplicados, geometrías,
+  coordenadas fuera del planeta y configuración. La `huella` detecta corrupción accidental; **no es
+  autenticación** y no se presenta como tal.
+- **Semántica temporal de la interfaz: un día es el DÍA CALENDARIO COMPLETO** (`vigentesEnDia`). El
+  motor sigue calculando traslape con fecha y hora exactas: eso no se toca. No mezcle «instante» y
+  «día» bajo la misma etiqueta.
+- **Fuentes**: abrir un proyecto lo incorpora como UNA FUENTE MÁS. Añadir suma, quitar resta,
+  «Empezar de nuevo» vacía. Identidad por nombre + huella de contenido.
+- **`Empezar de nuevo` llama a `Controles.reiniciarEstado()`**: sin eso quedaba un filtro aplicado e
+  invisible. Nunca puede haber un filtro activo sin su control visible.
+- **Pares no evaluables**: tienen pestaña propia, contador propio y salen en el informe. Jamás se
+  presentan como «lejos» ni como «sin relación».
+- **Velocidades del recorrido**: el `<select>` guarda el MULTIPLICADOR y el intervalo se deriva
+  (`intervaloDe`). No vuelva a poner un suelo con `Math.max`: rompía la proporción.
+- `VERSION_REGLAS` en `motor/src/nucleo/config.js` identifica las reglas canónicas. **Súbala solo si
+  cambia algo que mueva cifras.**
+- Pruebas: 229 motor + 75 app + **31 de navegador real**.
+
+### Estado anterior (Etapa 2.1)
 - **El mapa base NUNCA lleva `crossOrigin`.** Fue la causa del mapa en blanco: obliga a CORS y el
   navegador descarta teselas válidas si un proxy corporativo quita la cabecera. Demostrado en las 8
   combinaciones posibles. Tampoco se usa el prefijo `{s}.` (la política de OSM lo desaconseja).

@@ -439,7 +439,35 @@ details.tecnico pre {
 .inf-leyenda span { display: inline-flex; align-items: center; gap: 5px; }
 .inf-leyenda i { width: 18px; height: 4px; border-radius: 2px; display: inline-block; }
 
+/* ── Detalles cartográficos del informe ── */
+.inf-detalles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.inf-detalle { border: 1px solid var(--borde); border-radius: 5px; padding: 8px; break-inside: avoid; }
+.inf-detalle-tit { font-size: .76rem; margin-bottom: 5px; color: var(--tinta-2); }
+.inf-vs { color: var(--tenue); font-style: italic; }
+.inf-detalle-svg { width: 100%; height: auto; border-radius: 4px; display: block; }
+.inf-detalle-pie { display: flex; flex-wrap: wrap; gap: 10px; font-size: .72rem; color: var(--tinta-2); margin-top: 5px; }
+.inf-detalle-pie i { width: 12px; height: 3px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: middle; }
+@media (max-width: 800px) { .inf-detalles { grid-template-columns: 1fr; } }
+
+.aviso-cotejo {
+  margin-top: 8px; padding: 8px 11px; border-radius: 4px;
+  background: var(--rojo-suave); border-left: 3px solid var(--rojo); font-size: .85rem;
+}
+.notas-fuente { margin-top: 8px; font-size: .83rem; color: var(--tinta-2); }
+
+/**
+ * IMPRESIÓN DEL INFORME.
+ *
+ * Cuando el informe está abierto, imprimir tiene que dar SOLO el informe. Antes
+ * salían primero el tablero, los filtros y las tablas como páginas no pedidas.
+ * La regla es explícita: con `body.imprimiendo-informe`, todo lo que no sea el
+ * informe se oculta.
+ */
 @media print {
+  body.imprimiendo-informe > .envoltorio > *:not(#panelInforme) { display: none !important; }
+  body.imprimiendo-informe .cabecera { display: none !important; }
+  body.imprimiendo-informe #panelInforme { display: block !important; margin: 0 !important; }
+  body.imprimiendo-informe #panelInforme > h2 { display: none !important; }
   .informe { border: none; padding: 0; max-width: none; }
   .informe h2 { break-after: avoid; }
   .inf-tabla { break-inside: auto; }

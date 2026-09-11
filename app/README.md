@@ -37,6 +37,29 @@ Además: simbología por tipo de cierre, filtros cruzados, paginación, informe
 ejecutivo propio, gestión de archivos, proyectos guardables y 21 pruebas de
 navegador real.
 
+## Etapa 2.2 — qué se corrigió
+
+Una auditoría independiente demostró ocho defectos. El más grave: **un `.pmt.json`
+editado a mano imponía sus resultados**. Bastaba escribir una distancia de
+98.765,4 m para que la aplicación la mostrara como cálculo del motor.
+
+**El contrato de persistencia se rediseñó (esquema 2) con un principio:**
+
+> Las fuentes son entrada. Los resultados son derivados.
+> Un resultado no adquiere autoridad por estar escrito en un archivo.
+
+Las relaciones **ya no se guardan**: se recalculan siempre al abrir. El archivo
+guarda los trazados, la procedencia, la configuración, la versión de las reglas
+del motor y una instantánea de recuentos marcada como informativa, que solo
+sirve para avisar si el recálculo no coincide.
+
+También: abrir un proyecto y añadir un KMZ ya no pierde los datos anteriores;
+la vista de día muestra el día completo y no un instante; los pares no
+evaluables tienen pestaña propia; `Empezar de nuevo` limpia los filtros; el
+conector visual se sitúa bien en polígonos y en el antimeridiano; el informe
+declara su alcance real, sitúa los contactos donde ocurren, trae mapas de
+detalle y se imprime solo; y `4×` corre a 4× de verdad.
+
 ## Arquitectura
 
 ```

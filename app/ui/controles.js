@@ -10,9 +10,9 @@
  * CDN, accesibles con teclado sin configurar nada y con el mismo
  * comportamiento cruzado que tenia el tablero historico.
  */
-import { $, esc, num, crear, soloDia } from './dom.js';
+import { $, $$, esc, num, crear, soloDia } from './dom.js';
 import * as Filtro from '../nucleo/filtrado.js';
-import { vigentesEn, rangoTemporal } from '../nucleo/filtrado.js';
+import { vigentesEnDia, rangoTemporal, limitesDelDia } from '../nucleo/filtrado.js';
 
 const ETIQUETAS = {
   contratista: 'Contratista', contrato: 'Contrato', proyecto: 'Proyecto',
@@ -24,7 +24,40 @@ let todas = [];
 let alCambiar = () => {};
 
 export const actuales = () => filtros;
-export function fijarFiltros(f) { filtros = { ...Filtro.filtrosVacios(), ...(f ?? {}) }; }
+
+/**
+ * Fija los filtros desde fuera (al abrir un proyecto). Sanea lo que llega: un
+ * `.pmt.json` editado a mano no puede colar un filtro con forma imposible.
+ */
+export function fijarFiltros(f) {
+  const base = Filtro.filtrosVacios();
+  if (!f || typeof f !== 'object') { filtros = base; return; }
+  const lista = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
+  const fecha = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  filtros = {
+    ...base,
+    contratista: lista(f.contratista), contrato: lista(f.contrato), proyecto: lista(f.proyecto),
+    municipio: lista(f.municipio), frente: lista(f.frente), tipoCierre: lista(f.tipoCierre),
+    relacion: lista(f.relacion).filter((c) => Filtro.CLAVES_RELACION.some(([k]) => k === c)),
+    desde: fecha(f.desde), hasta: fecha(f.hasta),
+    texto: typeof f.texto === 'string' ? f.texto : '',
+  };
+}
+
+/**
+ * Devuelve los filtros y el recorrido a cero. `Empezar de nuevo` tiene que
+ * llamar aqui: si no, un filtro del analisis anterior seguia aplicado sin que
+ * su control existiera ya en pantalla, y el conjunto siguiente aparecia vacio
+ * sin explicacion.
+ */
+export function reiniciarEstado() {
+  parar();
+  filtros = Filtro.filtrosVacios();
+  todas = [];
+  rango = null; filasRec = [];
+  alCambiar = () => {};
+  alPaso = () => {};
+}
 
 export function montarFiltros(filas, onCambio) {
   todas = filas;
@@ -40,6 +73,8 @@ export function montarFiltros(filas, onCambio) {
       oninput: (e) => { filtros.texto = e.target.value; cambiar(null); },
     }),
   ]));
+  // NO PUEDE HABER UN FILTRO INVISIBLE APLICADO: todo lo que este en `filtros`
+  // tiene que verse en su control. Las fechas se rellenan mas abajo.
 
   for (const campo of Filtro.CAMPOS_FACETADOS) {
     const sel = crear('select', {
@@ -59,11 +94,13 @@ export function montarFiltros(filas, onCambio) {
     crear('label', { texto: 'Rango de fechas' }),
     crear('div', { clase: 'dos' }, [
       crear('input', {
-        type: 'date', id: 'fDesde', 'aria-label': 'Desde', min: r ? soloDia(r.min) : null, max: r ? soloDia(r.max) : null,
+        type: 'date', id: 'fDesde', 'aria-label': 'Desde', value: filtros.desde ?? '',
+        min: r ? soloDia(r.min) : null, max: r ? soloDia(r.max) : null,
         onchange: (e) => { filtros.desde = e.target.value || null; cambiar(null); },
       }),
       crear('input', {
-        type: 'date', id: 'fHasta', 'aria-label': 'Hasta', min: r ? soloDia(r.min) : null, max: r ? soloDia(r.max) : null,
+        type: 'date', id: 'fHasta', 'aria-label': 'Hasta', value: filtros.hasta ?? '',
+        min: r ? soloDia(r.min) : null, max: r ? soloDia(r.max) : null,
         onchange: (e) => { filtros.hasta = e.target.value || null; cambiar(null); },
       }),
     ]),
@@ -133,7 +170,7 @@ export function limpiar() {
   const t = $('fTexto'); if (t) t.value = '';
   const d = $('fDesde'), h = $('fHasta');
   if (d) d.value = ''; if (h) h.value = '';
-  document.querySelectorAll('#filtros input[type="checkbox"]').forEach((c) => { c.checked = false; });
+  for (const c of $$('#filtros input[type="checkbox"]')) c.checked = false;
   refrescarListas(null);
   alCambiar();
 }
@@ -142,7 +179,21 @@ export function limpiar() {
 
 let rango = null, tocando = false, temporizador = null, alPaso = () => {}, filasRec = [];
 
-const VELOCIDADES = [['2400', '0,5× (lento)'], ['1200', '1× (normal)'], ['600', '2× (rápido)'], ['250', '4× (muy rápido)']];
+/**
+ * VELOCIDADES. El valor es el MULTIPLICADOR, no el intervalo: el intervalo se
+ * deriva dividiendo la base entre el multiplicador, que es lo unico que
+ * garantiza que 4x sea el doble de rapido que 2x.
+ *
+ * Antes se guardaban intervalos a ojo y se les aplicaba un `Math.max(120, ...)`
+ * que actuaba de suelo: 4x acababa corriendo a 120 ms frente a los 300 ms de
+ * 1x, o sea 2,5x en vez de 4x. La base es 600 ms para que ni la mas rapida
+ * toque suelo alguno.
+ */
+export const INTERVALO_BASE_MS = 600;
+const VELOCIDADES = [[0.5, '0,5× (lento)'], [1, '1× (normal)'], [2, '2× (rápido)'], [4, '4× (muy rápido)']];
+
+/** Intervalo entre pasos, en ms, para un multiplicador dado. */
+export const intervaloDe = (multiplicador) => INTERVALO_BASE_MS / (multiplicador || 1);
 
 /**
  * Recorrido temporal. Conserva todo lo del tablero historico (reproducir,
@@ -187,9 +238,12 @@ export function volverATodo() {
 }
 
 function aplicarPaso(dia) {
-  const ms = rango.min + dia * 86400000;
+  // Se ancla al INICIO del dia calendario: el recorrido representa dias
+  // completos, no el instante que resulte de arrastrar la hora del primer dato.
+  const ms = limitesDelDia(rango.min).inicio + dia * 86400000;
   $('fechaViva').textContent = soloDia(ms);
-  $('vigentesAhora').textContent = `${num(vigentesEn(filasRec, ms).length)} PMT vigentes ese día`;
+  const n = vigentesEnDia(filasRec, ms).length;
+  $('vigentesAhora').textContent = `${num(n)} PMT con actividad ese día completo`;
   alPaso(ms);
 }
 
@@ -197,7 +251,6 @@ function reproducir() {
   tocando = true;
   $('btnPlay').textContent = '⏸ Pausar';
   const paso = +($('pasoDias')?.value ?? 7);
-  const ritmo = +($('velocidad')?.value ?? 1200);
   const barra = $('barraTiempo');
   if (+barra.value >= +barra.max) barra.value = 0;
   aplicarPaso(+barra.value);
@@ -206,7 +259,7 @@ function reproducir() {
     if (v > +barra.max) return parar();
     barra.value = v;
     aplicarPaso(v);
-  }, Math.max(120, ritmo / 4));
+  }, intervaloDe(+($('velocidad')?.value ?? 1)));
 }
 
 export function parar() {

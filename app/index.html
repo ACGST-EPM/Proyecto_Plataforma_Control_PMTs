@@ -98,6 +98,7 @@
     <div class="pestanas no-imprimir" role="tablist">
       <button role="tab" aria-selected="true"  data-pest="pmt">PMT <span class="cuenta" id="cuentaPmt">0</span></button>
       <button role="tab" aria-selected="false" data-pest="rel">Relaciones <span class="cuenta" id="cuentaRel">0</span></button>
+      <button role="tab" aria-selected="false" data-pest="noeval" id="pestNoEval" class="oculto">No evaluables <span class="cuenta" id="cuentaNoEval">0</span></button>
       <button role="tab" aria-selected="false" data-pest="cal">Calidad de los datos <span class="cuenta" id="cuentaCal">0</span></button>
     </div>
     <div class="cuerpo">
@@ -115,6 +116,8 @@
         <div class="tabla-caja"><table class="datos" id="tablaRel"><thead></thead><tbody></tbody></table></div>
         <div class="paginador no-imprimir" id="pagRel"></div>
       </div>
+
+      <div id="pest_noeval" class="oculto"><div id="panelNoEval"></div></div>
 
       <div id="pest_cal" class="oculto"><div id="panelCalidad"></div></div>
 

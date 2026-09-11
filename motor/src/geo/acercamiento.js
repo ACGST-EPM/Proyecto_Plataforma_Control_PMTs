@@ -22,7 +22,7 @@
 import { descomponer, cajaDe, RADIO_DOMINIO_METROS } from './geometria.js';
 import { planoParaCajas } from './plano-local.js';
 import { unir, radioAproximadoMetros, cotaInferiorMetros } from './cajas.js';
-import { ajustarACero } from './segmentos.js';
+import { ajustarACero, puntoEnAnillo, distPuntoAnillo } from './segmentos.js';
 
 /** Punto mas cercano de un segmento a un punto, como parametro t en [0,1]. */
 function tCercanoPuntoSegmento(p, a, b) {
@@ -33,6 +33,24 @@ function tCercanoPuntoSegmento(p, a, b) {
   return t < 0 ? 0 : t > 1 ? 1 : t;
 }
 
+/**
+ * Interpola entre dos vertices GEOGRAFICOS.
+ *
+ * OJO CON EL ANTIMERIDIANO: interpolar 179,9995 y -179,9995 tal cual da 0, es
+ * decir, el conector aparecia en el golfo de Guinea en vez de en el Pacifico.
+ * Se "desenrolla" la longitud antes de interpolar y se vuelve a normalizar
+ * despues, que es el mismo criterio de camino corto que usa el prefiltro.
+ */
+function interpGeo(a, b, t) {
+  let lonB = b[0];
+  if (Math.abs(lonB - a[0]) > 180) lonB += lonB > a[0] ? -360 : 360;
+  let lon = a[0] + (lonB - a[0]) * t;
+  if (lon > 180) lon -= 360;
+  if (lon < -180) lon += 360;
+  return [lon, a[1] + (b[1] - a[1]) * t];
+}
+
+/** Interpolacion plana, para el plano metrico local donde no hay antimeridiano. */
 const interp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1]);
 
@@ -67,6 +85,40 @@ function cercanosSegmentoSegmento(p1, p2, q1, q2) {
   probar(0, tCercanoPuntoSegmento(p1, q1, q2));
   probar(1, tCercanoPuntoSegmento(p2, q1, q2));
   return mejor;
+}
+
+/**
+ * Contencion: un punto DENTRO de un poligono esta a 0 m de el, aunque su borde
+ * quede lejos. Recorrer solo los anillos daba la distancia al borde —en el caso
+ * que encontro la auditoria, 552 m donde el motor decia 0— y pintaba el
+ * conector fuera del poligono. Aqui se detecta el caso y se devuelve el propio
+ * punto como lugar del contacto, que es donde esta de verdad.
+ */
+function dentroDelPoligono(p, pg) {
+  if (!puntoEnAnillo(p, pg.exterior)) return false;
+  for (const h of pg.huecos) {
+    // Sobre el borde de un hueco sigue habiendo contacto con el poligono.
+    if (puntoEnAnillo(p, h) && distPuntoAnillo(p, h) > 0) return false;
+  }
+  return true;
+}
+
+/**
+ * Busca un punto de una parte que caiga dentro de un poligono de la otra.
+ * Devuelve su indice dentro del tramo para poder recuperar la coordenada
+ * geografica original, sin pasar por ninguna reproyeccion.
+ */
+function buscarContenido(partePoligono, parteOtra, P) {
+  const pg = {
+    exterior: partePoligono.dato.exterior.map(P),
+    huecos: partePoligono.dato.huecos.map((h) => h.map(P)),
+  };
+  for (const tramo of tramosDe(parteOtra)) {
+    for (let i = 0; i < tramo.length; i++) {
+      if (dentroDelPoligono(P(tramo[i]), pg)) return tramo[i];
+    }
+  }
+  return null;
 }
 
 /** Vertices de una parte, como lista de anillos/lineas de al menos un punto. */
@@ -104,6 +156,7 @@ export function puntosMasCercanos(geomA, geomB) {
   let min = Infinity, mejorA = null, mejorB = null, algunaEvaluada = false;
 
   for (const pa of partesA) {
+    if (min === 0) break;
     for (const pb of partesB) {
       if (cotaInferiorMetros(pa.caja, pb.caja) >= min) continue;
       const union = unir(pa.caja, pb.caja);
@@ -112,6 +165,21 @@ export function puntosMasCercanos(geomA, geomB) {
 
       const plano = planoParaCajas([pa.caja, pb.caja]);
       const P = plano.proyectar;
+
+      // Contencion antes que nada: si algo cae DENTRO de un poligono, el
+      // contacto esta ahi mismo y ningun borde puede mejorarlo.
+      if (pa.tipo === 'poligono' || pb.tipo === 'poligono') {
+        const pg = pa.tipo === 'poligono' ? pa : pb;
+        const otra = pa.tipo === 'poligono' ? pb : pa;
+        const dentro = buscarContenido(pg, otra, P);
+        if (dentro) {
+          min = 0;
+          mejorA = pa.tipo === 'poligono' ? [...dentro] : [...dentro];
+          mejorB = [...dentro];
+          break;
+        }
+      }
+
       for (const tramoA of tramosDe(pa)) {
         for (const tramoB of tramosDe(pb)) {
           const provA = tramoA.map(P), provB = tramoB.map(P);
@@ -126,8 +194,8 @@ export function puntosMasCercanos(geomA, geomB) {
               // Vuelta al terreno: mismo parametro sobre el segmento original.
               const ga1 = tramoA[i], ga2 = tramoA[Math.min(i + 1, tramoA.length - 1)];
               const gb1 = tramoB[j], gb2 = tramoB[Math.min(j + 1, tramoB.length - 1)];
-              mejorA = interp(ga1, ga2, r.t);
-              mejorB = interp(gb1, gb2, r.u);
+              mejorA = interpGeo(ga1, ga2, r.t);
+              mejorB = interpGeo(gb1, gb2, r.u);
             }
           }
         }

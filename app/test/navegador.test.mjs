@@ -365,7 +365,8 @@ test('RECORRIDO: barra, reproducir, pausar, paso, velocidad y volver a todo', sa
   await p.evaluate(() => { const b = document.getElementById('barraTiempo'); b.value = 5; b.dispatchEvent(new Event('input')); });
   await p.waitForTimeout(400);
   assert.match(await txt(p, '#fechaViva'), /^\d{4}-\d{2}-\d{2}$/);
-  assert.ok(/vigentes ese día/.test(await txt(p, '#vigentesAhora')));
+  // La etiqueta dice ahora lo que de verdad se calcula: el DIA COMPLETO.
+  assert.ok(/actividad ese día completo/.test(await txt(p, '#vigentesAhora')), await txt(p, '#vigentesAhora'));
 
   await p.click('#btnPlay');
   await p.waitForTimeout(700);
@@ -486,8 +487,13 @@ test('PROYECTO: se guarda y se vuelve a abrir con el mismo resultado', saltar, a
   const ruta = path.join(TMP, 'proyecto.pmt.json');
   await descarga.saveAs(ruta);
   const guardado = JSON.parse(fs.readFileSync(ruta, 'utf8'));
-  assert.equal(guardado.esquema, 1);
+  assert.equal(guardado.esquema, 2);
   assert.equal(guardado.trazados.length, +pmtAntes);
+  // Contrato de la Etapa 2.2: el proyecto guarda ENTRADA, no resultados.
+  assert.equal(guardado.relaciones, undefined, 'un proyecto no guarda relaciones');
+  assert.ok(guardado.instantanea && /INFORMATIVO/.test(guardado.instantanea.nota),
+    'solo una instantánea de recuentos, marcada como informativa');
+  assert.ok(guardado.motor?.versionReglas, 'y declara con qué reglas se generó');
   assert.ok(!JSON.stringify(guardado).match(/password|token|secret|api[_-]?key/i), 'sin secretos');
   await p.close();
 
@@ -559,4 +565,237 @@ test('tambien funciona servida por HTTP, no solo desde file://', saltar, async (
   assert.equal(await txt(p, '#cuentaPmt'), '4');
   assert.deepEqual(errs, []);
   await p.close(); await ctx.close(); s.close();
+});
+
+/* ═══════════════════ ETAPA 2.2 · CONTRAEJEMPLOS DE LA AUDITORIA ═══════════════════ */
+
+/** KMZ con dos trazados muy separados en el tiempo, para el recorrido diario. */
+const KMZ_HORAS = escribir('horas.kmz', F.kmz([
+  F.placemark('MANANA', desc('CW7', { inicio: '2026-03-10 06:00:00', fin: '2026-03-10 08:00:00' }), F.punto([-75.6000, 6.2000])),
+  F.placemark('MEDIODIA', desc('CW8', { inicio: '2026-03-10 10:00:00', fin: '2026-03-10 12:00:00' }), F.punto([-75.6000, 6.2004])),
+]));
+
+test('2.2 · ABRIR PROYECTO + AÑADIR KMZ no pierde nada', saltar, async () => {
+  // ANTES: abrir un proyecto con 460 PMT y añadir un KMZ dejaba 14 PMT y 0
+  // relaciones, porque abrir el proyecto vaciaba la lista de fuentes.
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  const pmtAntes = +(await txt(p, '#cuentaPmt'));
+  const relAntes = +(await txt(p, '#cuentaRel'));
+  assert.ok(pmtAntes === 4 && relAntes > 0);
+
+  p.on('dialog', (d) => d.accept('Proyecto combinado'));
+  const [desc1] = await Promise.all([p.waitForEvent('download', { timeout: 20000 }), p.click('#btnGuardarProyecto')]);
+  const ruta = path.join(TMP, 'combinado.pmt.json');
+  await desc1.saveAs(ruta);
+  await p.close();
+
+  // Sesión nueva: abrir el proyecto y DESPUÉS añadir un KMZ más.
+  const q = await abrir({ sinRed: true });
+  await q.setInputFiles('#entradaProyecto', [ruta]);
+  await q.waitForSelector('#panelResumen:not(.oculto)', { timeout: 30000 });
+  await q.waitForTimeout(800);
+  assert.equal(+(await txt(q, '#cuentaPmt')), pmtAntes, 'el proyecto se restaura entero');
+  assert.equal(+(await txt(q, '#cuentaRel')), relAntes, 'y sus relaciones se recalculan igual');
+
+  await q.setInputFiles('#entradaAnadir', [KML_C]);
+  await q.waitForFunction((n) => document.querySelector('#cuentaPmt').textContent === String(n),
+    pmtAntes + 1, { timeout: 30000 });
+  assert.equal(+(await txt(q, '#cuentaPmt')), pmtAntes + 1, 'añadir SUMA, no reemplaza');
+  assert.ok(+(await txt(q, '#cuentaRel')) >= relAntes, 'y las relaciones no desaparecen');
+  const lista = await txt(q, '#listaSeleccion');
+  assert.ok(lista.includes('combinado.pmt.json') && lista.includes('gama.kml'), lista);
+  assert.deepEqual(q.erroresJs, []);
+  await q.close();
+});
+
+test('2.2 · un .pmt.json manipulado NO impone su resultado', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  const relReales = +(await txt(p, '#cuentaRel'));
+  p.on('dialog', (d) => d.accept('Para manipular'));
+  const [d] = await Promise.all([p.waitForEvent('download', { timeout: 20000 }), p.click('#btnGuardarProyecto')]);
+  const ruta = path.join(TMP, 'manipulado.pmt.json');
+  await d.saveAs(ruta);
+  await p.close();
+
+  // Se edita a mano: distancia falsa, relación inventada, instantánea mentirosa.
+  const obj = JSON.parse(fs.readFileSync(ruta, 'utf8'));
+  obj.relaciones = [{ idA: obj.trazados[0].id, idB: 'no-existe', distanciaMetros: 98765.4, intersecanFisicamente: true, hayTraslapeTemporal: true }];
+  obj.instantanea.relaciones = 999;
+  fs.writeFileSync(ruta, JSON.stringify(obj));
+
+  const q = await abrir({ sinRed: true });
+  await q.setInputFiles('#entradaProyecto', [ruta]);
+  await q.waitForSelector('#panelResumen:not(.oculto)', { timeout: 30000 });
+  await q.waitForTimeout(800);
+  assert.equal(+(await txt(q, '#cuentaRel')), relReales, 'manda el recálculo, no el archivo');
+  await q.click('.pestanas button[data-pest="rel"]');
+  await q.waitForTimeout(300);
+  const tabla = await txt(q, '#tablaRel');
+  assert.ok(!tabla.includes('98765'), 'la distancia inventada no aparece por ningún lado');
+  const aviso = await txt(q, '#siguientePaso');
+  assert.ok(/no coinciden con los que se guardaron|modificado/i.test(aviso), aviso);
+  await q.close();
+});
+
+test('2.2 · RECORRIDO: la vista de día muestra el día entero', saltar, async () => {
+  // ANTES: el recorrido consultaba un instante y un PMT de 10:00 a 12:00
+  // desaparecía de su propio día.
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_HORAS]);
+  assert.equal(await txt(p, '#cuentaPmt'), '2');
+  await p.evaluate(() => { const b = document.getElementById('barraTiempo'); b.value = 0; b.dispatchEvent(new Event('input')); });
+  await p.waitForTimeout(500);
+  assert.equal(await txt(p, '#cuentaPmt'), '2', 'los dos siguen visibles en su día');
+  assert.ok(/día completo/i.test(await txt(p, '#vigentesAhora')), await txt(p, '#vigentesAhora'));
+  await p.close();
+});
+
+test('2.2 · REINICIO: un filtro anterior no puede quedar invisible', saltar, async () => {
+  // ANTES: filtrar CW1 → empezar de nuevo → cargar otro KMZ dejaba 0 PMT,
+  // porque el filtro seguía aplicado sin que su control existiera.
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A]);
+  await p.selectOption('#f_contrato', ['CW1']);
+  await p.waitForTimeout(400);
+  assert.equal(await txt(p, '#cuentaPmt'), '2');
+
+  await p.click('#btnEmpezarDeNuevo');
+  await p.waitForTimeout(500);
+  await cargar(p, [KMZ_B]);
+  assert.equal(await txt(p, '#cuentaPmt'), '2', 'los datos nuevos se ven, sin filtros heredados');
+  const marcados = await p.$$eval('#filtros option', (o) => o.filter((x) => x.selected).length);
+  assert.equal(marcados, 0, 'ningún filtro queda marcado');
+  await p.close();
+});
+
+test('2.2 · los filtros de un proyecto se restauran TAMBIÉN en sus controles', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  await p.selectOption('#f_contrato', ['CW1']);
+  await p.fill('#fDesde', '2026-03-01');
+  await p.fill('#fHasta', '2026-03-30');
+  await p.dispatchEvent('#fDesde', 'change');
+  await p.dispatchEvent('#fHasta', 'change');
+  await p.waitForTimeout(400);
+
+  p.on('dialog', (d) => d.accept('Con filtros'));
+  const [d] = await Promise.all([p.waitForEvent('download', { timeout: 20000 }), p.click('#btnGuardarProyecto')]);
+  const ruta = path.join(TMP, 'confiltros.pmt.json');
+  await d.saveAs(ruta);
+  await p.close();
+
+  const q = await abrir({ sinRed: true });
+  await q.setInputFiles('#entradaProyecto', [ruta]);
+  await q.waitForSelector('#panelResumen:not(.oculto)', { timeout: 30000 });
+  await q.waitForTimeout(800);
+  // El estado interno y el control visual tienen que decir lo mismo.
+  assert.deepEqual(await q.$$eval('#f_contrato option', (o) => o.filter((x) => x.selected).map((x) => x.value)), ['CW1']);
+  assert.equal(await q.inputValue('#fDesde'), '2026-03-01');
+  assert.equal(await q.inputValue('#fHasta'), '2026-03-30');
+  await q.close();
+});
+
+test('2.2 · PARES NO EVALUABLES: se conservan, se cuentan y se pueden mirar', saltar, async () => {
+  // Los 8 KMZ reales no tienen ninguno, así que hace falta un caso sintético:
+  // dos contratos en puntos antípodas, que el motor no puede medir.
+  const lejos = escribir('antipodas.kmz', F.kmz([
+    F.placemark('AQUI', desc('CW9'), F.punto([0, 0])),
+    F.placemark('ALLI', desc('CW10'), F.punto([180, 0])),
+  ]));
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [lejos]);
+  assert.equal(await txt(p, '#cuentaPmt'), '2');
+  assert.equal(await txt(p, '#cuentaRel'), '0');
+  assert.equal(await txt(p, '#cuentaNoEval'), '1', 'el par no evaluable se cuenta aparte');
+  assert.ok(await p.isVisible('#pestNoEval'), 'y tiene su propia pestaña');
+
+  await p.click('.pestanas button[data-pest="noeval"]');
+  await p.waitForTimeout(300);
+  const panel = await txt(p, '#panelNoEval');
+  assert.ok(panel.includes('CW9') && panel.includes('CW10'), panel);
+  assert.ok(/no se pudo comprobar|No se pudo medir/i.test(panel), panel);
+  assert.ok(/no.*significa que estén lejos/i.test(panel), 'tiene que decir que NO es "lejos"');
+  await p.close();
+});
+
+test('2.2 · INFORME: durante el recorrido dice que cubre solo ese día', saltar, async () => {
+  // ANTES: afirmaba "Ninguno: cubre todos los datos cargados" mientras
+  // informaba solo el subconjunto visible.
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B, KMZ_HORAS]);
+  await p.evaluate(() => { const b = document.getElementById('barraTiempo'); b.value = 0; b.dispatchEvent(new Event('input')); });
+  await p.waitForTimeout(500);
+  await p.click('#expInforme');
+  await p.waitForSelector('#panelInforme:not(.oculto)', { timeout: 20000 });
+  const inf = await txt(p, '#informe');
+  assert.ok(/Recorrido temporal activo/i.test(inf), 'el informe declara el recorrido');
+  assert.ok(/Subconjunto/i.test(inf), 'y que cubre un subconjunto');
+  assert.ok(!/Ninguno: el informe cubre todos los datos cargados/.test(inf),
+    'no puede seguir afirmando que cubre todo');
+  await p.close();
+});
+
+test('2.2 · INFORME: trae mapas de detalle de las relaciones', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  await p.click('#expInforme');
+  await p.waitForSelector('#panelInforme:not(.oculto)', { timeout: 20000 });
+  const detalles = await p.$$eval('#informe .inf-detalle svg', (n) => n.length);
+  assert.ok(detalles > 0, 'hay al menos un mapa de detalle');
+  const inf = await txt(p, '#informe');
+  assert.ok(/punto exacto donde.*aproximan/i.test(inf), inf.slice(0, 200));
+  assert.ok(/no es una clasificación de criticidad/i.test(inf), 'y sigue sin clasificar');
+  // Cada detalle identifica de quién es.
+  const pie = await txt(p, '#informe .inf-detalle-pie');
+  assert.ok(pie.length > 0);
+  await p.close();
+});
+
+test('2.2 · IMPRESIÓN: el informe se imprime solo, sin el tablero', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  await p.click('#expInforme');
+  await p.waitForSelector('#panelInforme:not(.oculto)', { timeout: 20000 });
+  // Se comprueba la regla de impresion sin abrir el dialogo del sistema.
+  await p.evaluate(() => document.body.classList.add('imprimiendo-informe'));
+  await p.emulateMedia({ media: 'print' });
+  await p.waitForTimeout(200);
+  assert.ok(await p.isHidden('#panelExplorar'), 'el tablero no se imprime');
+  assert.ok(await p.isHidden('#panelDetalle'), 'las tablas tampoco');
+  assert.ok(await p.isHidden('#panelCarga'));
+  assert.ok(await p.isVisible('#informe'), 'pero el informe sí');
+  await p.emulateMedia({ media: 'screen' });
+  await p.close();
+});
+
+test('2.2 · identidad de fuentes: mismo nombre, otro contenido, y quitar', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A]);
+  assert.equal(await txt(p, '#cuentaPmt'), '2');
+
+  // Mismo archivo otra vez: no duplica y lo dice.
+  await p.setInputFiles('#entradaAnadir', [KMZ_A]);
+  await p.waitForTimeout(1200);
+  assert.equal(await txt(p, '#cuentaPmt'), '2');
+  assert.ok(/idéntico|no se duplicó/i.test(await txt(p, '#siguientePaso')), await txt(p, '#siguientePaso'));
+
+  // Mismo nombre con otro contenido: reemplaza y lo dice.
+  const otro = path.join(TMP, 'alfa.kmz');
+  const copia = path.join(TMP, 'copia-alfa.kmz');
+  fs.copyFileSync(otro, copia);
+  fs.writeFileSync(otro, Buffer.from(F.kmz([
+    F.placemark('A-NUEVO', desc('CW1', { tipo: 'total' }), F.punto([-75.6000, 6.2000])),
+  ])));
+  await p.setInputFiles('#entradaAnadir', [otro]);
+  await p.waitForFunction(() => document.querySelector('#cuentaPmt').textContent === '1', null, { timeout: 30000 });
+  assert.ok(/se reemplazó por la versión nueva/i.test(await txt(p, '#siguientePaso')));
+  fs.copyFileSync(copia, otro);       // se restaura para las demas pruebas
+
+  // Quitar deja el conjunto vacío y vuelve a la pantalla de carga.
+  await p.click('[data-quitar="alfa.kmz"]');
+  await p.waitForTimeout(700);
+  assert.ok(await p.isVisible('#panelCarga'));
+  await p.close();
 });

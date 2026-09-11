@@ -15,7 +15,7 @@ import { desambiguar } from '../modelo/identidad.js';
 import { calcularRelaciones } from './relaciones.js';
 import { resolverConfig } from './config.js';
 
-export { CONFIG_POR_DEFECTO, PERFIL_LEGADO, resolverConfig, alcanceMetros } from './config.js';
+export { CONFIG_POR_DEFECTO, PERFIL_LEGADO, resolverConfig, alcanceMetros, VERSION_REGLAS, REGLAS_CANONICAS } from './config.js';
 export { calcularRelaciones, hechosDelPar } from './relaciones.js';
 export { combinacionDe, repartir, porBandaDeDistancia, COMBINACIONES } from './provisional.js';
 export { resumenCalidad } from '../modelo/registro.js';

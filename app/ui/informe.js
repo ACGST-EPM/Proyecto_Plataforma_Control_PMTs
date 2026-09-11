@@ -23,8 +23,9 @@
 import { $, esc, num, fechaLegible, soloDia } from './dom.js';
 import { estadoEspacial, estadoTemporal, ESPACIAL, TEMPORAL,
   ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL, simbologiaDe, TIPOS_CIERRE, LECTURA } from '../nucleo/modelo.js';
-import { rangoTemporal } from '../nucleo/filtrado.js';
+import { rangoTemporal, limitesDelDia } from '../nucleo/filtrado.js';
 import { centroDe } from './mapa.js';
+import { puntosMasCercanos } from '../../motor/src/geo/acercamiento.js';
 
 /* ───────────────── Mini-mapa vectorial propio para el informe ───────────────── */
 
@@ -100,14 +101,15 @@ export function mapaSvg(filas, relaciones, porId, { ancho = 1000, alto = 620 } =
     trozos.push(`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="4.5" fill="${s.color}" stroke="#fff" stroke-width="1.5"/>`);
   }
 
-  // Relaciones: se marcan los puntos de contacto real.
+  // Contactos: se marcan DONDE SE TOCAN DE VERDAD. Antes se pintaba el centro
+  // del trazado A, que puede estar a cientos de metros del punto de contacto.
   for (const r of relaciones) {
-    const e = estadoEspacial(r);
-    if (e !== ESPACIAL.CONTACTO) continue;
-    const a = porId.get(r.idA);
-    const c = a?.geometria && centroDe(a.geometria);
-    if (!c) continue;
-    const [px, py] = T([c[1], c[0]]);
+    if (estadoEspacial(r) !== ESPACIAL.CONTACTO) continue;
+    const a = porId.get(r.idA), b = porId.get(r.idB);
+    if (!a?.geometria || !b?.geometria) continue;
+    const ac = puntosMasCercanos(a.geometria, b.geometria);
+    if (!ac.evaluable || !ac.a) continue;        // sin ubicacion fiable, no se marca nada
+    const [px, py] = T(ac.a);
     trozos.push(`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="7" fill="none" stroke="#c62828" stroke-width="2"/>`);
   }
 
@@ -119,8 +121,11 @@ export function mapaSvg(filas, relaciones, porId, { ancho = 1000, alto = 620 } =
 
 const tarjeta = (n, t, clase = '') => `<div class="inf-kpi ${clase}"><div class="inf-kpi-n">${num(n)}</div><div class="inf-kpi-t">${esc(t)}</div></div>`;
 
-function textoFiltros(f) {
+function textoFiltros(f, diaRecorrido) {
   const partes = [];
+  if (diaRecorrido !== null && diaRecorrido !== undefined) {
+    partes.push(`Recorrido temporal activo: solo el día ${soloDia(limitesDelDia(diaRecorrido).inicio)}`);
+  }
   const nombres = { contratista: 'Contratista', contrato: 'Contrato', proyecto: 'Proyecto', municipio: 'Municipio', frente: 'Frente', tipoCierre: 'Tipo de cierre', relacion: 'Tipo de relación' };
   for (const [k, t] of Object.entries(nombres)) if (f[k]?.length) partes.push(`${t}: ${f[k].join(', ')}`);
   if (f.desde || f.hasta) partes.push(`Fechas: ${f.desde ?? 'sin límite'} a ${f.hasta ?? 'sin límite'}`);
@@ -129,10 +134,89 @@ function textoFiltros(f) {
 }
 
 /**
+ * Mapa de DETALLE de una relacion: encuadra sus dos trazados y marca el punto
+ * exacto de aproximacion. Sin teselas, sin captura manual y sin QGIS.
+ */
+export function mapaDetalle(rel, porId, { ancho = 470, alto = 300 } = {}) {
+  const a = porId.get(rel.idA), b = porId.get(rel.idB);
+  if (!a?.geometria || !b?.geometria) return '';
+  const ac = puntosMasCercanos(a.geometria, b.geometria);
+
+  const proy = ([lon, lat]) => {
+    const x = (lon + 180) / 360;
+    const sn = Math.sin((lat * Math.PI) / 180);
+    return [x, 0.5 - Math.log((1 + sn) / (1 - sn)) / (4 * Math.PI)];
+  };
+  const pts = [];
+  const recoge = (g) => {
+    if (!g) return;
+    if (g.type === 'GeometryCollection') return (g.geometries ?? []).forEach(recoge);
+    const plano = (v) => { if (typeof v[0] === 'number') pts.push(proy(v)); else v.forEach(plano); };
+    if (g.coordinates) plano(g.coordinates);
+  };
+  recoge(a.geometria); recoge(b.geometria);
+  if (!pts.length) return '';
+
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  let minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const dx = Math.max(maxX - minX, 1e-9), dy = Math.max(maxY - minY, 1e-9);
+  minX -= dx * 0.18; maxX += dx * 0.18; minY -= dy * 0.18; maxY += dy * 0.18;
+  const k = Math.min(ancho / (maxX - minX), alto / (maxY - minY));
+  const cx = (maxX + minX) / 2, cy = (maxY + minY) / 2;
+  const T = (c) => { const [x, y] = proy(c); return [(x - cx) * k + ancho / 2, (y - cy) * k + alto / 2]; };
+  const fmt = ([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`;
+
+  const trozos = [];
+  const pinta = (g, color) => {
+    if (!g) return;
+    const est = `fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"`;
+    switch (g.type) {
+      case 'Point': { const [x, y] = T(g.coordinates); trozos.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" fill="${color}"/>`); break; }
+      case 'MultiPoint': g.coordinates.forEach((c) => pinta({ type: 'Point', coordinates: c }, color)); break;
+      case 'LineString': trozos.push(`<polyline points="${g.coordinates.map((c) => fmt(T(c))).join(' ')}" ${est}/>`); break;
+      case 'MultiLineString': g.coordinates.forEach((l) => pinta({ type: 'LineString', coordinates: l }, color)); break;
+      case 'Polygon': trozos.push(`<polygon points="${g.coordinates[0].map((c) => fmt(T(c))).join(' ')}" fill="${color}" fill-opacity="0.2" stroke="${color}" stroke-width="2"/>`); break;
+      case 'MultiPolygon': g.coordinates.forEach((pg) => pinta({ type: 'Polygon', coordinates: pg }, color)); break;
+      case 'GeometryCollection': (g.geometries ?? []).forEach((x) => pinta(x, color)); break;
+      default: break;
+    }
+  };
+  pinta(a.geometria, '#1565c0');
+  pinta(b.geometria, '#d56b00');
+
+  let leyendaDist = '';
+  if (ac.evaluable && ac.a && ac.b) {
+    const [x1, y1] = T(ac.a), [x2, y2] = T(ac.b);
+    trozos.push(`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#c62828" stroke-width="2" stroke-dasharray="4 3"/>`);
+    for (const [px, py] of [[x1, y1], [x2, y2]]) {
+      trozos.push(`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="4" fill="#c62828" stroke="#fff" stroke-width="1.5"/>`);
+    }
+    leyendaDist = `${ac.metros.toFixed(1)} m`;
+  } else {
+    leyendaDist = 'no se pudo situar';
+  }
+
+  return `<div class="inf-detalle">
+    <div class="inf-detalle-tit"><b>${esc(rel.contratoA)}</b> ${esc(rel.frenteA ?? '')}
+      <span class="inf-vs">vs</span> <b>${esc(rel.contratoB)}</b> ${esc(rel.frenteB ?? '')}</div>
+    <svg viewBox="0 0 ${ancho} ${alto}" class="inf-detalle-svg" role="img"
+      aria-label="Detalle de la relación entre ${esc(rel.frenteA ?? '')} y ${esc(rel.frenteB ?? '')}">
+      <rect width="${ancho}" height="${alto}" fill="#f6f7f8"/>${trozos.join('')}</svg>
+    <div class="inf-detalle-pie">
+      <span><i style="background:#1565c0"></i>${esc(rel.frenteA ?? 'A')}</span>
+      <span><i style="background:#d56b00"></i>${esc(rel.frenteB ?? 'B')}</span>
+      <span><i style="background:#c62828"></i>${esc(leyendaDist)}</span>
+      <span>${esc(ETIQUETA_ESPACIAL[estadoEspacial(rel)])} · ${esc(ETIQUETA_TEMPORAL[estadoTemporal(rel)])}</span>
+    </div>
+  </div>`;
+}
+
+/**
  * Construye el informe completo dentro de `#informe` y abre la impresión.
  * Devuelve el HTML generado, para poder comprobarlo en las pruebas.
  */
-export function generar({ filas, relaciones, porId, archivos, resumen, filtros, config }) {
+export function generar({ filas, relaciones, porId, noEvaluables, archivos, resumen, filtros,
+  config, versionReglas, diaRecorrido, totalCargado }) {
   const rango = rangoTemporal(filas);
   const contratos = [...new Set(filas.map((x) => x.contrato).filter(Boolean))].sort();
   const municipios = [...new Set(filas.map((x) => x.municipio).filter(Boolean))].sort();
@@ -190,6 +274,24 @@ export function generar({ filas, relaciones, porId, archivos, resumen, filtros, 
     ['Parejas cuyas fechas no permiten decidir el traslape', resumen.temporalNoEval],
   ].filter(([, n]) => n > 0);
 
+  // ALCANCE HONESTO. Durante el recorrido temporal el informe cubre SOLO ese
+  // dia, y decir "cubre todos los datos cargados" seria falso.
+  const enRecorrido = diaRecorrido !== null && diaRecorrido !== undefined;
+  const parcial = enRecorrido || (totalCargado && filas.length < totalCargado);
+  const alcance = parcial
+    ? `<b>Subconjunto:</b> ${num(filas.length)} de ${num(totalCargado ?? filas.length)} PMT cargados` +
+      (enRecorrido ? `, correspondientes al día ${esc(soloDia(limitesDelDia(diaRecorrido).inicio))} completo` : ', según los filtros aplicados') + '.'
+    : `Todos los datos cargados: ${num(filas.length)} PMT.`;
+
+  // Mapas de detalle: las relaciones que mas importa poder interpretar, sin
+  // clasificarlas. Se limita el numero y se dice, para no producir un PDF
+  // interminable.
+  const MAX_DETALLE = 12;
+  const paraDetalle = [...relaciones].sort((a, b) => {
+    const p = (r) => (estadoEspacial(r) === ESPACIAL.CONTACTO ? 0 : 1) + (estadoTemporal(r) === TEMPORAL.COINCIDE ? 0 : 2);
+    return p(a) - p(b) || (a.distanciaMetros ?? 1e9) - (b.distanciaMetros ?? 1e9);
+  }).slice(0, MAX_DETALLE);
+
   const html = `
   <div class="inf-portada">
     <div class="inf-marca">EPM</div>
@@ -218,7 +320,9 @@ export function generar({ filas, relaciones, porId, archivos, resumen, filtros, 
     <tr><th>Criterio espacial</th><td>distancia mínima real entre las geometrías, umbral de <b>${esc(config.umbralMetros)} m</b></td></tr>
     <tr><th>Criterio temporal</th><td>fecha <b>y hora</b> reales, coincidencia mínima exigida de ${esc(config.toleranciaMinutos)} minutos</td></tr>
     <tr><th>Regla invariante</th><td>dos frentes del <b>mismo contrato</b> nunca se consideran interferencia entre contratos</td></tr>
-    <tr><th>Filtros aplicados</th><td>${esc(textoFiltros(filtros))}</td></tr>
+    <tr><th>Filtros aplicados</th><td>${esc(textoFiltros(filtros, diaRecorrido))}</td></tr>
+    <tr><th>Alcance del informe</th><td>${alcance}</td></tr>
+    <tr><th>Reglas del motor</th><td>${esc(versionReglas ?? 'no declarada')}</td></tr>
     <tr><th>Contratistas</th><td>${esc(contratistas.join(', ')) || '—'}</td></tr>
   </table>
 
@@ -248,6 +352,30 @@ export function generar({ filas, relaciones, porId, archivos, resumen, filtros, 
   </table>`
     : '<p class="inf-p">No se detectó ninguna relación entre contratos distintos con los criterios y filtros aplicados.</p>'}
 
+  ${paraDetalle.length ? `
+  <h2>Detalle cartográfico de las relaciones</h2>
+  <p class="inf-p">Cada recuadro encuadra los dos trazados implicados y marca <b>el punto exacto donde
+  más se aproximan</b>. ${relaciones.length > MAX_DETALLE
+    ? `Se muestran ${MAX_DETALLE} de ${num(relaciones.length)} relaciones, ordenadas poniendo primero las que se tocan y coinciden en el tiempo.`
+    : `Se muestran todas las relaciones encontradas.`}
+  El orden <b>no es una clasificación de criticidad</b>.</p>
+  <div class="inf-detalles">${paraDetalle.map((r) => mapaDetalle(r, porId)).join('')}</div>` : ''}
+
+  ${(noEvaluables ?? []).length ? `
+  <h2>Parejas que no se pudieron evaluar</h2>
+  <div class="inf-nota inf-nota-aviso">
+    <b>${num(noEvaluables.length)} pareja(s) cuya distancia no se pudo determinar.</b>
+    No significa que estén lejos ni que no haya interferencia: significa que no se pudo comprobar.
+  </div>
+  <table class="inf-tabla">
+    <thead><tr><th>Contrato A</th><th>Frente A</th><th>Contrato B</th><th>Frente B</th><th>Motivo</th></tr></thead>
+    <tbody>${noEvaluables.slice(0, 40).map((h) => `<tr>
+      <td>${esc(h.contratoA ?? '—')}</td><td>${esc(h.frenteA ?? '—')}</td>
+      <td>${esc(h.contratoB ?? '—')}</td><td>${esc(h.frenteB ?? '—')}</td>
+      <td><small>${esc((h.avisos ?? h.errores ?? []).join(' · ') || 'sin motivo registrado')}</small></td>
+    </tr>`).join('')}</tbody>
+  </table>` : ''}
+
   <h2>Calidad de los datos</h2>
   <table class="inf-tabla">
     <thead><tr><th>Archivo</th><th>Lectura</th><th>Trazados</th><th>Observaciones</th></tr></thead>
@@ -274,4 +402,18 @@ export function generar({ filas, relaciones, porId, archivos, resumen, filtros, 
   return html;
 }
 
-export function imprimir() { window.print(); }
+/**
+ * Imprime SOLO el informe. Marca el `body` antes de llamar a la impresion y lo
+ * desmarca al terminar, de modo que la hoja de estilos de impresion pueda
+ * ocultar el tablero. Sin esto salian varias paginas de filtros y tablas que
+ * nadie habia pedido.
+ */
+export function imprimir() {
+  const cuerpo = document.body;
+  cuerpo.classList.add('imprimiendo-informe');
+  const limpiar = () => cuerpo.classList.remove('imprimiendo-informe');
+  if (typeof window.onafterprint !== 'undefined') {
+    window.addEventListener('afterprint', limpiar, { once: true });
+  }
+  try { window.print(); } finally { setTimeout(limpiar, 1500); }
+}

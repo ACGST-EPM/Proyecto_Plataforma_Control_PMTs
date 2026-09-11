@@ -13,8 +13,8 @@ arrastre sus KMZ o KML y listo. No hay que instalar nada ni tener internet.
 
 ```bash
 npm run preparar       # instala dependencias de desarrollo (npm ci, versiones fijas)
-npm test               # 229 pruebas del motor + 49 de la aplicación
-npm run test:navegador # 21 pruebas en Chromium real sobre el archivo de dist/
+npm test               # 229 pruebas del motor + 75 de la aplicación
+npm run test:navegador # 31 pruebas en Chromium real sobre el archivo de dist/
 npm run construir      # regenera dist/Plataforma_PMTs.html y dist/verificador.html
 ```
 
@@ -55,8 +55,11 @@ los KMZ sin librerías externas).
 ## Estado
 
 Etapa 1 (motor en paralelo) cerrada y auditada de forma independiente.
-Etapa 2 (integración y flujo directo KMZ/KML) implementada, y **corregida en la
-Etapa 2.1** tras la prueba real de la usuaria y una auditoría funcional: mapa
+Etapa 2 (integración y flujo directo KMZ/KML) implementada, y corregida en las
+Etapas **2.1** y **2.2** tras dos auditorías independientes. La 2.1 arregló el
+mapa base y nueve regresiones; la **2.2** rediseñó la persistencia para que un
+proyecto guardado no pueda dictar resultados, y corrigió la semántica temporal,
+la gestión de fuentes y el informe. Detalle original de la 2.1 tras la prueba real de la usuaria y una auditoría funcional: mapa
 base, simbología, filtros cruzados, paginación, informe ejecutivo, gestión de
 archivos y proyectos guardables.
 La publicación corporativa se evalúa en una etapa específica: la aplicación está
