@@ -135,9 +135,10 @@ summary{cursor:pointer;font-weight:600;font-size:13.5px;color:var(--verde-osc)}
       <div class="nota">Con «fecha y hora», dos obras el mismo día en jornadas distintas dejan de ser conflicto.</div>
     </div>
     <div class="campo">
-      <label for="tolerancia">Margen de tiempo exigido (minutos)</label>
+      <label for="tolerancia">Coincidencia mínima exigida (minutos)</label>
       <input type="number" id="tolerancia" value="0" min="0" step="15">
-      <div class="nota">0 = cualquier coincidencia cuenta. Si pone 120, se exigen 2 horas de coincidencia real.</div>
+      <div class="nota">Hay conflicto si las obras coinciden <b>más de cero</b> y <b>al menos</b> estos minutos.
+      Con 0, cualquier coincidencia real cuenta. Con 120, dos horas justas ya cuentan.</div>
     </div>
     <div class="campo">
       <label for="finDia">La fecha de fin cubre todo ese día</label>
@@ -212,12 +213,13 @@ summary{cursor:pointer;font-weight:600;font-size:13.5px;color:var(--verde-osc)}
 
 <script type="module">
 const motor = await window.__MOTOR_PMT__;
-const { analizar, aGeoJson, ejecutarLegado, PERFIL_LEGADO } = motor;
+const { analizar, aGeoJson, ejecutarLegado, cotejarFidelidad, resumirCotejo, PERFIL_LEGADO } = motor;
 
 let ARCHIVOS = [];
 let RESULTADO = null;   // motor nuevo, parametros elegidos
 let LEGADO = null;      // motor nuevo con PERFIL_LEGADO: comparable registro a registro
 let REPLICA = null;     // replica fiel del script de QGIS: sirve de control
+let COTEJO = null;      // comparacion alerta por alerta entre los dos caminos
 let FILTRO = 'todas';
 let ORDEN = { col: 'distanciaMetros', asc: true };
 
@@ -276,6 +278,7 @@ $('btnCalcular').onclick = async () => {
     RESULTADO = await analizar(ARCHIVOS, cfg);
     LEGADO = await analizar(ARCHIVOS, PERFIL_LEGADO);
     REPLICA = await ejecutarLegado(ARCHIVOS);
+    COTEJO = cotejarFidelidad(REPLICA, LEGADO);
     const ms = Math.round(performance.now() - t0);
     pintarResumen(ms);
     pintarRelaciones();
@@ -304,7 +307,6 @@ function pintarResumen(ms) {
 
   const rInter = REPLICA.resumen['Interferencia'] ?? 0;
   const rCerc = REPLICA.resumen['Cercanía'] ?? 0;
-  const fiel = rInter === lt && rCerc === (L.length - lt);
 
   $('tarjetasLegado').innerHTML =
     tarjeta(REPLICA.resumen['Trazado Normal'] ?? 0, 'trazados leídos') +
@@ -312,13 +314,32 @@ function pintarResumen(ms) {
     tarjeta(rInter, 'llamadas «interferencia real (crítica)»', 'naranja') +
     tarjeta(rCerc, 'llamadas «cercanía»', 'azul');
 
-  $('fidelidad').innerHTML = (fiel
-    ? `<div class="aviso ok" style="margin-top:10px"><b>Control de fidelidad superado.</b>
-       Se ejecutaron dos caminos independientes del motor de QGIS y dieron el mismo resultado
-       (${rInter} interferencias y ${rCerc} cercanías), así que la comparación de abajo es fiable.</div>`
-    : `<div class="aviso error" style="margin-top:10px"><b>Atención:</b> los dos caminos de reproducción
-       del motor de QGIS no coinciden (${rInter}/${rCerc} frente a ${lt}/${L.length - lt}).
-       Revise antes de sacar conclusiones de la comparación.</div>`);
+  // CONTROL DE FIDELIDAD: no se conforma con que los totales cuadren. Compara
+  // cada alerta con su pareja: mismos contratos, mismos frentes, misma
+  // categoría y mismo periodo. Solo así se puede confiar en la comparación.
+  const c = COTEJO;
+  const muestra = (lista, titulo) => !lista.length ? '' :
+    `<div style="margin-top:8px"><b>${titulo} (${lista.length}):</b><ul class="limpia">` +
+    lista.slice(0, 5).map((x) => `<li>${escapar(x.categoria)} · ${escapar(x.contratos)} · ${escapar(x.frentes)} · ${escapar(x.periodo)}</li>`).join('') +
+    (lista.length > 5 ? `<li>… y ${lista.length - 5} más</li>` : '') + '</ul></div>';
+
+  $('fidelidad').innerHTML = c.completo
+    ? `<div class="aviso ok" style="margin-top:10px">
+         <b>Control de fidelidad superado.</b> ${escapar(resumirCotejo(c))}
+         <details><summary>Qué se comprobó exactamente</summary>
+           <ul class="limpia">${c.criterios.map((x) => `<li>${escapar(x)}</li>`).join('')}</ul>
+           <p style="margin:8px 0 0">Se cotejaron <b>${c.coincidentes}</b> alertas una por una.
+           Los totales de arriba son solo un resumen: la prueba es esta.</p>
+         </details>
+       </div>`
+    : `<div class="aviso error" style="margin-top:10px">
+         <b>No se puede afirmar fidelidad completa.</b> ${escapar(resumirCotejo(c))}
+         <details open><summary>Qué se comprobó y qué no cuadra</summary>
+           <ul class="limpia">${c.criterios.map((x) => `<li>${escapar(x)}</li>`).join('')}</ul>
+           ${muestra(c.soloReplica, 'Solo en la reproducción de QGIS')}
+           ${muestra(c.soloMotor, 'Solo en el motor nuevo en perfil legado')}
+         </details>
+       </div>`;
 
   $('tarjetasNuevo').innerHTML =
     tarjeta(N.length, 'relaciones dentro del umbral') +

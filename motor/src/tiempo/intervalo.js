@@ -65,25 +65,53 @@ export function leerVigencia(textoInicio, textoFin, opciones = {}) {
 
 /**
  * Hechos del traslape entre dos vigencias. No clasifica nada.
+ *
+ * DEFINICION EXACTA DE LA REGLA, identica en codigo, pruebas, documentacion y
+ * texto de la interfaz:
+ *
+ *   Hay traslape cuando la coincidencia dura MAS DE CERO
+ *   y AL MENOS los N minutos exigidos.
+ *
+ *   es decir:   duracion > 0   Y   duracion >= N
+ *
+ * Con el valor aprobado por defecto N = 0 la regla se reduce a "duracion > 0":
+ * cualquier coincidencia real cuenta, y dos vigencias que solo se tocan en un
+ * instante NO traslapan (se marcan aparte como `contiguas`).
+ *
+ * Con N = 120, dos vigencias que coincidan exactamente 120 minutos SI traslapan,
+ * porque se exige "al menos", no "mas de".
+ *
  * @param {object} v1
  * @param {object} v2
- * @param {{toleranciaMinutos?: number}} [opciones] tolerancia por defecto 0
+ * @param {{toleranciaMinutos?: number}} [opciones] minutos minimos exigidos; por defecto 0
  */
 export function traslape(v1, v2, opciones = {}) {
-  const tol = (opciones.toleranciaMinutos ?? 0) * MS_MINUTO;
+  const minimoMs = (opciones.toleranciaMinutos ?? 0) * MS_MINUTO;
   if (!v1.valida || !v2.valida) {
     return {
       hayTraslape: false, contiguas: false, evaluable: false,
       inicioMs: null, finMs: null, inicio: null, fin: null,
       duracionMs: 0, duracionDias: 0, duracionHoras: 0,
+      minimoExigidoMinutos: minimoMs / MS_MINUTO,
       motivo: 'alguna de las dos vigencias no tiene fechas utilizables',
     };
   }
   const ini = Math.max(v1.inicioMs, v2.inicioMs);
   const fin = Math.min(v1.finMs, v2.finMs);
   const bruto = fin - ini;
-  const hay = bruto > tol;
-  const contiguas = !hay && bruto >= -tol && bruto <= tol;
+
+  const hay = bruto > 0 && bruto >= minimoMs;
+  // Contiguas significa exactamente eso: una termina en el mismo instante en
+  // que la otra empieza. No depende del minimo exigido.
+  const contiguas = bruto === 0;
+
+  let motivo = null;
+  if (!hay) {
+    if (contiguas) motivo = 'las vigencias solo se tocan en un instante';
+    else if (bruto < 0) motivo = 'no coinciden en el tiempo';
+    else motivo = `coinciden ${Math.round(bruto / MS_MINUTO)} min, menos de los ${minimoMs / MS_MINUTO} exigidos`;
+  }
+
   return {
     hayTraslape: hay,
     contiguas,
@@ -96,6 +124,7 @@ export function traslape(v1, v2, opciones = {}) {
     // Días calendario cubiertos por el traslape, ambos extremos incluidos.
     duracionDias: hay ? Math.floor(fin / MS_DIA) - Math.floor(ini / MS_DIA) + 1 : 0,
     duracionHoras: hay ? Math.round((bruto / 3600000) * 100) / 100 : 0,
-    motivo: hay ? null : (contiguas ? 'las vigencias solo se tocan en un instante' : 'no coinciden en el tiempo'),
+    minimoExigidoMinutos: minimoMs / MS_MINUTO,
+    motivo,
   };
 }

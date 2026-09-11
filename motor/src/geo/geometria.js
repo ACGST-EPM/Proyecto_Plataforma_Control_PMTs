@@ -13,9 +13,12 @@
 
 import { planoParaCajas } from './plano-local.js';
 import {
-  distPuntoSegmento, distSegmentoSegmento, seCortan,
+  distPuntoSegmento, distSegmentoSegmento,
   puntoEnAnillo, distPuntoAnillo,
+  ajustarACero, TOLERANCIA_NUMERICA_METROS,
 } from './segmentos.js';
+
+export { TOLERANCIA_NUMERICA_METROS };
 
 /** Tipos GeoJSON que el motor entiende. */
 export const TIPOS_SOPORTADOS = new Set([
@@ -143,7 +146,7 @@ function distLineaLinea(l1, l2) {
     for (let j = 0; j < n2; j++) {
       const c = l2[j], d = l2[j + 1] ?? l2[j];
       const dd = (a === b && c === d)
-        ? Math.hypot(a[0] - c[0], a[1] - c[1])
+        ? ajustarACero(Math.hypot(a[0] - c[0], a[1] - c[1]))
         : a === b ? distPuntoSegmento(a, c, d)
         : c === d ? distPuntoSegmento(c, a, b)
         : distSegmentoSegmento(a, b, c, d);
@@ -190,7 +193,7 @@ export function medir(geomA, geomB) {
   const bajar = (d) => { if (d < min) min = d; return min === 0; };
 
   for (const pa of A.puntos) {
-    for (const pb of B.puntos) if (bajar(Math.hypot(pa[0] - pb[0], pa[1] - pb[1]))) return fin(min, errores);
+    for (const pb of B.puntos) if (bajar(ajustarACero(Math.hypot(pa[0] - pb[0], pa[1] - pb[1])))) return fin(min, errores);
     for (const lb of B.lineas) if (bajar(distLineaLinea([pa], lb))) return fin(min, errores);
     for (const gb of B.poligonos) if (bajar(distPuntoPoligono(pa, gb))) return fin(min, errores);
   }
@@ -209,7 +212,11 @@ export function medir(geomA, geomB) {
 
 function fin(min, errores) {
   if (!Number.isFinite(min)) return { metros: null, intersecan: false, errores };
-  return { metros: min, intersecan: min === 0, errores };
+  // La tolerancia numerica se aplica una ultima vez aqui, de modo que
+  // `intersecan` nunca sea falso por culpa del redondeo de la coma flotante.
+  // Es una tolerancia de ARITMETICA (1 nm), no el umbral operacional de 120 m.
+  const metros = ajustarACero(min);
+  return { metros, intersecan: metros === 0, errores };
 }
 
 /** Caja envolvente geográfica de una geometría GeoJSON sin descomponer antes. */

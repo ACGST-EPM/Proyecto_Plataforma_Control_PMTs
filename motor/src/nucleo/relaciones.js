@@ -25,21 +25,53 @@ import { resolverConfig, alcanceMetros } from './config.js';
 const GRADO_LAT_MIN_METROS = 110574;
 
 /**
+ * Separacion angular minima, en grados, entre dos intervalos de longitud
+ * MEDIDA SOBRE EL CIRCULO.
+ *
+ * Es imprescindible que sea circular: la longitud da la vuelta en +-180. Dos
+ * trazados separados 110 m a los lados del antimeridiano tienen longitudes
+ * 179.9995 y -179.9995, y una resta normal los ve a 359.999 grados de
+ * distancia, es decir, casi una vuelta entera al planeta. Con la resta normal
+ * el prefiltro los descartaba y el par nunca llegaba a medirse, aunque el
+ * calculo final si sabia tratarlos.
+ *
+ * Se prueba el segundo intervalo desplazado una vuelta a cada lado y se toma
+ * la separacion menor. Devuelve 0 si los intervalos se solapan.
+ */
+export function separacionLongitud(aMin, aMax, bMin, bMax) {
+  let menor = Infinity;
+  for (const vuelta of [-360, 0, 360]) {
+    const b1 = bMin + vuelta, b2 = bMax + vuelta;
+    const hueco = Math.max(0, Math.max(aMin - b2, b1 - aMax));
+    if (hueco < menor) menor = hueco;
+  }
+  return menor;
+}
+
+/**
  * Prefiltro barato por caja envolvente. Solo descarta pares que con seguridad
  * estan mas lejos que el alcance; nunca descarta un par que podria calificar.
  */
 function puedenEstarCerca(a, b, alcance) {
   if (!a.caja || !b.caja) return false;
   const margenLat = alcance / GRADO_LAT_MIN_METROS;
-  const latMed = (a.caja.minLat + a.caja.maxLat + b.caja.minLat + b.caja.maxLat) / 4;
-  const cos = Math.max(0.01, Math.cos((latMed * Math.PI) / 180));
-  const margenLon = margenLat / cos;
-  return !(
-    a.caja.minLon - margenLon > b.caja.maxLon ||
-    b.caja.minLon - margenLon > a.caja.maxLon ||
-    a.caja.minLat - margenLat > b.caja.maxLat ||
-    b.caja.minLat - margenLat > a.caja.maxLat
+
+  // Separacion en latitud: no hay vuelta que dar, resta directa.
+  const huecoLat = Math.max(0, Math.max(a.caja.minLat - b.caja.maxLat, b.caja.minLat - a.caja.maxLat));
+  if (huecoLat > margenLat) return false;
+
+  // Separacion en longitud: circular, para no romperse en el antimeridiano.
+  // El margen en grados de longitud se ensancha con la latitud; se toma la
+  // latitud mas alejada del ecuador de las dos cajas, que es la que da el
+  // margen mas ancho, para no descartar nunca un par por quedarse corto.
+  const latExtrema = Math.max(
+    Math.abs(a.caja.minLat), Math.abs(a.caja.maxLat),
+    Math.abs(b.caja.minLat), Math.abs(b.caja.maxLat)
   );
+  const cos = Math.max(0.01, Math.cos((latExtrema * Math.PI) / 180));
+  const margenLon = margenLat / cos;
+  const huecoLon = separacionLongitud(a.caja.minLon, a.caja.maxLon, b.caja.minLon, b.caja.maxLon);
+  return huecoLon <= margenLon;
 }
 
 /** Hechos de un par concreto, sin prefiltro ni umbral. Util para pruebas. */
@@ -104,6 +136,7 @@ export function calcularRelaciones(registros, configParcial = {}) {
     sinGeometria: registros.length - utiles.length,
     paresTotales: (utiles.length * (utiles.length - 1)) / 2,
     paresMismoContrato: 0,
+    paresSinContrato: 0,
     paresDescartadosPorCaja: 0,
     distanciasCalculadas: 0,
     relaciones: 0,
@@ -119,9 +152,23 @@ export function calcularRelaciones(registros, configParcial = {}) {
     for (let j = i + 1; j < utiles.length; j++) {
       const a = utiles[i], b = utiles[j];
 
+      // REGISTROS SIN CONTRATO.
+      //
+      // Un trazado al que le falta el contrato se conserva y se muestra como
+      // dato con problema de calidad (aparece en `registros`, con su aviso y
+      // su geometria), pero NO puede participar en una relacion, porque una
+      // interferencia se define ENTRE CONTRATOS DISTINTOS y aqui no se sabe a
+      // que contrato pertenece. Antes se colaba: al no tener contrato, la
+      // comprobacion de "mismo contrato" se saltaba y dos trazados sin
+      // contrato se comparaban como si fueran de contratos diferentes.
+      if (!a.contrato || !b.contrato) {
+        est.paresSinContrato++;
+        continue;
+      }
+
       // INVARIANTE: dos frentes del mismo contrato no son interferencia entre
       // contratos. Se aplica antes que cualquier calculo.
-      if (config.excluirMismoContrato && a.contrato && b.contrato && a.contrato === b.contrato) {
+      if (config.excluirMismoContrato && a.contrato === b.contrato) {
         est.paresMismoContrato++;
         continue;
       }

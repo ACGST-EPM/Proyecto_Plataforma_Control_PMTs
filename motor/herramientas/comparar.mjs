@@ -18,7 +18,8 @@ import { cargarCarpeta, leerCsv, pad, num } from './comun.mjs';
 import { extraerKml } from '../src/io/zip.js';
 import { leerKml } from '../src/io/kml.js';
 import { analizarLegado } from '../src/legado/replica.js';
-import { analizar } from '../src/nucleo/index.js';
+import { analizar, ejecutarLegado, PERFIL_LEGADO } from '../src/nucleo/index.js';
+import { cotejarFidelidad, resumirCotejo } from '../src/legado/cotejo.js';
 import { repartir, porBandaDeDistancia, combinacionDe } from '../src/nucleo/provisional.js';
 
 const SEP = String.fromCharCode(1);
@@ -77,6 +78,24 @@ tabla('1 · REPLICA DEL MOTOR LEGADO (reproduce QGIS, errores incluidos)', [
   ['Interferencias', legado.resumen.Interferencia],
   ['Total de filas', legado.filas.length],
 ]);
+
+// Cotejo alerta por alerta entre los dos caminos de reproduccion del legado.
+{
+  const motorLegado = await analizar(archivos, PERFIL_LEGADO);
+  const c = cotejarFidelidad({ filas: legado.filas, resumen: legado.resumen }, motorLegado);
+  tabla('1a · COTEJO ALERTA POR ALERTA (replica vs motor nuevo en perfil legado)', [
+    ['Alertas en la replica de QGIS', c.alertasReplica],
+    ['Alertas en el motor nuevo (perfil legado)', c.alertasMotor],
+    ['Coinciden en par, frentes, categoria y periodo', c.coincidentes],
+    ['Solo en la replica', c.soloReplica.length],
+    ['Solo en el motor nuevo', c.soloMotor.length],
+    ['Trazados leidos coinciden', c.trazadosCoinciden ? 'si' : 'NO'],
+    ['Veredicto', c.completo ? 'FIDELIDAD COMPROBADA UNO A UNO' : 'NO SE PUEDE AFIRMAR FIDELIDAD'],
+  ]);
+  console.log('\n  ' + resumirCotejo(c));
+  for (const x of c.soloReplica.slice(0, 5)) console.log('    solo replica: ' + Object.values(x).join(' · '));
+  for (const x of c.soloMotor.slice(0, 5)) console.log('    solo motor  : ' + Object.values(x).join(' · '));
+}
 
 if (csvLegado) {
   const pub = leerCsv(await readFile(csvLegado, 'utf8')).slice(1);

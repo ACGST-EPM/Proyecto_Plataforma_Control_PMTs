@@ -52,20 +52,33 @@ export function leerInstante(texto, opciones = {}) {
   }
 
   // 24:00:00 es notación legítima para "fin del día": equivale a las 00:00 del
-  // día siguiente. Lo mismo para cualquier hora >= 24 que aparezca por error.
+  // VALIDACION ESTRICTA DE LA HORA.
+  //
+  // La UNICA normalizacion admitida es 24:00:00 -> 00:00:00 del dia siguiente,
+  // porque es notacion legitima para "fin del dia" y aparece en los datos.
+  //
+  // Cualquier otra hora fuera de rango (25:00, 24:30, minutos o segundos por
+  // encima de 59) es un DATO INVALIDO y se rechaza con diagnostico explicito.
+  // Antes se "arreglaban" sumando dias o recortando a 59, lo que convertia un
+  // error de captura en un instante distinto sin que nadie se enterara: el
+  // trazado entraba al analisis con una vigencia que nunca existio.
   let desbordeDias = 0;
-  if (hora >= 24) {
-    desbordeDias = Math.floor(hora / 24);
-    hora = hora % 24;
-    if (desbordeDias === 1 && hora === 0 && min === 0 && seg === 0) {
-      avisos.push('24:00:00 interpretado como 00:00:00 del día siguiente');
-    } else {
-      avisos.push(`hora fuera de rango (${m[4]}h): se normalizó sumando ${desbordeDias} día(s)`);
-    }
+  const horaTexto = tieneHora
+    ? `${String(hora).padStart(2, '0')}:${String(min).padStart(2, '0')}:${String(seg).padStart(2, '0')}`
+    : '';
+
+  if (min > 59) {
+    return { ms: null, iso: null, tieneHora, avisos: [...avisos, `hora invalida (${horaTexto}): los minutos no pueden pasar de 59`] };
   }
-  if (min > 59 || seg > 59) {
-    avisos.push(`minutos o segundos fuera de rango (${min}:${seg})`);
-    min = Math.min(min, 59); seg = Math.min(seg, 59);
+  if (seg > 59) {
+    return { ms: null, iso: null, tieneHora, avisos: [...avisos, `hora invalida (${horaTexto}): los segundos no pueden pasar de 59`] };
+  }
+  if (hora === 24 && min === 0 && seg === 0) {
+    desbordeDias = 1;
+    hora = 0;
+    avisos.push('24:00:00 interpretado como 00:00:00 del dia siguiente');
+  } else if (hora >= 24) {
+    return { ms: null, iso: null, tieneHora, avisos: [...avisos, `hora invalida (${horaTexto}): solo se admite 24:00:00 como fin de dia`] };
   }
 
   const ms = Date.UTC(anio, mes - 1, dia + desbordeDias, hora, min, seg);

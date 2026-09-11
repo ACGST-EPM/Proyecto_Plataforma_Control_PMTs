@@ -21,6 +21,7 @@ export { combinacionDe, repartir, porBandaDeDistancia, COMBINACIONES } from './p
 export { resumenCalidad } from '../modelo/registro.js';
 export { medir, descomponer } from '../geo/geometria.js';
 export { distanciaGeodesica } from '../geo/geodesica.js';
+export { cotejarFidelidad, resumirCotejo } from '../legado/cotejo.js';
 
 const esKmz = (n) => /\.kmz$/i.test(n ?? '');
 const esKml = (n) => /\.kml$/i.test(n ?? '');

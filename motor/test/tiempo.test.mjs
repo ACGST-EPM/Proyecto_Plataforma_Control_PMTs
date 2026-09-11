@@ -26,10 +26,46 @@ test('24:00:00 es el final del dia, no un error', () => {
   assert.ok(i.avisos.some((a) => a.includes('24:00:00')));
 });
 
-test('una hora absurda se normaliza y se avisa, no se descarta', () => {
-  const i = leerInstante('2026-03-10 27:15:00');
-  assert.equal(i.iso, '2026-03-11 03:15:00');
-  assert.ok(i.avisos.some((a) => a.includes('fuera de rango')));
+test('VALIDACION ESTRICTA: 24:00:00 es la UNICA hora que se normaliza', () => {
+  // Lo permitido
+  assert.equal(leerInstante('2026-03-10 24:00:00').iso, '2026-03-11 00:00:00');
+  assert.equal(leerInstante('2026-03-10 24:00').iso, '2026-03-11 00:00:00');
+  assert.equal(leerInstante('2026-12-31 24:00:00').iso, '2027-01-01 00:00:00');
+
+  // Todo lo demas fuera de rango es DATO INVALIDO, no se transforma.
+  const casos = [
+    ['2026-03-10 25:00:00', /solo se admite 24:00:00/],
+    ['2026-03-10 24:30:00', /solo se admite 24:00:00/],
+    ['2026-03-10 24:00:30', /solo se admite 24:00:00/],
+    ['2026-03-10 27:15:00', /solo se admite 24:00:00/],
+    ['2026-03-10 99:00:00', /solo se admite 24:00:00/],
+    ['2026-03-10 10:75:00', /minutos no pueden pasar de 59/],
+    ['2026-03-10 10:00:99', /segundos no pueden pasar de 59/],
+    ['2026-03-10 10:60:00', /minutos no pueden pasar de 59/],
+    ['2026-03-10 10:00:60', /segundos no pueden pasar de 59/],
+  ];
+  for (const [texto, patron] of casos) {
+    const i = leerInstante(texto);
+    assert.equal(i.ms, null, `"${texto}" deberia quedar invalido, dio ${i.iso}`);
+    assert.equal(i.iso, null);
+    assert.ok(i.avisos.some((a) => patron.test(a)),
+      `"${texto}" deberia explicar el problema; dijo: ${i.avisos.join('; ')}`);
+  }
+});
+
+test('VALIDACION ESTRICTA: una hora invalida invalida la vigencia entera', () => {
+  const x = v('2026-03-10 25:00:00', '2026-03-20 18:00:00');
+  assert.equal(x.valida, false);
+  assert.ok(x.avisos.some((a) => a.includes('fecha_inicio') && a.includes('24:00:00')));
+  // Y ese trazado no puede generar traslape con nadie.
+  const t = traslape(x, v('2026-03-01 00:00:00', '2026-03-30 00:00:00'));
+  assert.equal(t.evaluable, false);
+  assert.equal(t.hayTraslape, false);
+});
+
+test('VALIDACION ESTRICTA: 23:59:59 sigue siendo perfectamente valida', () => {
+  assert.equal(leerInstante('2026-03-10 23:59:59').iso, '2026-03-10 23:59:59');
+  assert.equal(leerInstante('2026-03-10 00:00:00').iso, '2026-03-10 00:00:00');
 });
 
 test('una fecha inexistente en el calendario se rechaza con nombre y apellido', () => {
@@ -125,17 +161,51 @@ test('mismo dia con jornadas que SI se solapan', () => {
   assert.equal(t.duracionDias, 1);
 });
 
-test('la tolerancia por defecto es 0 y no se inventa ningun margen', () => {
+test('SEMANTICA DE LA TOLERANCIA: duracion > 0 Y duracion >= N minutos', () => {
+  // La regla, escrita una sola vez y comprobada aqui:
+  //   hay traslape  <=>  duracion > 0  Y  duracion >= N
   const a = v('2026-03-10 06:00:00', '2026-03-10 12:00:00');
-  const b = v('2026-03-10 12:30:00', '2026-03-10 20:00:00');
-  assert.equal(traslape(a, b).hayTraslape, false);
-  // Con 60 minutos de tolerancia configurada, tampoco: la tolerancia EXIGE mas
-  // traslape, no lo regala. 30 minutos de separacion siguen sin ser traslape.
-  assert.equal(traslape(a, b, { toleranciaMinutos: 60 }).hayTraslape, false);
-  // Y un traslape corto deja de contar si se exige mas de su duracion.
-  const c = v('2026-03-10 11:00:00', '2026-03-10 20:00:00'); // 1 h de traslape
-  assert.equal(traslape(a, c).hayTraslape, true);
-  assert.equal(traslape(a, c, { toleranciaMinutos: 120 }).hayTraslape, false);
+
+  // N = 0 (valor aprobado por defecto): basta con cualquier coincidencia real.
+  const casi = v('2026-03-10 11:59:00', '2026-03-10 20:00:00'); // 1 minuto
+  assert.equal(traslape(a, casi).hayTraslape, true);
+
+  // Duracion cero (solo se tocan) NO es traslape, ni siquiera con N = 0.
+  const pegada = v('2026-03-10 12:00:00', '2026-03-10 20:00:00');
+  assert.equal(traslape(a, pegada).hayTraslape, false);
+  assert.equal(traslape(a, pegada).contiguas, true);
+
+  // Sin coincidencia: nunca.
+  const lejos = v('2026-03-10 12:30:00', '2026-03-10 20:00:00');
+  assert.equal(traslape(lejos, a).hayTraslape, false);
+  assert.equal(traslape(lejos, a, { toleranciaMinutos: 60 }).hayTraslape, false);
+
+  // EL LIMITE EXACTO: se exige "al menos N", asi que N clavado SI cuenta.
+  const dosHoras = v('2026-03-10 10:00:00', '2026-03-10 20:00:00'); // 120 min
+  assert.equal(traslape(a, dosHoras).duracionHoras, 2);
+  assert.equal(traslape(a, dosHoras, { toleranciaMinutos: 119 }).hayTraslape, true);
+  assert.equal(traslape(a, dosHoras, { toleranciaMinutos: 120 }).hayTraslape, true,
+    'exactamente 120 min con N=120 SI es traslape: se exige "al menos"');
+  assert.equal(traslape(a, dosHoras, { toleranciaMinutos: 121 }).hayTraslape, false);
+
+  // El motivo explica cuanto falta, no se limita a decir que no.
+  const r = traslape(a, dosHoras, { toleranciaMinutos: 180 });
+  assert.equal(r.hayTraslape, false);
+  assert.ok(/coinciden 120 min, menos de los 180 exigidos/.test(r.motivo), r.motivo);
+  assert.equal(r.minimoExigidoMinutos, 180);
+});
+
+test('contiguas no depende del minimo exigido', () => {
+  const a = v('2026-03-10 06:00:00', '2026-03-10 12:00:00');
+  const pegada = v('2026-03-10 12:00:00', '2026-03-10 20:00:00');
+  for (const n of [0, 30, 120]) {
+    assert.equal(traslape(a, pegada, { toleranciaMinutos: n }).contiguas, true);
+  }
+  // Un traslape corto NO es "contiguo": es traslape insuficiente.
+  const corto = v('2026-03-10 11:30:00', '2026-03-10 20:00:00');
+  const t = traslape(a, corto, { toleranciaMinutos: 120 });
+  assert.equal(t.contiguas, false);
+  assert.equal(t.hayTraslape, false);
 });
 
 test('si alguna vigencia no es valida, el traslape no es evaluable', () => {
