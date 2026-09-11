@@ -11,9 +11,12 @@ Desktop.ini
 *~
 *.tmp
 
-# Dependencias de desarrollo del motor (se reinstalan con npm install)
+# Dependencias de desarrollo del motor (se reinstalan con npm ci)
 motor/node_modules/
-motor/package-lock.json
+# NOTA: motor/package-lock.json SI se versiona. Es lo que hace que `npm ci`
+# instale exactamente las mismas versiones en cualquier equipo. Sin el, `npm ci`
+# falla y las 3 pruebas que usan Turf no se pueden ejecutar: era la observacion
+# pendiente de la auditoria de la Etapa 1.
 
 # DATOS OPERATIVOS DE EPM: nunca deben subirse al repositorio publico
 01_KMZ_Entrada/
