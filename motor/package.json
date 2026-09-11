@@ -1,0 +1,16 @@
+{
+  "name": "motor-pmt",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Nucleo geoespacial y temporal de la Plataforma de Control y Articulacion de PMTs. Etapa 1: corre en paralelo al motor QGIS legado.",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "inventario": "node herramientas/inventario.mjs",
+    "comparar": "node herramientas/comparar.mjs",
+    "construir": "node herramientas/construir-verificador.mjs"
+  },
+  "devDependencies": {
+    "@turf/turf": "7.4.0"
+  }
+}

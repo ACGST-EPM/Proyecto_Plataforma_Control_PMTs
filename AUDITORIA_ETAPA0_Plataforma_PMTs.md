@@ -4,12 +4,21 @@
 > **Estado:** informe para revisión y aprobación. **No se implementó nada todavía.**
 > **Fecha:** 2026-09-10 · **Alcance:** repositorio `ACGST-EPM/Proyecto_Plataforma_Control_PMTs` (código fuente) y `ACGST-EPM/Control-y-Articulacion-de-PMTs-EPM` (sitio publicado, inspeccionado en solo lectura).
 > **Cambios funcionales realizados:** ninguno. Ver §K.2.
+>
+> **FE DE ERRATAS (11-09-2026, tras recibir los KMZ reales):** este informe decía «12 contratos».
+> Contando los archivos de `01_KMZ_Entrada` son **8**. El error vino de contar los valores distintos
+> de la columna CONTRATO del CSV, que incluye textos como «CW323402 vs CW352217» de las filas de
+> interferencia. Las cifras corregidas están marcadas abajo con ~~tachado~~. Ningún otro número del
+> informe depende de ese dato. Segunda corrección, en el hallazgo M-9: los 20 duplicados **no vienen
+> de KMZ repetidos** en la carpeta —no hay ninguno—, sino de 3 placemarks idénticos dentro de un
+> mismo archivo más trazados distintos que el CSV no puede diferenciar por falta de identificador.
+> Detalle en `INFORME_ETAPA1.md` §9.
 
 ---
 
 ## Resumen en una página (para leer primero)
 
-La plataforma **funciona y ya produce valor real**: hoy tiene 460 trazados de 12 contratos y genera 84 alertas críticas y 164 de cercanía. Pero la auditoría encontró tres cosas que hay que saber antes de seguir:
+La plataforma **funciona y ya produce valor real**: hoy tiene 460 trazados de ~~12~~ **8** contratos y genera 84 alertas críticas y 164 de cercanía. Pero la auditoría encontró tres cosas que hay que saber antes de seguir:
 
 1. **Hay datos personales y corporativos de EPM publicados en internet, abiertamente.** El repositorio publicado es **público** y contiene 20 correos `@epm.com.co`, con nombre, área y cargo de cada persona, además de la dirección interna del sitio de SharePoint del equipo. Esto no viene del trabajo de PMTs: viene de dos archivos `crudo_*.json` de otro tablero que está en la misma carpeta. **Es lo más urgente del informe** (Hallazgo C-1).
 
@@ -45,7 +54,7 @@ Además existen otros repositorios del área que comparten estilo y probablement
 | `Generador_KMZ.html` | 671 | App autocontenida de captura. Base maestra de contratos + mapa Leaflet para dibujar/importar geometría + formulario validado → arma el texto de `<description>` y empaqueta un KMZ con JSZip. |
 | `proceso_pmt_qgis.py` | 250 | Motor. Se pega en la Consola Python de QGIS. Lee los `.kmz` de una carpeta fija de Windows, crea 5 capas en memoria, detecta conflictos por pares y exporta `reporte_dinamico.csv` directo a la carpeta del repositorio clonado. |
 | `Plataforma_PMTs.html` | 996 | Tablero. Lee el CSV, arma tabla DataTables + filtros Select2 con facetas cruzadas + recorrido temporal + informe PDF. El mapa lo muestra dentro de un `<iframe>` que apunta al export de qgis2web. |
-| `contratos_db.json` | 24 | Base maestra: 3 contratos. **Desactualizada**: los datos publicados tienen 12 contratos. |
+| `contratos_db.json` | 24 | Base maestra: 3 contratos. **Desactualizada**: los datos publicados tienen ~~12~~ **8** contratos. |
 | `CLAUDE.md` | 5,1 KB | Memoria del proyecto. Correcta, pero incompleta (no menciona el segundo tablero ni el segundo repositorio). |
 | `DOCUMENTACION_..._EPM.md` | 129 KB | Documento maestro. **El 85 % de su tamaño es una copia literal del código** de los otros archivos (Anexo A). |
 | `README.md` | 1 línea | Dice `# Articulacion_Proyectos`. No corresponde al proyecto. |
@@ -68,7 +77,7 @@ Además existen otros repositorios del área que comparten estilo y probablement
 Del `reporte_dinamico.csv` (708 filas):
 
 - **460** filas `Trazado Normal`, **164** `Cercanía`, **84** `Interferencia`.
-- **12 contratos** distintos, 311 nombres de frente únicos.
+- ~~**12 contratos**~~ **8 contratos** distintos, 311 nombres de frente únicos.
 - Municipio: Medellín 333, Itagüí 18, Sabaneta 9, Envigado 2, **"No definido" 98**, "Varios" 248.
 - Horario: **Nocturno 329 vs Diurno 131**. Esta proporción es la huella de un error de clasificación, no de la realidad operativa (ver Hallazgo A-2).
 - **20 filas exactamente duplicadas** (mismo contrato, frente, fechas y dirección) → hay KMZ repetidos en la carpeta de entrada.
@@ -252,7 +261,7 @@ Faltan `reporte_dinamico.csv`, `logo_epm.*` y el mapa. Nadie (ni usted, ni yo, n
 - **M-6 · La duración se calcula distinto según la fila.** Trazado normal: `daysTo` (un PMT de un día = **0 días**). Interferencia: `daysTo + 1` (= 1 día). Verificado: 165 filas con duración 0. El PDF luego hace `parseInt(row[10]) || 1`, tapando el síntoma.
 - **M-7 · El parser de CSV del tablero es artesanal.** No des-escapa comillas dobles internas (`""` → `"`) y parte por `\n`, así que un salto de línea dentro de un campo entrecomillado rompe la tabla. Hoy funciona (verifiqué las 708 filas contra un parser estándar: coinciden), pero es frágil y sobra: PapaParse ya está en el otro tablero del mismo repositorio.
 - **M-8 · Importación de KML incompleta.** `getByLocal(pm,'LineString')[0]` toma **solo la primera** geometría: un `MultiGeometry` o `MultiLineString` de Google Earth pierde el resto sin avisar. Los polígonos se descartan con un `return` mudo, y el mensaje final dice "N importados" sin decir cuántos se ignoraron.
-- **M-9 · Sin control de duplicados.** El motor procesa todos los `.kmz` de la carpeta; si un KMZ está dos veces con distinto nombre, todo se cuenta dos veces. Verificado: **20 filas exactamente duplicadas** en producción.
+- **M-9 · Sin control de duplicados.** El motor procesa todos los `.kmz` de la carpeta; si un KMZ está dos veces con distinto nombre, todo se cuenta dos veces. Verificado: **20 filas exactamente duplicadas** en producción. *(Corregido el 11-09-2026 con los archivos delante: no hay KMZ repetidos. Son 3 placemarks idénticos dentro de `CW366713_DESCARGAS_NORTE.kmz` más trazados distintos que el CSV no puede diferenciar porque no lleva identificador ni geometría. El problema es real, pero su causa es la identidad, no la carpeta.)*
 - **M-10 · Análisis O(n²) sin índice espacial.** Hoy son 104.196 pares, irrelevante. A 3.000 frentes serían 4,5 millones con buffers reales de QGIS: minutos.
 - **M-11 · `str(f.attribute('Name')) or "Sin Nombre"` es código muerto** (`:127`): `str(None)` devuelve `'None'`, que es *truthy*, así que el respaldo nunca se usa y un frente sin nombre entra al reporte como el texto `None`.
 - **M-12 · El nombre del KMZ exportado sale del primer trazado** (`Generador_KMZ.html:568-570`). Si el archivo mezcla contratos, el nombre miente sobre su contenido.
@@ -436,7 +445,7 @@ Solo tres librerías nuevas, y ninguna imprescindible salvo la primera.
 |---|---|---|
 | Formato de `<description>` con ` \| ` | ✅ **Conservar tal cual** | Es el contrato entre el generador y el motor, y ya hay KMZ en circulación con ese formato. Cambiarlo no aporta nada y rompe el histórico. Se le añade, opcionalmente y sin quitar nada, un bloque `ExtendedData` con los mismos datos en formato máquina. |
 | Lista cerrada `tipo_cierre` | ✅ Conservar | Invariante de negocio. |
-| `contratos_db.json` (esquema) | ✅ Conservar el esquema, actualizar el contenido | Los 12 contratos reales deben estar en el repositorio, no solo en el `localStorage` de un PC. |
+| `contratos_db.json` (esquema) | ✅ Conservar el esquema, actualizar el contenido | Los 8 contratos reales deben estar en el repositorio, no solo en el `localStorage` de un PC. |
 | Marca EPM y sistema visual | ✅ Conservar | Reconocible y correcto. |
 | Facetas cruzadas jerárquicas de los filtros | ✅ Conservar la lógica, migrar a módulo | Es lo mejor construido del tablero. Se extrae tal cual a `ui/filtros.js` y se le escriben pruebas. |
 | Informe PDF ejecutivo | ✅ Conservar, alimentar del nuevo modelo | Funciona y es el entregable que ve la dirección. |

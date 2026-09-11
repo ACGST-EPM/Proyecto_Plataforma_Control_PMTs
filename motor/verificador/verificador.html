@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verificador del motor de PMTs</title>
+<style>
+:root{
+  --verde:#009300; --verde-osc:#00700a; --lima:#b7c200; --naranja:#d56b00;
+  --rojo:#ac2418; --azul:#1f6fb2;
+  --fondo:#f5f7f3; --panel:#fff; --panel2:#eef2ea; --linea:#dbe2d7;
+  --tinta:#16211a; --tenue:#5a6a5f;
+  --mono:ui-monospace,'SFMono-Regular',Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --verde:#4cc257; --verde-osc:#5cc966; --lima:#cdd83a; --naranja:#f08a2c;
+    --rojo:#f0776a; --azul:#6aa9de;
+    --fondo:#0e1310; --panel:#161d18; --panel2:#1d2620; --linea:#2b352e;
+    --tinta:#e7eee8; --tenue:#a0b1a5;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fondo);color:var(--tinta);
+  font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;font-size:15px;line-height:1.5}
+header{background:var(--panel);border-bottom:4px solid var(--verde);padding:14px 22px;
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+header h1{margin:0;font-size:19px;color:var(--verde);letter-spacing:.2px}
+header .sub{color:var(--tenue);font-size:13px}
+header .etiqueta{margin-left:auto;font-size:12px;color:var(--tenue)}
+main{max-width:1180px;margin:0 auto;padding:20px}
+section{background:var(--panel);border:1px solid var(--linea);border-radius:8px;
+  padding:18px;margin-bottom:18px}
+h2{margin:0 0 4px;font-size:16px;color:var(--verde-osc);
+  text-transform:uppercase;letter-spacing:.08em}
+h2 .paso{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;
+  background:var(--verde);color:#fff;font-size:13px;margin-right:8px;vertical-align:-4px}
+.ayuda{color:var(--tenue);font-size:13.5px;margin:0 0 14px}
+button{font:inherit;border:none;border-radius:5px;padding:9px 16px;cursor:pointer;font-weight:600}
+.btn-verde{background:var(--verde);color:#fff}
+.btn-lima{background:var(--lima);color:#222}
+.btn-suave{background:var(--panel2);color:var(--tinta);border:1px solid var(--linea)}
+button:disabled{opacity:.5;cursor:not-allowed}
+#zona{border:2px dashed var(--linea);border-radius:8px;padding:30px;text-align:center;
+  background:var(--panel2);transition:border-color .15s,background .15s}
+#zona.encima{border-color:var(--verde);background:rgba(0,147,0,.08)}
+#zona p{margin:6px 0;color:var(--tenue)}
+#zona b{color:var(--tinta);font-size:16px}
+.rejilla{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.campo label{display:block;font-size:12.5px;font-weight:600;color:var(--tenue);margin-bottom:4px}
+.campo input,.campo select{width:100%;padding:7px 9px;border:1px solid var(--linea);
+  border-radius:5px;background:var(--panel);color:var(--tinta);font:inherit}
+.campo .nota{font-size:12px;color:var(--tenue);margin-top:3px;line-height:1.35}
+.tarjetas{display:grid;gap:1px;background:var(--linea);border:1px solid var(--linea);
+  border-radius:6px;overflow:hidden;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.tarjeta{background:var(--panel);padding:14px}
+.tarjeta b{display:block;font-size:30px;line-height:1;font-variant-numeric:tabular-nums}
+.tarjeta span{display:block;font-size:12.5px;color:var(--tenue);margin-top:5px;line-height:1.3}
+.tarjeta.rojo b{color:var(--rojo)} .tarjeta.naranja b{color:var(--naranja)}
+.tarjeta.verde b{color:var(--verde)} .tarjeta.azul b{color:var(--azul)}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{text-align:left;background:var(--panel2);padding:8px 10px;border-bottom:2px solid var(--linea);
+  font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--tenue);
+  position:sticky;top:0;cursor:pointer;white-space:nowrap}
+td{padding:7px 10px;border-bottom:1px solid var(--linea);vertical-align:top}
+td.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:12.5px}
+.tabla-caja{max-height:460px;overflow:auto;border:1px solid var(--linea);border-radius:6px}
+.pastilla{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:3px;
+  white-space:nowrap}
+.p-rojo{background:rgba(172,36,24,.15);color:var(--rojo)}
+.p-naranja{background:rgba(213,107,0,.15);color:var(--naranja)}
+.p-azul{background:rgba(31,111,178,.15);color:var(--azul)}
+.p-gris{background:var(--panel2);color:var(--tenue)}
+.p-verde{background:rgba(0,147,0,.15);color:var(--verde-osc)}
+.aviso{border-left:4px solid var(--naranja);background:var(--panel2);padding:12px 14px;
+  border-radius:0 6px 6px 0;margin:12px 0;font-size:13.5px}
+.aviso.error{border-left-color:var(--rojo)}
+.aviso.ok{border-left-color:var(--verde)}
+.filtros{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.filtros button{padding:6px 12px;font-size:13px;background:var(--panel2);
+  border:1px solid var(--linea);color:var(--tinta);font-weight:600}
+.filtros button.activo{background:var(--verde);color:#fff;border-color:var(--verde)}
+.oculto{display:none !important}
+.mono{font-family:var(--mono);font-size:12px}
+.barra{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.progreso{font-size:13px;color:var(--tenue)}
+ul.limpia{margin:8px 0 0;padding-left:20px;font-size:13.5px}
+ul.limpia li{margin-bottom:4px}
+details{margin-top:10px}
+summary{cursor:pointer;font-weight:600;font-size:13.5px;color:var(--verde-osc)}
+.pie{color:var(--tenue);font-size:12.5px;text-align:center;padding:10px 0 30px}
+</style>
+</head>
+<body>
+
+<header>
+  <span style="font-size:26px">🔎</span>
+  <div>
+    <h1>VERIFICADOR DEL MOTOR DE PMTs</h1>
+    <div class="sub">Compara el motor de QGIS que se usa hoy con el motor nuevo, caso por caso</div>
+  </div>
+  <span class="etiqueta">Grupo EPM · Etapa 1 · nada de esto modifica el sistema actual</span>
+</header>
+
+<main>
+
+<section>
+  <h2><span class="paso">1</span>Cargue los KMZ</h2>
+  <p class="ayuda">Arrastre aquí los archivos de la carpeta <b>01_KMZ_Entrada</b>, o pulse el botón para elegirlos.
+  Puede soltar varios a la vez. Los archivos <b>no salen de su computador</b>: todo el análisis ocurre dentro del navegador.</p>
+  <div id="zona">
+    <p><b>Arrastre aquí los archivos .kmz o .kml</b></p>
+    <p>o</p>
+    <p><button class="btn-verde" id="btnElegir">Elegir archivos…</button></p>
+    <input type="file" id="entrada" accept=".kmz,.kml" multiple hidden>
+  </div>
+  <div id="listaArchivos"></div>
+</section>
+
+<section id="secConfig" class="oculto">
+  <h2><span class="paso">2</span>Parámetros del motor nuevo</h2>
+  <p class="ayuda">Puede cambiarlos y volver a calcular cuantas veces quiera. Los valores que ve son los aprobados en la revisión de la Etapa 0.</p>
+  <div class="rejilla">
+    <div class="campo">
+      <label for="umbral">Distancia de cercanía (metros)</label>
+      <input type="number" id="umbral" value="120" min="0" step="1">
+      <div class="nota">Distancia real entre los trazados. El motor de QGIS usa hoy 243 m aunque su capa diga 120.</div>
+    </div>
+    <div class="campo">
+      <label for="granularidad">Cómo comparar el tiempo</label>
+      <select id="granularidad">
+        <option value="instante" selected>Fecha y hora</option>
+        <option value="dia">Solo la fecha (como QGIS)</option>
+      </select>
+      <div class="nota">Con «fecha y hora», dos obras el mismo día en jornadas distintas dejan de ser conflicto.</div>
+    </div>
+    <div class="campo">
+      <label for="tolerancia">Margen de tiempo exigido (minutos)</label>
+      <input type="number" id="tolerancia" value="0" min="0" step="15">
+      <div class="nota">0 = cualquier coincidencia cuenta. Si pone 120, se exigen 2 horas de coincidencia real.</div>
+    </div>
+    <div class="campo">
+      <label for="finDia">La fecha de fin cubre todo ese día</label>
+      <select id="finDia">
+        <option value="no" selected>No (lo que dice el dato)</option>
+        <option value="si">Sí (criterio de QGIS)</option>
+      </select>
+      <div class="nota">Afecta a los trazados cuya hora de fin es 00:00. En los datos reales son casi la mitad.</div>
+    </div>
+  </div>
+  <div class="barra">
+    <button class="btn-verde" id="btnCalcular">Calcular y comparar</button>
+    <button class="btn-suave" id="btnReiniciar">Empezar de nuevo</button>
+    <span class="progreso" id="progreso"></span>
+  </div>
+</section>
+
+<section id="secResumen" class="oculto">
+  <h2><span class="paso">3</span>Resultado</h2>
+  <p class="ayuda">Arriba, lo que produce el motor de QGIS que se usa hoy. Abajo, lo que produce el motor nuevo con los parámetros elegidos.</p>
+
+  <h3 style="font-size:14px;margin:14px 0 8px;color:var(--tenue)">Motor de QGIS (el de hoy)</h3>
+  <div class="tarjetas" id="tarjetasLegado"></div>
+  <div id="fidelidad"></div>
+
+  <h3 style="font-size:14px;margin:20px 0 8px;color:var(--tenue)">Motor nuevo</h3>
+  <div class="tarjetas" id="tarjetasNuevo"></div>
+
+  <div id="atribucion"></div>
+</section>
+
+<section id="secRelaciones" class="oculto">
+  <h2><span class="paso">4</span>Caso por caso</h2>
+  <p class="ayuda">Cada fila es una pareja de frentes de contratos distintos. Pulse en una cabecera para ordenar por esa columna.</p>
+  <div class="filtros" id="filtros"></div>
+  <div class="tabla-caja">
+    <table id="tablaRel">
+      <thead><tr>
+        <th data-col="estado">Estado</th>
+        <th data-col="contratoA">Contratos</th>
+        <th data-col="frenteA">Frentes</th>
+        <th data-col="distanciaMetros" class="num">Distancia</th>
+        <th data-col="intersecanFisicamente">¿Se tocan?</th>
+        <th data-col="hayTraslapeTemporal">¿Coinciden en el tiempo?</th>
+        <th data-col="traslapeInicio">Periodo común</th>
+        <th data-col="traslapeDias" class="num">Días</th>
+      </tr></thead>
+      <tbody id="cuerpoRel"></tbody>
+    </table>
+  </div>
+  <div class="barra">
+    <button class="btn-lima" id="btnCsv">Descargar esta tabla (CSV)</button>
+    <button class="btn-suave" id="btnGeo">Descargar los trazados (GeoJSON)</button>
+    <span class="progreso" id="contadorFilas"></span>
+  </div>
+</section>
+
+<section id="secCalidad" class="oculto">
+  <h2><span class="paso">5</span>Estado de los datos que cargó</h2>
+  <p class="ayuda">Problemas detectados en los propios KMZ. Ninguno detiene el análisis: quedan anotados para que se puedan corregir en origen.</p>
+  <div class="tarjetas" id="tarjetasCalidad"></div>
+  <div id="detalleCalidad"></div>
+</section>
+
+<p class="pie">
+  Motor de PMTs · Etapa 1 · verificación en paralelo.<br>
+  Este archivo funciona sin internet y no envía nada a ningún servidor.
+</p>
+</main>
+
+<!--MOTOR-->
+
+<script type="module">
+const motor = await window.__MOTOR_PMT__;
+const { analizar, aGeoJson, ejecutarLegado, PERFIL_LEGADO } = motor;
+
+let ARCHIVOS = [];
+let RESULTADO = null;   // motor nuevo, parametros elegidos
+let LEGADO = null;      // motor nuevo con PERFIL_LEGADO: comparable registro a registro
+let REPLICA = null;     // replica fiel del script de QGIS: sirve de control
+let FILTRO = 'todas';
+let ORDEN = { col: 'distanciaMetros', asc: true };
+
+const $ = (id) => document.getElementById(id);
+const zona = $('zona');
+
+/* ---------- carga de archivos ---------- */
+$('btnElegir').onclick = () => $('entrada').click();
+$('entrada').onchange = (e) => recibir([...e.target.files]);
+['dragenter', 'dragover'].forEach((ev) => zona.addEventListener(ev, (e) => {
+  e.preventDefault(); zona.classList.add('encima');
+}));
+['dragleave', 'drop'].forEach((ev) => zona.addEventListener(ev, (e) => {
+  e.preventDefault(); zona.classList.remove('encima');
+}));
+zona.addEventListener('drop', (e) => recibir([...e.dataTransfer.files]));
+
+async function recibir(archivos) {
+  const validos = archivos.filter((f) => /\.(kmz|kml)$/i.test(f.name));
+  const rechazados = archivos.length - validos.length;
+  ARCHIVOS = [];
+  for (const f of validos) {
+    ARCHIVOS.push({ nombre: f.name, datos: new Uint8Array(await f.arrayBuffer()) });
+  }
+  let html = '';
+  if (ARCHIVOS.length) {
+    html += `<div class="aviso ok"><b>${ARCHIVOS.length} archivo(s) listo(s):</b><ul class="limpia">` +
+      ARCHIVOS.map((a) => `<li>${escapar(a.nombre)} · ${(a.datos.length / 1024).toFixed(1)} KB</li>`).join('') +
+      '</ul></div>';
+  }
+  if (rechazados) {
+    html += `<div class="aviso">Se ignoraron ${rechazados} archivo(s) que no son .kmz ni .kml.</div>`;
+  }
+  $('listaArchivos').innerHTML = html;
+  $('secConfig').classList.toggle('oculto', ARCHIVOS.length === 0);
+  if (ARCHIVOS.length) $('secConfig').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+$('btnReiniciar').onclick = () => location.reload();
+
+/* ---------- cálculo ---------- */
+$('btnCalcular').onclick = async () => {
+  const b = $('btnCalcular');
+  b.disabled = true;
+  $('progreso').textContent = 'Calculando…';
+  await new Promise((r) => setTimeout(r, 20));
+  try {
+    const cfg = {
+      umbralMetros: Number($('umbral').value) || 0,
+      toleranciaMinutos: Number($('tolerancia').value) || 0,
+      granularidadTemporal: $('granularidad').value,
+      finInclusivoDiaCompleto: $('finDia').value === 'si',
+      modoDistancia: 'real',
+    };
+    const t0 = performance.now();
+    RESULTADO = await analizar(ARCHIVOS, cfg);
+    LEGADO = await analizar(ARCHIVOS, PERFIL_LEGADO);
+    REPLICA = await ejecutarLegado(ARCHIVOS);
+    const ms = Math.round(performance.now() - t0);
+    pintarResumen(ms);
+    pintarRelaciones();
+    pintarCalidad();
+    for (const s of ['secResumen', 'secRelaciones', 'secCalidad']) $(s).classList.remove('oculto');
+    $('progreso').textContent = `Listo en ${ms} ms.`;
+    $('secResumen').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    $('progreso').innerHTML = `<span style="color:var(--rojo)">Error: ${escapar(e.message)}</span>`;
+    console.error(e);
+  } finally {
+    b.disabled = false;
+  }
+};
+
+/* ---------- pintado ---------- */
+function tarjeta(valor, texto, clase = '') {
+  return `<div class="tarjeta ${clase}"><b>${valor}</b><span>${texto}</span></div>`;
+}
+
+function pintarResumen(ms) {
+  const L = LEGADO.relaciones, N = RESULTADO.relaciones;
+  const lt = L.filter((r) => r.hayTraslapeTemporal).length;
+  const nt = N.filter((r) => r.hayTraslapeTemporal).length;
+  const ni = N.filter((r) => r.intersecanFisicamente).length;
+
+  const rInter = REPLICA.resumen['Interferencia'] ?? 0;
+  const rCerc = REPLICA.resumen['Cercanía'] ?? 0;
+  const fiel = rInter === lt && rCerc === (L.length - lt);
+
+  $('tarjetasLegado').innerHTML =
+    tarjeta(REPLICA.resumen['Trazado Normal'] ?? 0, 'trazados leídos') +
+    tarjeta(rInter + rCerc, 'alertas en total') +
+    tarjeta(rInter, 'llamadas «interferencia real (crítica)»', 'naranja') +
+    tarjeta(rCerc, 'llamadas «cercanía»', 'azul');
+
+  $('fidelidad').innerHTML = (fiel
+    ? `<div class="aviso ok" style="margin-top:10px"><b>Control de fidelidad superado.</b>
+       Se ejecutaron dos caminos independientes del motor de QGIS y dieron el mismo resultado
+       (${rInter} interferencias y ${rCerc} cercanías), así que la comparación de abajo es fiable.</div>`
+    : `<div class="aviso error" style="margin-top:10px"><b>Atención:</b> los dos caminos de reproducción
+       del motor de QGIS no coinciden (${rInter}/${rCerc} frente a ${lt}/${L.length - lt}).
+       Revise antes de sacar conclusiones de la comparación.</div>`);
+
+  $('tarjetasNuevo').innerHTML =
+    tarjeta(N.length, 'relaciones dentro del umbral') +
+    tarjeta(ni, 'con contacto físico real', 'rojo') +
+    tarjeta(nt, 'con coincidencia en el tiempo', 'naranja') +
+    tarjeta(N.length - nt, 'sin coincidencia en el tiempo', 'azul') +
+    tarjeta(ms + ' ms', 'tiempo de cálculo', 'verde');
+
+  const idL = new Set(L.map(par));
+  const idN = new Set(N.map(par));
+  const desaparecen = [...idL].filter((k) => !idN.has(k));
+  const aparecen = [...idN].filter((k) => !idL.has(k));
+
+  const lejos = L.filter((r) => r.distanciaMetros > RESULTADO.config.umbralMetros).length;
+  const cfg = RESULTADO.config;
+
+  $('atribucion').innerHTML = `
+    <div class="aviso">
+      <b>Por qué cambian los números</b>
+      <ul class="limpia">
+        <li><b>${desaparecen.length}</b> alertas del motor de QGIS ya no aparecen.
+            De ellas, <b>${lejos}</b> estaban a más de ${cfg.umbralMetros} m de distancia real:
+            el motor de hoy las marcaba porque su umbral efectivo es el doble del que anuncia.</li>
+        <li><b>${aparecen.length}</b> alertas nuevas que el motor de QGIS no veía.</li>
+        <li>De las <b>${nt}</b> relaciones con coincidencia en el tiempo, solo
+            <b>${N.filter((r) => r.intersecanFisicamente && r.hayTraslapeTemporal).length}</b>
+            corresponden a trazados que <b>se tocan de verdad</b>.
+            El motor de QGIS llamaba «interferencia real» a las ${lt}, sin comprobar nunca el contacto.</li>
+        <li>Comparación temporal aplicada: <b>${cfg.granularidadTemporal === 'dia' ? 'solo la fecha' : 'fecha y hora'}</b>,
+            margen exigido <b>${cfg.toleranciaMinutos} min</b>.</li>
+      </ul>
+    </div>
+    <div class="aviso">
+      <b>Lo que este verificador NO decide</b><br>
+      No se ha fijado ninguna regla nueva de criticidad. El motor entrega los hechos por separado
+      —distancia, contacto, coincidencia temporal— para que usted decida qué merece llamarse crítico.
+    </div>`;
+}
+
+const par = (r) => [r.idA, r.idB].sort().join('|');
+
+function estadoDe(r) {
+  if (!r.traslapeEvaluable) return { t: 'sin evaluar', c: 'p-gris' };
+  if (r.intersecanFisicamente && r.hayTraslapeTemporal) return { t: 'se tocan y coinciden', c: 'p-rojo' };
+  if (r.intersecanFisicamente) return { t: 'se tocan, otro momento', c: 'p-naranja' };
+  if (r.hayTraslapeTemporal) return { t: 'cerca y coinciden', c: 'p-naranja' };
+  return { t: 'cerca, otro momento', c: 'p-azul' };
+}
+
+const FILTROS = [
+  ['todas', 'Todas'],
+  ['tocan', 'Se tocan físicamente'],
+  ['tiempo', 'Coinciden en el tiempo'],
+  ['ambos', 'Se tocan Y coinciden'],
+  ['desaparecen', 'Que el motor de QGIS marcaba y el nuevo no'],
+  ['aparecen', 'Que el nuevo ve y QGIS no'],
+];
+
+function pintarRelaciones() {
+  $('filtros').innerHTML = FILTROS.map(([k, t]) =>
+    `<button data-f="${k}" class="${k === FILTRO ? 'activo' : ''}">${t}</button>`).join('');
+  for (const b of $('filtros').querySelectorAll('button')) {
+    b.onclick = () => { FILTRO = b.dataset.f; pintarRelaciones(); };
+  }
+  for (const th of document.querySelectorAll('#tablaRel th')) {
+    th.onclick = () => {
+      const c = th.dataset.col;
+      ORDEN = { col: c, asc: ORDEN.col === c ? !ORDEN.asc : true };
+      pintarRelaciones();
+    };
+  }
+
+  const idN = new Set(RESULTADO.relaciones.map(par));
+  const idL = new Set(LEGADO.relaciones.map(par));
+  let filas;
+  if (FILTRO === 'desaparecen') filas = LEGADO.relaciones.filter((r) => !idN.has(par(r)));
+  else if (FILTRO === 'aparecen') filas = RESULTADO.relaciones.filter((r) => !idL.has(par(r)));
+  else {
+    filas = RESULTADO.relaciones.filter((r) =>
+      FILTRO === 'todas' ? true :
+      FILTRO === 'tocan' ? r.intersecanFisicamente :
+      FILTRO === 'tiempo' ? r.hayTraslapeTemporal :
+      r.intersecanFisicamente && r.hayTraslapeTemporal);
+  }
+
+  const c = ORDEN.col, s = ORDEN.asc ? 1 : -1;
+  filas = [...filas].sort((a, b) => {
+    const x = a[c] ?? '', y = b[c] ?? '';
+    if (typeof x === 'number' && typeof y === 'number') return (x - y) * s;
+    return String(x).localeCompare(String(y)) * s;
+  });
+
+  $('cuerpoRel').innerHTML = filas.map((r) => {
+    const e = estadoDe(r);
+    return `<tr>
+      <td><span class="pastilla ${e.c}">${e.t}</span></td>
+      <td class="mono">${escapar(r.contratoA)}<br>${escapar(r.contratoB)}</td>
+      <td>${escapar(r.frenteA ?? '—')}<br>${escapar(r.frenteB ?? '—')}</td>
+      <td class="num">${r.distanciaMetros === null ? '—' : r.distanciaMetros.toFixed(1) + ' m'}</td>
+      <td>${r.intersecanFisicamente ? '<b style="color:var(--rojo)">Sí</b>' : 'No'}</td>
+      <td>${r.hayTraslapeTemporal ? '<b style="color:var(--naranja)">Sí</b>' : (r.traslapeEvaluable ? 'No' : 'sin fechas')}</td>
+      <td class="mono">${r.traslapeInicio ? escapar(r.traslapeInicio) + '<br>' + escapar(r.traslapeFin) : '—'}</td>
+      <td class="num">${r.traslapeDias || '—'}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--tenue);padding:24px">Ninguna relación en esta categoría.</td></tr>';
+
+  $('contadorFilas').textContent = `${filas.length} fila(s)`;
+  $('btnCsv').onclick = () => descargarCsv(filas);
+}
+
+function pintarCalidad() {
+  const c = RESULTADO.calidad;
+  $('tarjetasCalidad').innerHTML =
+    tarjeta(c.total, 'trazados leídos') +
+    tarjeta(c.analizables, 'completos y analizables', 'verde') +
+    tarjeta(c.sinVigenciaValida, 'con fechas inservibles', c.sinVigenciaValida ? 'rojo' : '') +
+    tarjeta(c.sinGeometria, 'sin geometría', c.sinGeometria ? 'rojo' : '') +
+    tarjeta(c.sinMunicipio, 'sin municipio', c.sinMunicipio ? 'naranja' : '') +
+    tarjeta(c.duplicadosExactos, 'duplicados exactos', c.duplicadosExactos ? 'naranja' : '');
+
+  const fallidos = RESULTADO.archivos.filter((a) => !a.ok);
+  const avisos = Object.entries(c.avisosFrecuentes).sort((a, b) => b[1] - a[1]);
+  const anomalos = RESULTADO.registros.filter((r) => r.avisos.length);
+
+  $('detalleCalidad').innerHTML =
+    (fallidos.length
+      ? `<div class="aviso error"><b>${fallidos.length} archivo(s) no se pudieron leer completos:</b><ul class="limpia">` +
+        fallidos.map((a) => `<li>${escapar(a.nombre)}: ${escapar(a.errores.join('; '))}</li>`).join('') +
+        '</ul>Los demás archivos se procesaron con normalidad.</div>'
+      : '<div class="aviso ok">Todos los archivos se leyeron sin errores.</div>') +
+    (avisos.length
+      ? `<details open><summary>Avisos por frecuencia (${avisos.length} tipos)</summary>
+         <table style="margin-top:8px"><thead><tr><th class="num">Veces</th><th>Aviso</th></tr></thead><tbody>` +
+        avisos.map(([k, v]) => `<tr><td class="num">${v}</td><td>${escapar(k)}</td></tr>`).join('') +
+        '</tbody></table></details>'
+      : '') +
+    (anomalos.length
+      ? `<details><summary>Trazados con algún aviso (${anomalos.length})</summary>
+         <div class="tabla-caja" style="margin-top:8px"><table><thead><tr>
+         <th>Contrato</th><th>Frente</th><th>Archivo</th><th>Avisos</th></tr></thead><tbody>` +
+        anomalos.map((r) => `<tr><td class="mono">${escapar(r.contrato ?? '—')}</td>
+          <td>${escapar(r.frente ?? '—')}</td><td class="mono">${escapar(r.origenArchivo)}</td>
+          <td>${r.avisos.map(escapar).join('<br>')}</td></tr>`).join('') +
+        '</tbody></table></div></details>'
+      : '');
+}
+
+/* ---------- descargas ---------- */
+function descargarCsv(filas) {
+  const cab = ['ESTADO', 'CONTRATO_A', 'CONTRATO_B', 'FRENTE_A', 'FRENTE_B', 'ID_A', 'ID_B',
+    'DISTANCIA_M', 'SE_TOCAN', 'COINCIDEN_EN_TIEMPO', 'TRASLAPE_INICIO', 'TRASLAPE_FIN',
+    'TRASLAPE_DIAS', 'TRASLAPE_HORAS', 'VIGENCIA_A_INICIO', 'VIGENCIA_A_FIN',
+    'VIGENCIA_B_INICIO', 'VIGENCIA_B_FIN', 'UMBRAL_APLICADO_M'];
+  const esc = (v) => {
+    const s = v === null || v === undefined ? '' : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const cuerpo = filas.map((r) => [
+    estadoDe(r).t, r.contratoA, r.contratoB, r.frenteA, r.frenteB, r.idA, r.idB,
+    r.distanciaMetros, r.intersecanFisicamente ? 'si' : 'no',
+    r.hayTraslapeTemporal ? 'si' : (r.traslapeEvaluable ? 'no' : 'sin fechas'),
+    r.traslapeInicio, r.traslapeFin, r.traslapeDias, r.traslapeHoras,
+    r.vigenciaA.inicio, r.vigenciaA.fin, r.vigenciaB.inicio, r.vigenciaB.fin,
+    r.umbralAplicadoMetros,
+  ].map(esc).join(','));
+  bajar('﻿' + [cab.join(','), ...cuerpo].join('\n'), 'comparacion_motores.csv', 'text/csv');
+}
+
+$('btnGeo').onclick = () => {
+  bajar(JSON.stringify(aGeoJson(RESULTADO.registros), null, 1), 'trazados_pmt.geojson', 'application/geo+json');
+};
+
+function bajar(texto, nombre, tipo) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([texto], { type: tipo }));
+  a.download = nombre;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function escapar(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+</script>
+</body>
+</html>

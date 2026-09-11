@@ -17,9 +17,27 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
 - `Plataforma_PMTs.html` — dashboard (Bootstrap + DataTables + Select2). Lee `reporte_dinamico.csv`.
 - `contratos_db.json` — base maestra de contratos (contrato → contratista, proyecto, municipios[]).
 - `DOCUMENTACION_Plataforma_PMTs_EPM.md` — documento maestro con todo el detalle.
+- `AUDITORIA_ETAPA0_Plataforma_PMTs.md` — auditoría técnica del estado real (Etapa 0, aprobada).
+- `INFORME_ETAPA1.md` — resultados de la Etapa 1.
+- `motor/` — **motor geoespacial y temporal nuevo, en paralelo** (Etapa 1). No sustituye a nada
+  todavía. Ver `motor/README.md` para las decisiones técnicas; `motor/dist/verificador.html` se abre
+  con doble clic y compara el motor de QGIS con el nuevo, caso por caso.
 
 Repo publicado: `ACGST-EPM/Control-y-Articulacion-de-PMTs-EPM` (GitHub Pages).
 Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada`, `02_Proyecto_QGIS`, `Control-y-Articulacion-de-PMTs-EPM`).
+
+## Estado de la migración (Etapa 1 terminada, en pausa para auditoría)
+- El motor nuevo (`motor/`) corre **en paralelo**: no sustituye al tablero, no retira QGIS ni
+  qgis2web, no toca el generador. `proceso_pmt_qgis.py` queda **congelado** como referencia; no se
+  corrige para hacerlo coincidir con el nuevo.
+- `motor/src/legado/replica.js` reproduce el motor de QGIS **con sus defectos a propósito**. No
+  arregles nada ahí: su valor es poder demostrar qué hacía el sistema anterior.
+- El núcleo separa HECHOS (distancia, contacto, traslape) de su CLASIFICACIÓN. No metas reglas de
+  criticidad dentro del cálculo: van en `provisional.js` y siguen sin aprobarse.
+- Parámetros aprobados: umbral **120 m reales** (configurable), traslape con **fecha y hora**,
+  tolerancia **0 minutos**. El ~243 m del legado es solo línea base de comparación.
+- **Nunca subas al repositorio** los KMZ de `01_KMZ_Entrada`, `reporte_dinamico.csv` ni los
+  `crudo_*.json`: el repositorio es público y esos archivos llevan datos operativos y personales.
 
 ## Invariantes que NO debes romper (si cambias una punta, actualiza la otra)
 - **Formato del campo Descripción del KMZ** (lo produce el generador y lo lee el motor):

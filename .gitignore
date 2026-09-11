@@ -10,3 +10,13 @@ Desktop.ini
 # Temporales de edición
 *~
 *.tmp
+
+# Dependencias de desarrollo del motor (se reinstalan con npm install)
+motor/node_modules/
+motor/package-lock.json
+
+# DATOS OPERATIVOS DE EPM: nunca deben subirse al repositorio publico
+01_KMZ_Entrada/
+*.kmz
+reporte_dinamico.csv
+crudo_*.json
