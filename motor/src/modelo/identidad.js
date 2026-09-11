@@ -82,31 +82,90 @@ export function canonizarGeometria(geom) {
  * @param {string} [idExplicito] identificador que venia dentro del KMZ, si lo habia
  */
 export function calcularId(campos, geom, idExplicito) {
-  if (idExplicito) return { id: String(idExplicito), origen: 'explicito en el KMZ' };
   const partes = [
     campos.contrato ?? '', campos.frente ?? '', campos.tipoCierre ?? '',
     campos.direccion ?? '', campos.inicio ?? '', campos.fin ?? '',  // fechas crudas
     canonizarGeometria(geom),
   ];
-  return { id: 'pmt_' + hash64(partes.join(SEP)), origen: 'derivado del contenido' };
+  // La huella del contenido se calcula SIEMPRE, tambien cuando el KMZ trae un
+  // identificador propio: es lo que permite distinguir "dos copias del mismo
+  // registro" de "dos registros distintos con el identificador repetido".
+  const huellaContenido = 'c_' + hash64(partes.join(SEP));
+  if (idExplicito) {
+    return { id: String(idExplicito), origen: 'explicito en el KMZ', huellaContenido };
+  }
+  return { id: 'pmt_' + hash64(partes.join(SEP)), origen: 'derivado del contenido', huellaContenido };
 }
 
 /**
- * Anade sufijos a los identificadores repetidos de una lista de registros.
- * Modifica los registros en el sitio y devuelve cuantos duplicados encontro.
+ * Garantiza que TODOS los registros acaben con un identificador distinto.
+ *
+ * Dos casos que hay que distinguir, y que antes se confundian:
+ *
+ *  a) DUPLICADO REAL: dos registros con exactamente el mismo contenido. Como el
+ *     identificador se deriva del contenido, coinciden. Es el caso que aparece
+ *     en los datos reales (tres placemarks identicos dentro de un mismo KMZ).
+ *
+ *  b) IDENTIFICADOR REPETIDO: dos registros DISTINTOS que traen el mismo
+ *     `pmt:id` escrito dentro del KMZ. Aqui el contenido no es igual: lo que
+ *     esta mal es el archivo, que reutiliza un identificador.
+ *
+ * Antes se marcaban los dos casos como "duplicado exacto" solo porque el id
+ * coincidia. Y ademas el sufijo podia chocar: la entrada `x`, `x`, `x~2`
+ * producia `x`, `x~2`, `x~2`, es decir, seguia habiendo repetidos. Ahora el
+ * sufijo se busca hasta encontrar uno libre.
+ *
+ * Un sufijo libre, ademas, no puede robarle el identificador a otro registro.
+ * Con la entrada `x`, `x`, `x~2` el segundo registro NO puede quedarse con
+ * `x~2`, porque ese identificador es el que el tercero trae escrito de origen.
+ * Si se lo quedara, el tercero tendria que renombrarse y se le acusaria de
+ * traer "un identificador repetido en el KMZ" cuando el suyo era unico: el
+ * choque lo habriamos provocado nosotros. Por eso los identificadores de
+ * origen se reservan antes de repartir sufijos.
+ *
+ * @param {Array} registros con {id, huellaContenido, avisos}
+ * @returns {{duplicadosExactos:number, idsRepetidos:number}}
  */
 export function desambiguar(registros) {
-  const vistos = new Map();
-  let duplicados = 0;
+  const usados = new Set();
+  const porHuella = new Map();
+  // Identificadores que vienen de origen: ningun sufijo sintetico puede ocuparlos.
+  const deOrigen = new Set(registros.map((r) => r.id));
+  let duplicadosExactos = 0;
+  let idsRepetidos = 0;
+
   for (const r of registros) {
-    const n = (vistos.get(r.id) ?? 0) + 1;
-    vistos.set(r.id, n);
-    if (n > 1) {
-      duplicados++;
-      r.avisos.push(`registro identico a otro del mismo origen (copia ${n}); se le anadio el sufijo ~${n}`);
-      r.id = `${r.id}~${n}`;
-      r.duplicadoExacto = true;
+    const huella = r.huellaContenido ?? r.id;
+    const original = r.id;
+
+    if (!usados.has(original)) {
+      usados.add(original);
+      porHuella.set(huella, (porHuella.get(huella) ?? 0) + 1);
+      continue;
     }
+
+    // El identificador ya estaba cogido. ¿Mismo contenido u otro contenido?
+    const mismoContenido = porHuella.has(huella);
+    let n = (porHuella.get(huella) ?? 1) + 1;
+    let candidato = `${original}~${n}`;
+    while (usados.has(candidato) || deOrigen.has(candidato)) { n++; candidato = `${original}~${n}`; }
+
+    if (mismoContenido) {
+      duplicadosExactos++;
+      r.duplicadoExacto = true;
+      r.avisos.push(`registro identico a otro del mismo origen (copia ${n}); se le anadio el sufijo ~${n}`);
+    } else {
+      idsRepetidos++;
+      r.idRepetidoEnOrigen = true;
+      r.avisos.push(
+        `el identificador "${original}" viene repetido en el KMZ para registros distintos; ` +
+        `se le anadio el sufijo ~${n} para poder distinguirlos`
+      );
+    }
+    r.id = candidato;
+    usados.add(candidato);
+    porHuella.set(huella, n);
   }
-  return duplicados;
+
+  return { duplicadosExactos, idsRepetidos };
 }

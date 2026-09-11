@@ -15,6 +15,7 @@ decidir si hay conflicto — **sin decidirlo por nadie**:
 | `dentroDelUmbral` | si esa distancia cae dentro del umbral configurado |
 | `vigenciaA` / `vigenciaB` | inicio y fin completos de cada vigencia, con hora |
 | `hayTraslapeTemporal` | si coinciden en el tiempo, con fecha **y** hora |
+| `traslapeEvaluable` | si las fechas permiten siquiera decidirlo. Cuando es `false`, `hayTraslapeTemporal` **no** significa «no coinciden», significa «no se sabe», y así se presenta |
 | `traslapeInicio` / `traslapeFin` / `traslapeDias` / `traslapeHoras` | cuándo y cuánto coinciden |
 | `vigenciasContiguas` | si una termina justo cuando la otra empieza |
 | `minimoExigidoMinutos` | la coincidencia mínima que se exigió para este cálculo |
@@ -70,9 +71,11 @@ src/
   geo/
     elipsoide.js     WGS84: constantes y radios de curvatura
     plano-local.js   proyección métrica local (la decisión clave; ver abajo)
+    cajas.js         prefiltro por cajas envolventes: cota inferior, antimeridiano
     geodesica.js     Vincenty inverso — solo referencia para las pruebas
     segmentos.js     operaciones planas: distancias, cortes, punto en anillo
     geometria.js     distancia e intersección entre geometrías GeoJSON completas
+                     (plano por par de partes + dominio declarado de 50 km)
   tiempo/
     instante.js      lectura de marcas de tiempo, 24:00:00, calendario real
     intervalo.js     vigencias y traslape
@@ -92,7 +95,8 @@ src/
   legado/
     replica.js       réplica fiel del motor QGIS, defectos incluidos
     cotejo.js        compara los dos caminos de reproducción, alerta por alerta
-test/            146 pruebas + 1 que requiere los datos reales
+test/            184 pruebas + 1 que requiere los datos reales
+                 (auditoria-codex.test.mjs: una prueba adversaria por hallazgo de la ronda 1.2)
 herramientas/    inventario, comparador, empaquetador del verificador
 fixtures/        casos límite sintéticos (ningún dato real de EPM)
 verificador/     fuente del verificador
@@ -120,9 +124,31 @@ Por qué el plano ENU:
 
 - Es el método estándar de trabajo local en navegación, no una aproximación casera.
 - Funciona en **cualquier latitud y longitud**, incluidos los polos y el antimeridiano, porque la
-  rotación se hace en el espacio cartesiano.
+  rotación se hace en el espacio cartesiano. Lo que está acotado no es *dónde* puede estar el par,
+  sino *cuánto puede abarcar*: ver el dominio declarado más abajo.
 - No necesita husos, ni tablas, ni datum nacional.
 - Sin dependencias: ~30 líneas, lo que permite entregar el producto como un archivo portable.
+
+**El plano se construye para cada PAR DE PARTES, no para la geometría entera.** Una geometría puede
+tener varias partes (un `MultiPoint`, un `MultiLineString`, una `GeometryCollection`). Si el origen
+del plano se calculara con todas ellas a la vez, una parte lejana desplazaría el origen y movería la
+medida de las partes cercanas, que es lo que se quiere medir. Medido: un vértice añadido a 221 km
+desplazaba una distancia de 120,010 m a 119,992 m —18,26 mm— y podía cruzar el umbral de 120 m en el
+sentido equivocado. Con el origen por par de partes, la medida del par cercano sale **idéntica bit a
+bit** con y sin el vértice lejano, y hay una prueba que exige esa igualdad exacta.
+
+**Dominio declarado: `RADIO_DOMINIO_METROS = 50 000`.** Un plano tangente deja de ser fiable cuando
+el par abarca demasiado. Si el par de partes ocupa un radio mayor de 50 km, el motor **no lo mide**:
+devuelve `metros: null`, `dominioValido: false` y un error que dice cuántos kilómetros abarcaba y
+cuál es el límite. Nunca devuelve un número inventado ni «se tocan». El caso extremo que lo motivó:
+dos geometrías **antípodas** daban antes 0 m y contacto físico, porque el antípoda, proyectado en un
+plano tangente compartido, cae justo sobre el origen. Sobre 120 m, 50 km de dominio dejan un error de
+proyección de 3,7 mm, y el motor solo mide de verdad por debajo del umbral.
+
+> Portabilidad, dicha sin exagerar: el motor mide **en cualquier punto del planeta**, incluidos polos
+> y antimeridiano, siempre que **cada par comparado quepa en 50 km**. Fuera de eso lo dice; no lo
+> aproxima. Para los PMT de EPM, donde el umbral de trabajo es de 120 m, esa condición se cumple
+> siempre.
 
 Error medido frente a la geodésica exacta (prueba `geo-distancia.test.mjs`):
 
@@ -132,7 +158,7 @@ Error medido frente a la geodésica exacta (prueba `geo-distancia.test.mjs`):
 | 1,1 km | 0,0013 mm |
 | 11 km | 1,4 mm |
 | 33 km | 37 mm |
-| 111 km | 1,4 m |
+| 111 km | 1,4 m *(fuera del dominio de 50 km: se mide aquí solo para caracterizar el error; en el motor este par se rechaza)* |
 
 El motor solo mide por debajo del umbral (120 m por defecto), donde el error es de micras.
 Se valida contra **dos referencias independientes**: Vincenty inverso implementado aparte
@@ -191,6 +217,23 @@ y tiene pruebas propias que lo dejan por escrito con los números medidos.
   sumando días o recortando a 59, lo que convertía un error de captura en un instante distinto sin
   que nadie se enterara: el trazado entraba al análisis con una vigencia que nunca existió.
 
+  La validación es de **texto completo**, no de prefijo: `123:00`, `12:3`, `99:99` o `1a:00` ya no
+  caen en el camino de «sin hora» convirtiéndose en `00:00:00` sin decir nada, y `24:00:001` ya no
+  se confunde con `24:00:00` por compartir el principio. Cada uno devuelve `ms: null`,
+  `estadoHora: 'invalida'` y un aviso que dice qué está mal.
+
+- **Las zonas horarias se rechazan diciendo que son zonas horarias.** El formato del proyecto
+  expresa hora local de obra y no admite sufijo. Antes, un `Z`, un `UTC` o un `-05:00` al final se
+  ignoraban en silencio y la marca entraba como hora local; ahora la vigencia se invalida con un
+  mensaje que nombra el sufijo encontrado.
+
+- **`24:00:00` no se extiende dos veces.** Ese texto significa «el final del día declarado». El
+  criterio legado de *fin inclusivo* lleva un fin escrito a las `00:00` hasta el último instante de
+  su día; aplicárselo también a un `24:00:00` regalaba un día entero: `2026-03-01 24:00:00`
+  terminaba en `2026-03-02 23:59:59`. El motor recuerda de dónde viene cada hora
+  (`origenHora: 'medianoche24'`) y no la vuelve a extender. En granularidad de día, además, ese
+  registro pertenece al **día que declara** (el 1), no al día al que apunta el instante (el 2).
+
 - Las fechas que no existen en el calendario (por ejemplo `2026-02-29`) se rechazan **con nombre y
   apellido** en los avisos. El motor legado las ignoraba en silencio.
 
@@ -210,6 +253,16 @@ desplazado una vuelta a cada lado y se toma la menor de las tres separaciones. L
 necesita ese tratamiento. Hay pruebas de extremo a extremo —entrando por KMZ y saliendo por
 `analizar()`— para puntos, para líneas, cerca de los polos, en el meridiano cero, y un control
 negativo que exige que dos trazados a 220 km **no** se relacionen.
+
+**El prefiltro tampoco puede exagerar cerca de los polos.** Convertir grados de longitud a metros
+exige multiplicar por el coseno de la latitud, que tiende a cero en el polo. Ese coseno estaba
+recortado a un mínimo de 0,01, lo que hacía que el prefiltro **sobreestimara** la separación: a
+89,999° de latitud, dos puntos realmente separados 1,95 m se estimaban a ~1,1 km y el par se
+descartaba antes de medirlo. La regla es que la estimación tiene que ser una **cota inferior** —nunca
+puede superar la distancia real—, porque solo así se garantiza que el prefiltro no tira ningún par
+que el cálculo preciso habría aceptado. Todo el prefiltro vive ahora en `geo/cajas.js`
+(`separacionLongitud`, `cotaInferiorMetros`, `unir`, `radioAproximadoMetros`), con una prueba que
+compara cota contra distancia real y otra de extremo a extremo con el par polar.
 
 ### 4. Registros sin contrato
 
@@ -237,7 +290,16 @@ id = "pmt_" + FNV1a64( contrato, frente, tipo_cierre, dirección,
 - **No cambia al cambiar la configuración del motor**: se usan los textos de fecha tal como vienen
   en el KMZ, no la vigencia ya normalizada. Sin esto no se podrían comparar dos ejecuciones
   registro a registro. Hay una prueba que lo garantiza.
-- **Conserva los duplicados exactos** añadiendo el sufijo `~2`, en vez de perderlos.
+- **Conserva los duplicados exactos** añadiendo el sufijo `~2`, en vez de perderlos. El sufijo se
+  busca hasta encontrar uno **realmente libre**, y además **no puede quitarle el identificador a
+  otro registro**: con la entrada `x`, `x`, `x~2` el segundo no se queda con `x~2` —ese pertenece al
+  tercero, que lo trae escrito de origen— sino con `x~3`. Antes salían dos registros llamados `x~2`,
+  y el tercero recibía un aviso que lo acusaba de traer un identificador repetido cuando el choque lo
+  había provocado el propio motor.
+- **Distingue dos problemas distintos**: `duplicadosExactos` cuenta registros con el mismo contenido
+  (el caso real: tres placemarks idénticos en un KMZ) y `idsRepetidos` cuenta archivos que reutilizan
+  un `pmt:id` para registros diferentes. El primero es una copia; el segundo es un archivo mal
+  hecho. Se informan por separado.
 - La geometría se redondea a 7 decimales (~1 cm) para que el ruido de coma flotante de un
   re-exportado no genere un id distinto.
 
@@ -258,6 +320,24 @@ El modelo interno es GeoJSON completo: `Point`, `MultiPoint`, `LineString`, `Mul
 Los datos reales de hoy solo traen `Point` (33) y `LineString` (427), así que el soporte de los
 demás tipos se prueba con fixtures sintéticos.
 
+**Coordenadas: se leen enteras o no se leen.** El lector usaba `parseFloat`, que acepta basura
+pegada al número: `0.002oops` se leía como `0,002` y el trazado seguía adelante con una geometría
+falsa, sin que nadie lo supiera. Ahora se convierte solo si **todo** el texto es un número, y
+también se rechazan las coordenadas fuera del rango terrestre. Si un vértice no se puede leer, se
+excluye **la geometría completa** —no los vértices buenos por su cuenta, que producirían un trazado
+que nadie dibujó— y el registro se conserva con su diagnóstico para poder corregirlo en origen.
+
+**Lo que se acepta y lo que no, dicho claro:**
+
+| Entrada | Qué hace el motor |
+|---|---|
+| KML en UTF-8, UTF-16LE o UTF-16BE (con marca de orden) | Se lee. Si no era UTF-8, lo avisa. Antes un KMZ en UTF-16 devolvía **0 registros sin un solo error**, y parecía un archivo vacío. |
+| `<NetworkLink>` a otros documentos | **No se sigue.** Si el documento no tiene Placemarks propios es un **error**; si los tiene, es un aviso. Nunca se presenta como una lectura correcta de 0 frentes. |
+| Varios `.kml` dentro del KMZ | Se procesa `doc.kml` (o el primero) y se **nombran los que no se procesaron**. |
+| Coordenada ilegible o fuera del planeta | Se excluye la geometría; el registro se conserva con el diagnóstico. |
+| Par que abarca más de 50 km | No se mide: `metros: null` y error explícito. |
+| Zona horaria en la fecha | Vigencia inválida, con el sufijo nombrado. |
+
 ### 7. Cómo se comprueba que la réplica del legado es fiel
 
 El verificador no declara fidelidad porque los totales cuadren. Dos resultados pueden sumar lo
@@ -274,12 +354,48 @@ sobrantes**. Las pruebas de `cotejo.test.mjs` se dedican sobre todo a comprobar 
 **sabe decir que no**: se le dan totales que cuadran con parejas distintas, categorías cambiadas,
 periodos desplazados y alertas de más y de menos, y tiene que detectarlo en todos los casos.
 
+**Coincidir no es lo mismo que haber demostrado fidelidad.** El cotejo publica ahora cuatro
+condiciones por separado, y solo las cuatro juntas dan por superado el control:
+
+| Condición | Qué significa |
+|---|---|
+| `coinciden` | Los dos caminos dan la misma alerta, una a una. |
+| `hayEntrada` | Se leyó al menos un trazado. **Cero contra cero no demuestra equivalencia**: un `<kml>` truncado daba antes 0 alertas a cada lado, los totales cuadraban y el control salía «superado» sobre una entrada que nadie había leído. |
+| `lecturaLimpia` | Ningún archivo falló al leerse. Si uno de ocho es ilegible, lo comparado no es la entrada. |
+| `alcanceContrastado` | Todas las geometrías son de un tipo cuya equivalencia con QGIS está realmente contrastada: **`Point` y `LineString`, y solo esos**. |
+
+Ese último punto importa: la réplica del legado ignoraba los polígonos **en silencio**, igual que
+QGIS, y el cotejo seguía diciendo «superado» sobre una entrada que no había comparado entera. Ahora
+`replica.js` devuelve `noContrastables` con el frente y el tipo de cada geometría que quedó fuera, y
+el control lo refleja. El verificador muestra cada condición con su ✔ o su ✖, de modo que nadie
+tenga que deducir por qué el control pasó o falló.
+
+**Lo que el verificador nunca presenta como «no coinciden» es «no lo sabemos».** Una relación cuyas
+fechas no permiten decidir el traslape tiene su propia tarjeta (gris), su propio filtro y una
+pastilla que dice «No se puede saber» en la tabla; en el CSV sale como `no evaluable`. Sumarla a
+«sin coincidencia en el tiempo» habría convertido un dato que falta en una respuesta tranquilizadora.
+
 ### 8. Dependencias
 
 **En tiempo de ejecución: ninguna.** El verificador empaquetado no carga nada de internet.
 
 - El ZIP del KMZ se abre con `DecompressionStream('deflate-raw')`, que forma parte de la
   plataforma web (Chrome 103+, Firefox 113+, Safari 16.4+, Node 18+). Evita arrastrar JSZip.
+
+**El lector de ZIP está endurecido.** No se abre un archivo de procedencia desconocida sin
+comprobarlo ni acotarlo:
+
+- **Se verifica el CRC-32** de cada entrada contra el que declara el propio ZIP. Antes no se
+  comprobaba nunca, así que un archivo manipulado o corrompido en tránsito entraba al análisis como
+  si nada.
+- **Límites explícitos** en `LIMITES_POR_DEFECTO` (congelado, no se puede subir sobre la marcha):
+  64 MB de archivo, 64 MB por entrada descomprimida, 128 MB descomprimidos en total, factor de
+  expansión 400 y 10 000 entradas. Sin ellos, 60 MB comprimidos a 59,7 KB —un factor de 1029:1—
+  entraban sin resistencia. Los valores son holgados frente a los KMZ reales, que pesan decenas
+  de kilobytes.
+- **Se descomprime solo lo que hace falta.** `leerDirectorio` lee el índice sin descomprimir nada,
+  `listarZip` enseña el contenido igual de barato, y `extraerKml` descomprime **únicamente** la
+  entrada elegida.
 - El XML se lee con un analizador propio de ~180 líneas, común a Node y al navegador. Se eligió
   frente a `DOMParser` porque `DOMParser` no existe en Node, y tener dos lectores distintos haría
   que las pruebas no demostraran el comportamiento real.

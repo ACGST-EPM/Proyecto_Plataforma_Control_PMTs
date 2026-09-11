@@ -15,7 +15,7 @@
  * tocar el cálculo.
  */
 
-import { leerInstante, formatear, MS_DIA, MS_MINUTO } from './instante.js';
+import { leerInstante, formatear, inicioDelDiaDeclarado, MS_DIA, MS_MINUTO } from './instante.js';
 
 /**
  * Construye una vigencia a partir de los textos del KMZ.
@@ -38,12 +38,28 @@ export function leerVigencia(textoInicio, textoFin, opciones = {}) {
   // Granularidad 'dia': descarta la hora por completo y trata cada vigencia
   // como dias calendario completos. Es exactamente lo que hacia el motor
   // legado, y existe aqui solo para poder comparar ambos criterios.
+  //
+  // Se usa el DIA DECLARADO en el texto, no el dia al que apunta el instante
+  // normalizado. La diferencia importa con 24:00:00: "2026-03-01 24:00:00" es
+  // el final del 1 de marzo, asi que en granularidad de dia su dia es el 1,
+  // no el 2. Es tambien lo que hacia el legado, que leia la fecha del texto.
   if (opciones.granularidadTemporal === 'dia') {
-    if (msIni !== null) msIni = Math.floor(msIni / MS_DIA) * MS_DIA;
-    if (msFin !== null) msFin = Math.floor(msFin / MS_DIA) * MS_DIA + MS_DIA - 1000;
+    const dIni = inicioDelDiaDeclarado(ini.diaDeclarado);
+    const dFin = inicioDelDiaDeclarado(fin.diaDeclarado);
+    if (msIni !== null && dIni !== null) msIni = dIni;
+    if (msFin !== null && dFin !== null) msFin = dFin + MS_DIA - 1000;
   }
-  if (opciones.granularidadTemporal !== 'dia' && opciones.finInclusivoDiaCompleto && msFin !== null) {
-    // Lleva el fin al último instante de su día, replicando el criterio legado.
+
+  // Fin inclusivo: lleva el fin al ultimo instante de su dia, replicando el
+  // criterio legado para las vigencias cuya hora de fin es exactamente 00:00.
+  //
+  // NO se aplica cuando el fin venia escrito como 24:00:00: eso YA significa
+  // "final de ese dia" y volver a extenderlo regalaria un dia entero. Era el
+  // defecto reportado: "2026-03-01 24:00:00" acababa en "2026-03-02 23:59:59".
+  if (opciones.granularidadTemporal !== 'dia' &&
+      opciones.finInclusivoDiaCompleto &&
+      msFin !== null &&
+      fin.origenHora !== 'medianoche24') {
     const inicioDelDia = Math.floor(msFin / MS_DIA) * MS_DIA;
     if (msFin === inicioDelDia) { msFin = inicioDelDia + MS_DIA - 1000; finExtendido = true; }
   }
@@ -58,6 +74,9 @@ export function leerVigencia(textoInicio, textoFin, opciones = {}) {
     inicio: formatear(msIni), fin: formatear(msFin),
     granularidad: opciones.granularidadTemporal ?? 'instante',
     tieneHoraInicio: ini.tieneHora, tieneHoraFin: fin.tieneHora,
+    estadoHoraInicio: ini.estadoHora, estadoHoraFin: fin.estadoHora,
+    origenHoraInicio: ini.origenHora, origenHoraFin: fin.origenHora,
+    diaDeclaradoInicio: ini.diaDeclarado, diaDeclaradoFin: fin.diaDeclarado,
     finExtendidoADiaCompleto: finExtendido,
     valida, avisos,
   };

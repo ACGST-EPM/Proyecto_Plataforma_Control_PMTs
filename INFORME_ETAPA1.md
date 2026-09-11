@@ -1,6 +1,8 @@
 # ETAPA 1 — Motor geoespacial y temporal en paralelo, con verificador
 
-> **Estado:** terminada y detenida para auditoría independiente. **No se avanza a la Etapa 2.**
+> **Estado:** terminada. Auditada de forma independiente (Codex) y **corregida**: rondas 1.1
+> (endurecimiento) y 1.2 (hallazgos de la auditoría). Detenida de nuevo para revisión.
+> **No se avanza a la Etapa 2.**
 > **Fecha:** 11 de septiembre de 2026
 > **Alcance:** se construyó un motor nuevo que corre **en paralelo**. No se tocó ni un archivo del sistema actual.
 
@@ -119,19 +121,26 @@ geométrica independiente. No entra en el producto ni en el verificador.
 
 ```
 $ npm test
-# tests 110   # pass 110   # fail 0   # skipped 0   # duration_ms 483
+# tests 185   # pass 184   # fail 0   # skipped 1
 ```
+
+La prueba omitida es la que necesita los 8 KMZ reales, que **no están en el repositorio**. Se activa
+con `PMT_KMZ_DIR` y `PMT_CSV_LEGADO`; ejecutada con ellos, pasa (10 de 10).
 
 | Archivo | Pruebas | Qué cubre |
 |---|---|---|
 | `geo-distancia.test.mjs` | 8 | metros, validación cruzada contra Vincenty y Turf, antimeridiano, nueve latitudes, cota de error |
 | `geo-tipos.test.mjs` | 18 | punto↔punto, punto↔línea, línea↔línea, polígonos con hueco, Multi*, GeometryCollection, tipos desconocidos, geometría ausente |
 | `umbral.test.mjs` | 7 | exactamente 120 m, justo por debajo y por encima, umbral configurable, configuración inválida |
-| `tiempo.test.mjs` | 20 | intervalos iguales, parciales, contenidos, extremos que se tocan, mismo día sin traslape, `24:00:00`, fechas inexistentes, tolerancia, independencia de la zona horaria |
+| `tiempo.test.mjs` | 23 | intervalos iguales, parciales, contenidos, extremos que se tocan, mismo día sin traslape, `24:00:00`, fechas inexistentes, semántica exacta de la tolerancia, independencia de la zona horaria |
 | `identidad.test.mjs` | 13 | revigencias, homónimos, geometrías distintas, estabilidad frente a la configuración, duplicados, nombres que son prefijo de otro |
 | `io.test.mjs` | 22 | XML, coordenadas, descripción en HTML, MultiGeometry, carpetas, CDATA, KMZ comprimido, archivos rotos, entradas absurdas |
 | `nucleo.test.mjs` | 12 | regla de contratos, independencia de los hechos, contrato de datos, ausencia de clasificación, reproducibilidad |
 | `replica-legado.test.mjs` | 10 | cada defecto del legado replicado por separado + reproducción exacta del CSV publicado |
+| `robustez-numerica.test.mjs` | 14 | cortes en vértice, colineales, casi colineales, tolerancia numérica frente al umbral operacional, arco contra cuerda |
+| `hardening.test.mjs` | 12 | registros sin contrato, antimeridiano de extremo a extremo, prefiltro que nunca descarta de más |
+| `cotejo.test.mjs` | 8 | el control de fidelidad **sabe decir que no**: totales que cuadran con parejas distintas, categorías cambiadas, periodos desplazados |
+| `auditoria-codex.test.mjs` | **38** | **una prueba adversaria por cada hallazgo de la auditoría independiente** (ronda 1.2) |
 
 **Validación contra referencias independientes** (requisito 13): la distancia no se comprueba solo
 contra sí misma. Se compara con **Vincenty inverso**, implementado aparte con otro algoritmo
@@ -139,10 +148,11 @@ contra sí misma. Se compara con **Vincenty inverso**, implementado aparte con o
 del elipsoidal) y con **valores geodésicos publicados**: el caso Flinders Peak → Buninyong
 (54.972,271 m) y los grados de latitud y longitud en el ecuador según WGS84.
 
-**Prueba en navegador real:** el verificador empaquetado se abrió con Chromium desde `file://`, se
-le cargaron los 8 KMZ reales, se pulsó calcular, se recorrieron los filtros y se recalculó con otros
-parámetros. **Cero errores de JavaScript.** Un fallo visual detectado en esa prueba (el aviso de
-fidelidad se duplicaba al recalcular) quedó corregido y verificado.
+**Prueba en navegador real:** el verificador empaquetado se abrió con Chromium desde `file://` —el
+equivalente exacto a hacer doble clic—, se le cargaron los 8 KMZ reales, se pulsó calcular, se
+recorrieron **los siete filtros** uno a uno y se recalculó con otros parámetros. **Cero errores de
+JavaScript.** Un fallo visual detectado en esa prueba (el aviso de fidelidad se duplicaba al
+recalcular) quedó corregido y verificado.
 
 ---
 
@@ -358,4 +368,112 @@ Los archivos que arrastra no salen de su computador.
 
 ---
 
-*Etapa 1 terminada. Detenida para auditoría independiente. No se avanza a la Etapa 2.*
+## 13. Ronda 1.2 — correcciones derivadas de la auditoría independiente
+
+Una auditoría externa (Codex) revisó el motor sobre el commit `4b59f89` y concluyó
+**«requiere corrección antes de Etapa 2»**, con 9 hallazgos bloqueantes y 4 medios. Esa misma
+auditoría confirmó por su cuenta las cifras publicadas: 460 registros, 1.340 vértices, 708 de 708
+filas del legado, 248 alertas (84 + 164), 174 relaciones nuevas, 68 con traslape y 147 pruebas en
+verde. Es decir: **los números eran correctos; lo que estaba mal era lo que el motor hacía en
+situaciones que los datos de hoy no contienen**.
+
+### 13.1 Cómo se trabajó
+
+No se aplicó ninguna corrección a ciegas. Para cada hallazgo se hizo, en este orden:
+
+1. **Reproducirlo** con el código tal y como estaba, y anotar el resultado **medido**.
+2. Corregirlo.
+3. Escribir una prueba adversaria que **falla sin la corrección y pasa con ella**.
+4. Volver a pasar la batería entera y los 8 KMZ reales.
+
+De los 13 hallazgos, **los 13 se reprodujeron**. Ninguno resultó ser falso, así que no hubo que
+refutar ninguno. La demostración del punto 3 se hizo de verdad: se revirtió cada corrección una a
+una y se comprobó qué prueba se ponía en rojo (columna «prueba que lo detecta»).
+
+### 13.2 Los nueve hallazgos bloqueantes
+
+| # | Qué estaba mal | Qué devolvía **antes** (medido) | Qué devuelve **ahora** | Prueba que lo detecta |
+|---|---|---|---|---|
+| **H1** | El plano de medida se construía con **todas** las partes de las dos geometrías a la vez, y no había ningún límite de tamaño declarado | Una línea y un punto **antípodas** daban **0 m y «se tocan»**. Un vértice añadido a 221 km movía una medida de 120,010 m a 119,992 m (18,26 mm) | Plano **por par de partes** y dominio declarado de **50 km**: los antípodas devuelven `null` con un error explícito, y el vértice lejano deja la medida **idéntica bit a bit** | H1 ×3 |
+| **H2** | El prefiltro recortaba el coseno de la latitud a 0,01, con lo que **sobreestimaba** la separación cerca de los polos | Dos puntos a **1,95 m** en latitud 89,999 se estimaban a ~1,1 km y **se descartaban sin medirlos** | La estimación es una **cota inferior** garantizada; el par sobrevive y se mide en 1,95 m | H2 ×3 |
+| **H3** | La hora se validaba por prefijo, no por texto completo | `123:00`, `12:3`, `99:99` se convertían en **`00:00:00` sin un solo aviso**; `24:00:001` saltaba al día siguiente; `Z`, `UTC`, `-05:00` se ignoraban en silencio | Todos son **dato inválido** con diagnóstico; la zona horaria se rechaza **diciendo que es una zona horaria** | H3 ×4 |
+| **H4** | El criterio de «fin inclusivo» se aplicaba también a un fin escrito `24:00:00`, que **ya** significa fin de día | `2026-03-01 24:00:00` terminaba en **`2026-03-02 23:59:59`**: un día entero de regalo | Termina en `2026-03-02 00:00:00`; y en granularidad de día pertenece al **día que declara** (el 1) | H4 ×3 |
+| **H5** | Los campos de la descripción se buscaban como **subcadena** | `direccion: subcontrato: CW999` producía un **contrato fantasma CW999** que no existe en ningún sitio | La clave tiene que estar **al principio del segmento**; el contrato queda `null` y se avisa de que falta | H5 ×3 |
+| **H6** | El sufijo de desambiguación podía chocar con uno ya usado | La entrada `x`, `x`, `x~2` salía como `x`, `x~2`, **`x~2`**: seguía habiendo dos iguales | Se busca sufijo hasta encontrar uno libre **y que no pertenezca a otro registro**; además se separan «copia idéntica» de «identificador reutilizado» | H6 ×3 |
+| **H7** | Las coordenadas se leían con `parseFloat`, que acepta basura pegada | `0.002oops` se leía como **0,002** y el trazado seguía con una geometría falsa | Se convierte solo si **todo** el texto es número; si un vértice falla se excluye la geometría entera y **el registro se conserva** con su diagnóstico | H7 ×4 |
+| **H8** | El KMZ se abría sin verificar ni acotar | Un archivo **manipulado entraba sin protestar** (el CRC-32 no se comprobaba nunca); 60 MB comprimidos a 59,7 KB —factor 1029:1— entraban sin resistencia | **CRC-32 verificado** en cada entrada, límites explícitos y congelados, y se descomprime **solo** la entrada necesaria | H8 ×3 |
+| **H9** | El control de fidelidad aprobaba con que los totales coincidieran | Un `<kml>` truncado daba 0 alertas a cada lado y el control salía **«superado»** sobre una entrada que nadie había leído | Cuatro condiciones separadas y visibles (`coinciden`, `hayEntrada`, `lecturaLimpia`, `alcanceContrastado`); **cero contra cero ya no demuestra nada** | H9 ×3 |
+
+### 13.3 Los cuatro hallazgos medios
+
+| # | Qué estaba mal | Qué se hizo | Prueba |
+|---|---|---|---|
+| **M1** | La réplica ignoraba los polígonos **en silencio**, igual que QGIS, y el cotejo seguía diciendo «superado» | La réplica devuelve `noContrastables` con frente y tipo; la fidelidad solo se declara sobre `Point` y `LineString`, y se dice | M1 ×2 |
+| **M2** | Un KMZ en UTF-16 devolvía **0 registros sin ningún error**; un documento con solo `NetworkLink` parecía un archivo vacío | Se detecta la codificación por su marca de orden; el `NetworkLink` se reporta como error si no hay Placemarks propios, y como aviso si los hay | M2 ×3 |
+| **M3** | El comparador emparejaba relaciones por **nombre de frente**, que no es único | Empareja por **identificador estable**, con multiplicidad, y atribuye una causa a cada relación que desaparece | M3 ×2 |
+| **M4** | «No se puede saber si coinciden en el tiempo» se mostraba junto a «no coinciden» | Tarjeta propia (gris), filtro propio, pastilla **«No se puede saber»** en la tabla y `no evaluable` en el CSV | M4 ×2 |
+
+### 13.4 Un defecto más, encontrado por las propias pruebas nuevas
+
+Al escribir la prueba adversaria de **H6** apareció algo que la auditoría no había visto: el sufijo
+sintético podía **quitarle el identificador a otro registro**. Con la entrada `x`, `x`, `x~2`, el
+segundo registro se quedaba con `x~2`, que pertenecía al tercero; el tercero tenía entonces que
+renombrarse y recibía un aviso acusándolo de traer «un identificador repetido en el KMZ» cuando el
+suyo era único: **el choque lo había provocado el propio motor**. Corregido reservando los
+identificadores de origen antes de repartir sufijos. Los identificadores de origen ahora se
+respetan siempre.
+
+### 13.5 Deuda menor saldada
+
+- El comentario que hablaba de una tolerancia de «1 nanómetro» ya no existe: el valor implementado
+  y documentado es **1 micrómetro**, con la medida de la que sale (residuo real de 1,65·10⁻⁸ m).
+- La documentación ya no promete más portabilidad de la demostrada. Donde decía «funciona en
+  cualquier latitud y longitud» ahora dice, además, **cuánto puede abarcar cada par**: el motor mide
+  en cualquier punto del planeta —polos y antimeridiano incluidos— **siempre que cada par comparado
+  quepa en 50 km**; fuera de eso lo dice en vez de aproximarlo. En la tabla de error, la fila de
+  111 km queda marcada como fuera del dominio.
+- El `README.md` documenta ahora, además, el plano por par de partes, los formatos aceptados y
+  rechazados uno por uno, los límites del ZIP con su justificación y el alcance real de la fidelidad.
+
+### 13.6 Regresión: **ninguna cifra publicada cambió**
+
+Se reprocesaron los 8 KMZ reales con el motor corregido. Todo lo publicado en las secciones 6 a 8 de
+este informe se mantiene:
+
+```
+REPLICA DEL LEGADO      460 trazados · 164 cercanias · 84 interferencias · 708 filas
+  vs CSV publicado      708 de 708 filas identicas · 0 faltantes · 0 sobrantes
+COTEJO ALERTA A ALERTA  248 coincidentes · 0 solo en la replica · 0 solo en el motor
+  fidelidad             superada, con las cuatro condiciones en verde
+CONFIGURACION APROBADA  174 relaciones · 68 con traslape · 106 sin traslape
+  (120 m, fecha + hora)   0 no evaluables · 6 con contacto fisico real
+  emparejamiento        174 de 248 se conservan · 74 desaparecen · 0 aparecen
+                        74 de 74 explicadas: estaban a mas de 120 m
+CALIDAD                 459 analizables · 1 sin vigencia valida · 3 duplicados exactos
+                        0 sin geometria · 0 sin contrato · 98 sin municipio
+```
+
+Una única estadística interna cambia, y es correcto que cambie: el número de distancias que llega a
+calcularse pasa de 294 (perfil legado, 243 m) a 191 (120 m). Es el efecto del umbral más estrecho,
+no del prefiltro: el prefiltro corregido descarta **menos**, nunca más.
+
+**Si alguna cifra hubiera cambiado no se habría forzado de vuelta.** No hizo falta: las 13
+correcciones tocan situaciones que los 8 KMZ de hoy no contienen (no hay antípodas, ni polos, ni
+UTF-16, ni horas inválidas más allá del `2026-02-29` ya conocido, ni polígonos, ni archivos
+manipulados). Que los números no se muevan **es exactamente lo que se esperaba**, y por eso hicieron
+falta fixtures sintéticos: sin ellos, estos trece defectos habrían seguido invisibles hasta
+aparecer en campo.
+
+### 13.7 Verificación final
+
+- `npm test` → **185 pruebas, 184 en verde, 0 fallos, 1 omitida** (la que requiere los KMZ reales;
+  ejecutada aparte con ellos, 10 de 10).
+- Ambos `verificador.html` reconstruidos (20 módulos, ~159 KB).
+- El archivo autocontenido **abierto en navegador con doble clic**: se cargaron los 8 KMZ, se
+  recorrieron los siete filtros, se recalculó con 243 m + «solo fecha» y volvieron a salir las 248
+  alertas del motor de QGIS. **Cero errores de JavaScript.**
+
+---
+
+*Etapa 1 terminada. Auditada de forma independiente, corregida en las rondas 1.1 y 1.2, y detenida
+de nuevo para revisión. No se avanza a la Etapa 2.*

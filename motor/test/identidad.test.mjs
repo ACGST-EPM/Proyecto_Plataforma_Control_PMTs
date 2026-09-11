@@ -73,13 +73,16 @@ test('el resumen distribuye bien y no colisiona en un volumen realista', () => {
 
 test('duplicados exactos se conservan, se marcan y quedan distinguibles', () => {
   const regs = [
-    { id: 'pmt_a', avisos: [] }, { id: 'pmt_a', avisos: [] },
-    { id: 'pmt_a', avisos: [] }, { id: 'pmt_b', avisos: [] },
+    { id: 'pmt_a', huellaContenido: 'A', avisos: [] },
+    { id: 'pmt_a', huellaContenido: 'A', avisos: [] },
+    { id: 'pmt_a', huellaContenido: 'A', avisos: [] },
+    { id: 'pmt_b', huellaContenido: 'B', avisos: [] },
   ];
-  const n = desambiguar(regs);
-  assert.equal(n, 2);
-  assert.deepEqual(regs.map((r) => r.id), ['pmt_a', 'pmt_a~2', 'pmt_a~3', 'pmt_b']);
-  assert.equal(new Set(regs.map((r) => r.id)).size, 4);
+  const r = desambiguar(regs);
+  assert.equal(r.duplicadosExactos, 2);
+  assert.equal(r.idsRepetidos, 0);
+  assert.deepEqual(regs.map((x) => x.id), ['pmt_a', 'pmt_a~2', 'pmt_a~3', 'pmt_b']);
+  assert.equal(new Set(regs.map((x) => x.id)).size, 4);
   assert.ok(regs[1].avisos[0].includes('identico a otro'));
   assert.equal(regs[1].duplicadoExacto, true);
 });

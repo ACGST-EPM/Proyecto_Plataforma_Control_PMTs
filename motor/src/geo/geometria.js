@@ -1,17 +1,42 @@
 /**
- * Distancia mínima e intersección entre dos geometrías GeoJSON cualesquiera.
+ * Distancia minima e interseccion entre dos geometrias GeoJSON cualesquiera.
  *
- * Soporta todo el modelo GeoJSON, no solo punto y línea como el motor legado:
+ * Soporta todo el modelo GeoJSON, no solo punto y linea como el motor legado:
  *   Point, MultiPoint, LineString, MultiLineString, Polygon, MultiPolygon
  *   y GeometryCollection (recursiva).
  *
- * Los dos hechos que produce son INDEPENDIENTES entre sí y se calculan sin
+ * Los dos hechos que produce son INDEPENDIENTES entre si y se calculan sin
  * ninguna regla de negocio encima:
- *   - metros    : distancia mínima real entre las geometrías originales
- *   - intersecan: si existe contacto geométrico físico (distancia exactamente 0)
+ *   - metros    : distancia minima real entre las geometrias originales
+ *   - intersecan: si existe contacto geometrico fisico (distancia 0)
+ *
+ * ── DOMINIO DE LA PROYECCION ───────────────────────────────────────────────
+ *
+ * La medida se hace sobre un plano tangente local. Ese plano solo es fiable en
+ * un entorno del punto donde toca la Tierra, asi que hay dos reglas duras:
+ *
+ *  1. El plano se construye PARA CADA PAR DE PARTES que se compara, con el
+ *     origen en el punto medio de esas dos partes. No se usa un unico plano
+ *     para toda la geometria.
+ *
+ *     Por que importa: con un plano comun, un componente lejano desplazaba el
+ *     origen y falseaba la medida de los componentes cercanos. Medido:
+ *     MultiPoint([[0,0],[2,0]]) contra un punto situado a 120,010 m del primer
+ *     componente daba 119,992 m — 18 mm de error por culpa de un vertice a
+ *     222 km. Y en el caso extremo, una linea que cruzaba el planeta entero
+ *     hacia que el antipoda se proyectara sobre el propio origen, produciendo
+ *     un falso contacto de 0 m.
+ *
+ *  2. Si el par de partes no cabe en el radio de dominio, NO se mide. Se
+ *     devuelve `metros: null` con un error explicito. Nunca se entrega un
+ *     numero que parezca valido cuando el metodo ha dejado de serlo.
+ *
+ * El dominio soportado se declara en RADIO_DOMINIO_METROS y esta justificado
+ * en motor/README.md con el error medido.
  */
 
 import { planoParaCajas } from './plano-local.js';
+import { cotaInferiorMetros, unir, radioAproximadoMetros } from './cajas.js';
 import {
   distPuntoSegmento, distSegmentoSegmento,
   puntoEnAnillo, distPuntoAnillo,
@@ -20,6 +45,17 @@ import {
 
 export { TOLERANCIA_NUMERICA_METROS };
 
+/**
+ * Radio maximo, en metros, desde el origen del plano local hasta cualquier
+ * vertice que participe en una medida.
+ *
+ * 50 km. La distorsion del plano tangente crece como s^2/(2R^2): a 50 km del
+ * origen vale 3,1e-5, es decir 3,7 mm sobre una medida de 120 m. Mas alla el
+ * metodo sigue funcionando, pero preferimos declarar el limite antes que
+ * defender numeros que no hemos comprobado.
+ */
+export const RADIO_DOMINIO_METROS = 50000;
+
 /** Tipos GeoJSON que el motor entiende. */
 export const TIPOS_SOPORTADOS = new Set([
   'Point', 'MultiPoint', 'LineString', 'MultiLineString',
@@ -27,7 +63,7 @@ export const TIPOS_SOPORTADOS = new Set([
 ]);
 
 /**
- * Descompone cualquier geometría GeoJSON en tres listas de primitivas.
+ * Descompone cualquier geometria GeoJSON en tres listas de primitivas.
  * Es el paso que impide que un tipo "raro" se descarte en silencio: lo que no
  * se reconoce se reporta como error, nunca se ignora.
  *
@@ -36,14 +72,14 @@ export const TIPOS_SOPORTADOS = new Set([
 export function descomponer(geom, errores = []) {
   const r = { puntos: [], lineas: [], poligonos: [], errores };
   if (!geom || typeof geom !== 'object' || !geom.type) {
-    errores.push('geometría ausente o sin type');
+    errores.push('geometria ausente o sin type');
     return r;
   }
   const c = geom.coordinates;
   switch (geom.type) {
-    case 'Point': if (valido(c)) r.puntos.push(c); else errores.push('Point con coordenadas inválidas'); break;
+    case 'Point': if (valido(c)) r.puntos.push(c); else errores.push('Point con coordenadas invalidas'); break;
     case 'MultiPoint': for (const p of c ?? []) if (valido(p)) r.puntos.push(p); break;
-    case 'LineString': if (lineaValida(c)) r.lineas.push(c); else errores.push('LineString con menos de 1 vértice válido'); break;
+    case 'LineString': if (lineaValida(c)) r.lineas.push(c); else errores.push('LineString con menos de 1 vertice valido'); break;
     case 'MultiLineString': for (const l of c ?? []) if (lineaValida(l)) r.lineas.push(l); break;
     case 'Polygon': agregarPoligono(r, c, errores); break;
     case 'MultiPolygon': for (const pg of c ?? []) agregarPoligono(r, pg, errores); break;
@@ -55,7 +91,7 @@ export function descomponer(geom, errores = []) {
       break;
     }
     default:
-      errores.push(`tipo de geometría no soportado: ${geom.type}`);
+      errores.push(`tipo de geometria no soportado: ${geom.type}`);
   }
   return r;
 }
@@ -66,42 +102,62 @@ const lineaValida = (l) => Array.isArray(l) && l.filter(valido).length >= 1;
 function agregarPoligono(r, anillos, errores) {
   if (!Array.isArray(anillos) || !anillos.length) { errores.push('Polygon sin anillos'); return; }
   const limpios = anillos.map((a) => (a ?? []).filter(valido)).filter((a) => a.length >= 3);
-  if (!limpios.length) { errores.push('Polygon sin un anillo exterior válido'); return; }
+  if (!limpios.length) { errores.push('Polygon sin un anillo exterior valido'); return; }
   r.poligonos.push({ exterior: limpios[0], huecos: limpios.slice(1) });
 }
 
-/** Caja envolvente geográfica de una geometría ya descompuesta. */
-export function cajaDe(desc) {
+function cajaDeVertices(vertices) {
   let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
-  const ver = ([x, y]) => {
+  for (const [x, y] of vertices) {
     if (x < minLon) minLon = x; if (x > maxLon) maxLon = x;
     if (y < minLat) minLat = y; if (y > maxLat) maxLat = y;
-  };
-  desc.puntos.forEach(ver);
-  desc.lineas.forEach((l) => l.forEach(ver));
-  desc.poligonos.forEach((p) => { p.exterior.forEach(ver); p.huecos.forEach((h) => h.forEach(ver)); });
-  if (minLon === Infinity) return null;
-  return { minLon, minLat, maxLon, maxLat };
+  }
+  return minLon === Infinity ? null : { minLon, minLat, maxLon, maxLat };
 }
 
-/** Proyecta una descomposición al plano métrico dado. */
-function proyectar(desc, plano) {
+/** Caja envolvente geografica de una geometria ya descompuesta. */
+export function cajaDe(desc) {
+  const todos = [];
+  desc.puntos.forEach((p) => todos.push(p));
+  desc.lineas.forEach((l) => l.forEach((p) => todos.push(p)));
+  desc.poligonos.forEach((p) => {
+    p.exterior.forEach((q) => todos.push(q));
+    p.huecos.forEach((h) => h.forEach((q) => todos.push(q)));
+  });
+  return cajaDeVertices(todos);
+}
+
+/**
+ * Enumera las PARTES independientes de una descomposicion, cada una con su
+ * propia caja. Esta es la unidad sobre la que se proyecta y se mide.
+ */
+function enumerarPartes(desc) {
+  const partes = [];
+  for (const p of desc.puntos) partes.push({ tipo: 'punto', dato: p, caja: cajaDeVertices([p]) });
+  for (const l of desc.lineas) partes.push({ tipo: 'linea', dato: l, caja: cajaDeVertices(l) });
+  for (const g of desc.poligonos) {
+    const vs = [...g.exterior, ...g.huecos.flat()];
+    partes.push({ tipo: 'poligono', dato: g, caja: cajaDeVertices(vs) });
+  }
+  return partes.filter((p) => p.caja);
+}
+
+/** Proyecta una parte al plano metrico dado. */
+function proyectarParte(parte, plano) {
   const P = plano.proyectar;
+  if (parte.tipo === 'punto') return { tipo: 'punto', dato: P(parte.dato) };
+  if (parte.tipo === 'linea') return { tipo: 'linea', dato: parte.dato.map(P) };
   return {
-    puntos: desc.puntos.map(P),
-    lineas: desc.lineas.map((l) => l.map(P)),
-    poligonos: desc.poligonos.map((p) => ({
-      exterior: p.exterior.map(P),
-      huecos: p.huecos.map((h) => h.map(P)),
-    })),
+    tipo: 'poligono',
+    dato: { exterior: parte.dato.exterior.map(P), huecos: parte.dato.huecos.map((h) => h.map(P)) },
   };
 }
 
-/** ¿El punto (plano) cae dentro del polígono, descontando huecos? */
+/** ¿El punto (plano) cae dentro del poligono, descontando huecos? */
 function puntoEnPoligono(p, pg) {
   if (!puntoEnAnillo(p, pg.exterior)) return false;
   for (const h of pg.huecos) {
-    // Sobre el borde de un hueco sigue habiendo contacto con el polígono.
+    // Sobre el borde de un hueco sigue habiendo contacto con el poligono.
     if (puntoEnAnillo(p, h) && distPuntoAnillo(p, h) > 0) return false;
   }
   return true;
@@ -168,58 +224,82 @@ function distPoligonoPoligono(p1, p2) {
   return min;
 }
 
+/** Distancia entre dos partes ya proyectadas al mismo plano. */
+function distanciaPartes(a, b) {
+  if (a.tipo === 'punto' && b.tipo === 'punto') {
+    return ajustarACero(Math.hypot(a.dato[0] - b.dato[0], a.dato[1] - b.dato[1]));
+  }
+  if (a.tipo === 'punto' && b.tipo === 'linea') return distLineaLinea([a.dato], b.dato);
+  if (a.tipo === 'linea' && b.tipo === 'punto') return distLineaLinea(a.dato, [b.dato]);
+  if (a.tipo === 'linea' && b.tipo === 'linea') return distLineaLinea(a.dato, b.dato);
+  if (a.tipo === 'punto' && b.tipo === 'poligono') return distPuntoPoligono(a.dato, b.dato);
+  if (a.tipo === 'poligono' && b.tipo === 'punto') return distPuntoPoligono(b.dato, a.dato);
+  if (a.tipo === 'linea' && b.tipo === 'poligono') return distLineaPoligono(a.dato, b.dato);
+  if (a.tipo === 'poligono' && b.tipo === 'linea') return distLineaPoligono(b.dato, a.dato);
+  return distPoligonoPoligono(a.dato, b.dato);
+}
+
 /**
- * Distancia mínima en metros entre dos geometrías GeoJSON.
- * Devuelve `null` si alguna de las dos no tiene ninguna primitiva utilizable.
+ * Distancia minima en metros entre dos geometrias GeoJSON.
  *
  * @param {object} geomA GeoJSON
  * @param {object} geomB GeoJSON
- * @returns {{metros:number|null, intersecan:boolean, errores:string[]}}
+ * @returns {{metros:number|null, intersecan:boolean, dominioValido:boolean, errores:string[]}}
  */
 export function medir(geomA, geomB) {
   const errores = [];
-  const dA = descomponer(geomA, errores);
-  const dB = descomponer(geomB, errores);
-  const cA = cajaDe(dA), cB = cajaDe(dB);
-  if (!cA || !cB) return { metros: null, intersecan: false, errores };
-
-  // El origen del plano se calcula con las dos geometrías que se comparan, de
-  // modo que siempre queda a unos cientos de metros de los datos medidos.
-  const plano = planoParaCajas([cA, cB]);
-  const A = proyectar(dA, plano);
-  const B = proyectar(dB, plano);
+  const partesA = enumerarPartes(descomponer(geomA, errores));
+  const partesB = enumerarPartes(descomponer(geomB, errores));
+  if (!partesA.length || !partesB.length) {
+    return { metros: null, intersecan: false, dominioValido: true, errores };
+  }
 
   let min = Infinity;
-  const bajar = (d) => { if (d < min) min = d; return min === 0; };
+  let dominioValido = true;
 
-  for (const pa of A.puntos) {
-    for (const pb of B.puntos) if (bajar(ajustarACero(Math.hypot(pa[0] - pb[0], pa[1] - pb[1])))) return fin(min, errores);
-    for (const lb of B.lineas) if (bajar(distLineaLinea([pa], lb))) return fin(min, errores);
-    for (const gb of B.poligonos) if (bajar(distPuntoPoligono(pa, gb))) return fin(min, errores);
-  }
-  for (const la of A.lineas) {
-    for (const pb of B.puntos) if (bajar(distLineaLinea(la, [pb]))) return fin(min, errores);
-    for (const lb of B.lineas) if (bajar(distLineaLinea(la, lb))) return fin(min, errores);
-    for (const gb of B.poligonos) if (bajar(distLineaPoligono(la, gb))) return fin(min, errores);
-  }
-  for (const ga of A.poligonos) {
-    for (const pb of B.puntos) if (bajar(distPuntoPoligono(pb, ga))) return fin(min, errores);
-    for (const lb of B.lineas) if (bajar(distLineaPoligono(lb, ga))) return fin(min, errores);
-    for (const gb of B.poligonos) if (bajar(distPoligonoPoligono(ga, gb))) return fin(min, errores);
-  }
-  return fin(min, errores);
-}
+  for (const pa of partesA) {
+    for (const pb of partesB) {
+      // Poda por cota inferior: si ya sabemos que no puede mejorar el minimo,
+      // no hace falta proyectar ni medir.
+      if (cotaInferiorMetros(pa.caja, pb.caja) >= min) continue;
 
-function fin(min, errores) {
-  if (!Number.isFinite(min)) return { metros: null, intersecan: false, errores };
-  // La tolerancia numerica se aplica una ultima vez aqui, de modo que
-  // `intersecan` nunca sea falso por culpa del redondeo de la coma flotante.
-  // Es una tolerancia de ARITMETICA (1 nm), no el umbral operacional de 120 m.
+      // Dominio: el plano se construye para ESTE par, con origen en su centro.
+      const union = unir(pa.caja, pb.caja);
+      const radio = radioAproximadoMetros(union);
+      if (radio > RADIO_DOMINIO_METROS) {
+        dominioValido = false;
+        errores.push(
+          `par de geometrias fuera del dominio de la proyeccion local: abarca ~${Math.round(radio / 1000)} km ` +
+          `de radio y el limite es ${RADIO_DOMINIO_METROS / 1000} km; no se mide`
+        );
+        continue;
+      }
+
+      const plano = planoParaCajas([pa.caja, pb.caja]);
+      const d = distanciaPartes(proyectarParte(pa, plano), proyectarParte(pb, plano));
+      if (d < min) min = d;
+      if (min === 0) break;
+    }
+    if (min === 0) break;
+  }
+
+  if (!Number.isFinite(min)) {
+    return { metros: null, intersecan: false, dominioValido, errores };
+  }
   const metros = ajustarACero(min);
-  return { metros, intersecan: metros === 0, errores };
+  return { metros, intersecan: metros === 0, dominioValido, errores };
 }
 
-/** Caja envolvente geográfica de una geometría GeoJSON sin descomponer antes. */
+/** Caja envolvente geografica de una geometria GeoJSON sin descomponer antes. */
 export function caja(geom) {
   return cajaDe(descomponer(geom, []));
+}
+
+/**
+ * Radio aproximado que ocupa una geometria, en metros. Sirve para decidir si
+ * cabe dentro del dominio soportado antes de intentar medir nada con ella.
+ */
+export function radioDe(geom) {
+  const c = caja(geom);
+  return c ? radioAproximadoMetros(c) : 0;
 }

@@ -107,16 +107,37 @@ function distanciaGrados(A, B) {
   return min;
 }
 
-/** Vertices que el legado veria de una geometria (solo el primer Point/LineString). */
+/**
+ * Vertices que el legado veria de una geometria.
+ *
+ * ALCANCE CONTRASTADO. Esta replica solo reproduce con fidelidad demostrada los
+ * tipos que aparecen en los datos reales: Point y LineString (427 lineas y 33
+ * puntos en los 8 KMZ de produccion). Para esos dos tipos su salida coincide
+ * con el CSV publicado por QGIS fila por fila.
+ *
+ * Para los demas tipos NO se afirma equivalencia. `proceso_pmt_qgis.py` aplica
+ * `buffer()` a `f.geometry()`, asi que QGIS si haria algo con un poligono; pero
+ * ese comportamiento nunca se ha podido contrastar contra una ejecucion real,
+ * porque no hay poligonos en los datos. Inventar aqui una equivalencia no
+ * verificada seria peor que declarar el limite, asi que se declara: la
+ * geometria se marca como no contrastable y el cotejo lo dice.
+ */
+const TIPOS_CONTRASTADOS = new Set(['Point', 'LineString']);
+
 function verticesLegado(geom) {
-  if (!geom) return [];
-  if (geom.type === 'Point') return [geom.coordinates];
-  if (geom.type === 'LineString') return geom.coordinates;
-  if (geom.type === 'MultiPoint') return [geom.coordinates[0]];          // el legado tomaba solo la primera
-  if (geom.type === 'MultiLineString') return geom.coordinates[0] ?? []; // idem
-  if (geom.type === 'GeometryCollection') return verticesLegado(geom.geometries?.[0]);
-  return []; // poligonos y demas: el legado los descartaba
+  if (!geom) return { vertices: [], contrastable: true };
+  if (geom.type === 'Point') return { vertices: [geom.coordinates], contrastable: true };
+  if (geom.type === 'LineString') return { vertices: geom.coordinates, contrastable: true };
+  if (geom.type === 'MultiPoint') return { vertices: [geom.coordinates[0]], contrastable: false };
+  if (geom.type === 'MultiLineString') return { vertices: geom.coordinates[0] ?? [], contrastable: false };
+  if (geom.type === 'GeometryCollection') {
+    const primera = verticesLegado(geom.geometries?.[0]);
+    return { vertices: primera.vertices, contrastable: false };
+  }
+  return { vertices: [], contrastable: false }; // poligonos y demas
 }
+
+export { TIPOS_CONTRASTADOS };
 
 /**
  * Ejecuta el analisis legado sobre placemarks ya leidos del KML.
@@ -126,6 +147,7 @@ function verticesLegado(geom) {
 export function analizarLegado(placemarks) {
   const filas = [];
   const frentes = [];
+  const noContrastables = [];
 
   for (const pm of placemarks) {
     const desc = pm.descripcion ?? '';
@@ -143,7 +165,11 @@ export function analizarLegado(placemarks) {
 
     filas.push(['Trazado Normal', contrato, contratista, municipio, nombre, direccion,
       tipoCierre, horario, fi, ff, String(duracion)]);
-    frentes.push({ geom: verticesLegado(pm.geometria), frente: nombre, contrato, contratista, ini: fi, fin: ff });
+    const v = verticesLegado(pm.geometria);
+    if (!v.contrastable) {
+      noContrastables.push({ frente: nombre, tipo: pm.geometria?.type ?? '(sin geometria)' });
+    }
+    frentes.push({ geom: v.vertices, frente: nombre, contrato, contratista, ini: fi, fin: ff });
   }
 
   const UMBRAL = 2 * COLCHON_GRADOS;
@@ -187,7 +213,7 @@ export function analizarLegado(placemarks) {
 
   const resumen = { 'Trazado Normal': 0, 'Cercanía': 0, Interferencia: 0 };
   for (const f of filas) resumen[f[0]]++;
-  return { filas, resumen };
+  return { filas, resumen, noContrastables };
 }
 
 export const COLUMNAS_CSV = ['CATEGORIA', 'CONTRATO', 'CONTRATISTA', 'MUNICIPIO', 'FRENTE',

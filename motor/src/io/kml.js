@@ -15,50 +15,104 @@
 
 import { analizarXml, buscarTodos, hijos, buscarUno, textoDe } from './xml.js';
 
-/** Lee una lista de coordenadas KML: "lon,lat[,alt]" separadas por espacios. */
-export function leerCoordenadas(texto, avisos = []) {
+/**
+ * Lee una lista de coordenadas KML: "lon,lat[,alt]" separadas por espacios.
+ *
+ * PRINCIPIO: no hay aceptacion parcial de numeros ni reparacion silenciosa.
+ *
+ * Antes se usaba `parseFloat`, que lee "0.002oops" como 0.002 y sigue adelante;
+ * y los vertices ilegibles se descartaban, con lo que los que quedaban se unian
+ * entre si y salia una geometria DISTINTA de la que habia en el archivo. Una
+ * linea de tres tramos podia convertirse en una recta que no existe.
+ *
+ * Ahora basta un vertice malo para marcar la lista entera como invalida. El
+ * registro se conserva para poder diagnosticarlo, pero su geometria queda fuera
+ * del calculo hasta que se corrija en origen.
+ *
+ * @returns {{puntos:Array<[number,number]>, valida:boolean, problemas:string[]}}
+ */
+export function leerCoordenadas(texto) {
+  const problemas = [];
   const t = String(texto ?? '').trim();
-  if (!t) { avisos.push('bloque <coordinates> vacio'); return []; }
+  if (!t) return { puntos: [], valida: false, problemas: ['bloque <coordinates> vacio'] };
+
   // Google Earth a veces escribe "lon, lat, alt" con espacio tras la coma; se
   // normaliza antes de separar por espacios en blanco.
-  const limpio = t.replace(/,\s+/g, ',');
+  const limpio = t.replace(/,[ \t]+/g, ',');
   const puntos = [];
-  let descartados = 0;
   for (const tok of limpio.split(/\s+/)) {
     if (!tok) continue;
-    const p = tok.split(',');
-    const lon = Number.parseFloat(p[0]);
-    const lat = Number.parseFloat(p[1]);
-    if (!Number.isFinite(lon) || !Number.isFinite(lat)) { descartados++; continue; }
+    const partes = tok.split(',');
+    if (partes.length < 2 || partes.length > 3) {
+      problemas.push(`coordenada mal formada: "${recorte(tok)}" (se esperaba lon,lat[,alt])`);
+      continue;
+    }
+    const lon = numeroEstricto(partes[0]);
+    const lat = numeroEstricto(partes[1]);
+    const alt = partes.length === 3 ? numeroEstricto(partes[2]) : 0;
+    if (lon === null || lat === null || alt === null) {
+      problemas.push(`coordenada con un numero ilegible: "${recorte(tok)}"`);
+      continue;
+    }
     if (lon < -180 || lon > 180 || lat < -90 || lat > 90) {
-      avisos.push(`coordenada fuera del rango terrestre: ${lon},${lat}`);
-      descartados++; continue;
+      problemas.push(`coordenada fuera del rango terrestre: ${lon},${lat}`);
+      continue;
     }
     puntos.push([lon, lat]);
   }
-  if (descartados) avisos.push(`${descartados} coordenada(s) ilegibles descartadas`);
-  return puntos;
+  if (!puntos.length && !problemas.length) problemas.push('bloque <coordinates> sin ningun vertice');
+  return { puntos, valida: problemas.length === 0 && puntos.length > 0, problemas };
 }
 
-const anilloDe = (nodo, avisos) => {
-  const c = leerCoordenadas(textoDe(buscarUno(nodo, 'coordinates')), avisos);
-  if (c.length < 3) { avisos.push('anillo con menos de 3 vertices: se ignora'); return null; }
-  // GeoJSON exige el anillo cerrado.
+/**
+ * Convierte a numero SOLO si el texto entero es un numero. `parseFloat` acepta
+ * basura al final; `Number` no, y eso es justo lo que hace falta aqui.
+ */
+function numeroEstricto(s) {
+  const t = String(s ?? '').trim();
+  if (t === '') return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+const recorte = (s) => (s.length > 30 ? s.slice(0, 30) + '…' : s);
+
+/** Lee las coordenadas de un nodo y propaga el fallo si algo no cuadra. */
+function coordenadasDe(nodo, avisos) {
+  const r = leerCoordenadas(textoDe(buscarUno(nodo, 'coordinates')));
+  for (const p of r.problemas) avisos.push(p);
+  return r;
+}
+
+/**
+ * Lee un anillo (LinearRing) y devuelve sus vertices, o null si no es valido.
+ * No hay reparacion silenciosa: si alguna coordenada falla, el anillo entero se
+ * descarta, porque un anillo "a medias" seria una figura distinta.
+ */
+function anilloDe(nodo, avisos) {
+  const r = coordenadasDe(nodo, avisos);
+  if (!r.valida) { avisos.push('anillo descartado: sus coordenadas no son validas'); return null; }
+  const c = r.puntos;
+  if (c.length < 3) { avisos.push('anillo con menos de 3 vertices: geometria invalida'); return null; }
+  // GeoJSON exige el anillo cerrado. Cerrarlo no cambia el trazado: solo repite
+  // el primer vertice al final, que es lo que el formato pide.
   const primero = c[0], ultimo = c[c.length - 1];
   if (primero[0] !== ultimo[0] || primero[1] !== ultimo[1]) c.push([...primero]);
   return c;
-};
+}
 
 /** Convierte un nodo de geometria KML en geometria GeoJSON. */
 function geometriaDe(nodo, avisos) {
   switch (nodo.nombre) {
     case 'Point': {
-      const c = leerCoordenadas(textoDe(buscarUno(nodo, 'coordinates')), avisos);
-      return c.length ? { type: 'Point', coordinates: c[0] } : null;
+      const r = coordenadasDe(nodo, avisos);
+      if (!r.valida) { avisos.push('Point descartado: sus coordenadas no son validas'); return null; }
+      return { type: 'Point', coordinates: r.puntos[0] };
     }
     case 'LineString': {
-      const c = leerCoordenadas(textoDe(buscarUno(nodo, 'coordinates')), avisos);
-      if (!c.length) return null;
+      const r = coordenadasDe(nodo, avisos);
+      if (!r.valida) { avisos.push('LineString descartada: sus coordenadas no son validas'); return null; }
+      const c = r.puntos;
       if (c.length === 1) {
         avisos.push('LineString con un solo vertice: se trata como punto');
         return { type: 'Point', coordinates: c[0] };
@@ -82,11 +136,19 @@ function geometriaDe(nodo, avisos) {
     }
     case 'MultiGeometry': {
       const partes = [];
+      let algunaFallo = false;
       for (const h of nodo.hijos) {
         if (h.nombre === '#texto') continue;
+        if (!GEOMETRIAS_KML.has(h.nombre)) continue;   // Style, ExtendedData, etc.
         const g = geometriaDe(h, avisos);
         if (g) partes.push(g);
-        else if (h.nombre !== 'coordinates') avisos.push(`dentro de MultiGeometry no se pudo leer <${h.nombre}>`);
+        else { algunaFallo = true; avisos.push(`dentro de MultiGeometry no se pudo leer <${h.nombre}>`); }
+      }
+      if (algunaFallo) {
+        // No se entrega una geometria "a medias": seria una figura distinta de
+        // la del archivo. Se descarta entera y se conserva el aviso.
+        avisos.push('MultiGeometry descartada: alguna de sus partes no es valida');
+        return null;
       }
       return agruparMultiGeometria(partes, avisos);
     }
@@ -129,8 +191,12 @@ function idExplicitoDe(placemark) {
     const n = (d.atributos.name ?? '').toLowerCase();
     if (n === 'pmt:id' || n === 'pmt_id') return textoDe(buscarUno(d, 'value')) || null;
   }
-  const s = buscarUno(placemark, 'SimpleData');
-  if (s && (s.atributos.name ?? '').toLowerCase() === 'pmt:id') return textoDe(s) || null;
+  // Se recorren TODOS los SimpleData, no solo el primero: el identificador
+  // puede venir en cualquier posicion dentro del esquema.
+  for (const s of buscarTodos(placemark, 'SimpleData')) {
+    const n = (s.atributos.name ?? '').toLowerCase();
+    if (n === 'pmt:id' || n === 'pmt_id') return textoDe(s) || null;
+  }
   return null;
 }
 
@@ -171,9 +237,20 @@ export function leerKml(textoKml, origen = '(sin nombre)') {
   }
 
   const carpetas = rutaDeCarpetas(raiz);
+
+  // Un KML puede delegar su contenido en otros documentos mediante NetworkLink.
+  // Este motor NO los sigue, y decirlo es importante: si no, un archivo con
+  // 50 enlaces se leeria como "0 frentes" y pareceria un exito.
+  const enlaces = buscarTodos(raiz, 'NetworkLink');
+  if (enlaces.length) {
+    const m = `el documento tiene ${enlaces.length} <NetworkLink>: este motor no sigue enlaces a ` +
+      `otros documentos, asi que su contenido NO entra en el analisis`;
+    if (!buscarTodos(raiz, 'Placemark').length) errores.push(m); else avisosDocumento.push(m);
+  }
+
   const nodos = buscarTodos(raiz, 'Placemark');
   if (!nodos.length) {
-    errores.push('el KML no contiene ningun <Placemark>');
+    if (!enlaces.length) errores.push('el KML no contiene ningun <Placemark>');
     return { placemarks: [], errores, avisosDocumento };
   }
 

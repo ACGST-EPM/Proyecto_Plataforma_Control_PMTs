@@ -18,60 +18,29 @@
  */
 
 import { medir } from '../geo/geometria.js';
+import { cotaInferiorMetros } from '../geo/cajas.js';
+
+// Se re-exporta para que las pruebas del prefiltro tengan un punto de entrada
+// estable; la implementacion vive en geo/cajas.js.
+export { separacionLongitud, cotaInferiorMetros } from '../geo/cajas.js';
 import { traslape } from '../tiempo/intervalo.js';
 import { resolverConfig, alcanceMetros } from './config.js';
 
-/** Grados de latitud equivalentes a un metro (cota superior segura). */
-const GRADO_LAT_MIN_METROS = 110574;
-
 /**
- * Separacion angular minima, en grados, entre dos intervalos de longitud
- * MEDIDA SOBRE EL CIRCULO.
+ * Prefiltro por caja envolvente.
  *
- * Es imprescindible que sea circular: la longitud da la vuelta en +-180. Dos
- * trazados separados 110 m a los lados del antimeridiano tienen longitudes
- * 179.9995 y -179.9995, y una resta normal los ve a 359.999 grados de
- * distancia, es decir, casi una vuelta entera al planeta. Con la resta normal
- * el prefiltro los descartaba y el par nunca llegaba a medirse, aunque el
- * calculo final si sabia tratarlos.
+ * GARANTIA: nunca descarta un par que el calculo preciso situaria dentro del
+ * umbral. Se apoya en `cotaInferiorMetros`, que por construccion devuelve un
+ * valor menor o igual que la distancia real, asi que si esa cota ya supera el
+ * alcance el par se puede tirar sin riesgo.
  *
- * Se prueba el segundo intervalo desplazado una vuelta a cada lado y se toma
- * la separacion menor. Devuelve 0 si los intervalos se solapan.
- */
-export function separacionLongitud(aMin, aMax, bMin, bMax) {
-  let menor = Infinity;
-  for (const vuelta of [-360, 0, 360]) {
-    const b1 = bMin + vuelta, b2 = bMax + vuelta;
-    const hueco = Math.max(0, Math.max(aMin - b2, b1 - aMax));
-    if (hueco < menor) menor = hueco;
-  }
-  return menor;
-}
-
-/**
- * Prefiltro barato por caja envolvente. Solo descarta pares que con seguridad
- * estan mas lejos que el alcance; nunca descarta un par que podria calificar.
+ * El prefiltro anterior convertia grados a metros con un coseno limitado a
+ * 0,01, y con eso descartaba pares reales: dos puntos a 89,999 grados de
+ * latitud separados un grado entero de longitud estan a 1,9 m, y los tiraba.
  */
 function puedenEstarCerca(a, b, alcance) {
   if (!a.caja || !b.caja) return false;
-  const margenLat = alcance / GRADO_LAT_MIN_METROS;
-
-  // Separacion en latitud: no hay vuelta que dar, resta directa.
-  const huecoLat = Math.max(0, Math.max(a.caja.minLat - b.caja.maxLat, b.caja.minLat - a.caja.maxLat));
-  if (huecoLat > margenLat) return false;
-
-  // Separacion en longitud: circular, para no romperse en el antimeridiano.
-  // El margen en grados de longitud se ensancha con la latitud; se toma la
-  // latitud mas alejada del ecuador de las dos cajas, que es la que da el
-  // margen mas ancho, para no descartar nunca un par por quedarse corto.
-  const latExtrema = Math.max(
-    Math.abs(a.caja.minLat), Math.abs(a.caja.maxLat),
-    Math.abs(b.caja.minLat), Math.abs(b.caja.maxLat)
-  );
-  const cos = Math.max(0.01, Math.cos((latExtrema * Math.PI) / 180));
-  const margenLon = margenLat / cos;
-  const huecoLon = separacionLongitud(a.caja.minLon, a.caja.maxLon, b.caja.minLon, b.caja.maxLon);
-  return huecoLon <= margenLon;
+  return cotaInferiorMetros(a.caja, b.caja) <= alcance;
 }
 
 /** Hechos de un par concreto, sin prefiltro ni umbral. Util para pruebas. */

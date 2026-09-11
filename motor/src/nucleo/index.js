@@ -7,7 +7,7 @@
  * probarlo entero en Node y ejecutarlo igual dentro del navegador.
  */
 
-import { extraerKml } from '../io/zip.js';
+import { extraerKml, decodificarTexto } from '../io/zip.js';
 import { analizarLegado } from '../legado/replica.js';
 import { leerKml } from '../io/kml.js';
 import { aRegistro, resumenCalidad } from '../modelo/registro.js';
@@ -51,9 +51,9 @@ export async function leerArchivo(archivo, config = {}) {
       textoKml = r.texto;
       informe.avisos.push(...r.avisos);
     } else if (esKml(nombre)) {
-      textoKml = new TextDecoder('utf-8').decode(
-        archivo.datos instanceof Uint8Array ? archivo.datos : new Uint8Array(archivo.datos)
-      );
+      const d = decodificarTexto(archivo.datos);
+      textoKml = d.texto;
+      if (d.codificacion !== 'UTF-8') informe.avisos.push(`el KML venia en ${d.codificacion}; se convirtio a texto`);
     } else {
       informe.errores.push(`extension no reconocida: se esperaba .kmz o .kml`);
       return informe;
@@ -92,7 +92,7 @@ export async function analizar(archivos, config = {}) {
   }
   const msLectura = Date.now() - t0;
 
-  const duplicados = desambiguar(registros);
+  const desamb = desambiguar(registros);
   const { relaciones, estadisticas } = calcularRelaciones(registros, cfg);
 
   return {
@@ -100,7 +100,12 @@ export async function analizar(archivos, config = {}) {
     archivos: informes,
     registros,
     relaciones,
-    calidad: { ...resumenCalidad(registros), duplicadosDesambiguados: duplicados },
+    calidad: {
+      ...resumenCalidad(registros),
+      duplicadosDesambiguados: desamb.duplicadosExactos,
+      idsRepetidosEnOrigen: desamb.idsRepetidos,
+      idsUnicos: new Set(registros.map((r) => r.id)).size === registros.length,
+    },
     estadisticas: { ...estadisticas, msLectura, msTotalProceso: Date.now() - t0 },
   };
 }
@@ -123,8 +128,7 @@ export async function ejecutarLegado(archivos) {
       let texto;
       if (/\.kmz$/i.test(a.nombre)) texto = (await extraerKml(a.datos)).texto;
       else if (typeof a.datos === 'string') texto = a.datos;
-      else texto = new TextDecoder('utf-8').decode(
-        a.datos instanceof Uint8Array ? a.datos : new Uint8Array(a.datos));
+      else texto = decodificarTexto(a.datos).texto;
       const r = leerKml(texto, a.nombre);
       errores.push(...r.errores.map((e) => `${a.nombre}: ${e}`));
       placemarks = placemarks.concat(r.placemarks);
@@ -132,8 +136,8 @@ export async function ejecutarLegado(archivos) {
       errores.push(`${a.nombre}: ${e?.message ?? e}`);
     }
   }
-  const { filas, resumen } = analizarLegado(placemarks);
-  return { filas, resumen, errores, placemarks: placemarks.length };
+  const { filas, resumen, noContrastables } = analizarLegado(placemarks);
+  return { filas, resumen, errores, noContrastables, placemarks: placemarks.length };
 }
 
 /** Exporta los registros como FeatureCollection GeoJSON estandar. */

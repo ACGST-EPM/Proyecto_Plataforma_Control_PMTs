@@ -50,6 +50,7 @@ test('NO se conforma con que los totales cuadren', () => {
   };
   const motor = {
     registros: [{}, {}],
+    archivos: [{ nombre: 'x.kmz', ok: true, errores: [], placemarks: 2 }],
     relaciones: [{
       contratoA: 'CW1', contratoB: 'CW3',       // <- otro contrato
       frenteA: 'A', frenteB: 'C',
@@ -72,7 +73,8 @@ test('detecta una diferencia de categoria aunque el par sea el mismo', () => {
   const base = ['Interferencia', 'CW1 vs CW2', 'X vs X', 'Varios', 'A / B', 'Ver Mapa', 'x', 'Varios', '2026-03-01', '2026-03-30', '30'];
   const replica = { filas: [base], resumen: {} };
   const motor = {
-    registros: [],
+    registros: [{ tieneGeometria: true }],
+    archivos: [{ nombre: 'x.kmz', ok: true, errores: [], placemarks: 1 }],
     relaciones: [{
       contratoA: 'CW1', contratoB: 'CW2', frenteA: 'A', frenteB: 'B',
       hayTraslapeTemporal: false,           // <- el legado dijo Interferencia
@@ -91,7 +93,8 @@ test('detecta una diferencia en el periodo de traslape', () => {
     resumen: {},
   };
   const motor = {
-    registros: [],
+    registros: [{ tieneGeometria: true }],
+    archivos: [{ nombre: 'x.kmz', ok: true, errores: [], placemarks: 1 }],
     relaciones: [{
       contratoA: 'CW1', contratoB: 'CW2', frenteA: 'A', frenteB: 'B',
       hayTraslapeTemporal: true,
@@ -113,14 +116,16 @@ test('detecta que falte o sobre una alerta', () => {
     hayTraslapeTemporal: false, traslapeInicio: null, traslapeFin: null,
   });
   const c = cotejarFidelidad(
-    { filas: [fila('A / B'), fila('C / D')], resumen: {} },
-    { registros: [], relaciones: [rel('A', 'B')] }
+    { filas: [fila('A / B'), fila('C / D')], resumen: {}, errores: [], noContrastables: [] },
+    { registros: [{ tieneGeometria: true }], relaciones: [rel('A', 'B')],
+      archivos: [{ nombre: 'x.kmz', ok: true, errores: [], placemarks: 1 }] }
   );
   assert.equal(c.completo, false);
   assert.equal(c.coincidentes, 1);
   assert.equal(c.soloReplica.length, 1);
   assert.equal(c.soloMotor.length, 0);
-  assert.ok(resumirCotejo(c).includes('solo en la reproducción de QGIS'));
+  assert.equal(c.lecturaLimpia, true, 'la lectura fue limpia: lo que falla es la comparacion');
+  assert.ok(resumirCotejo(c).includes('solo en la reproducción de QGIS'), resumirCotejo(c));
 });
 
 test('detecta que no cuadre el numero de trazados leidos', () => {
@@ -148,7 +153,8 @@ test('el desglose por categoria es solo resumen, no la prueba', () => {
     resumen: {},
   };
   const motor = {
-    registros: [],
+    registros: [{ tieneGeometria: true }],
+    archivos: [{ nombre: 'x.kmz', ok: true, errores: [], placemarks: 1 }],
     relaciones: [{
       contratoA: 'CW9', contratoB: 'CW8', frenteA: 'Z', frenteB: 'Y',
       hayTraslapeTemporal: false, traslapeInicio: null, traslapeFin: null,

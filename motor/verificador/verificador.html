@@ -58,6 +58,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .tarjeta span{display:block;font-size:12.5px;color:var(--tenue);margin-top:5px;line-height:1.3}
 .tarjeta.rojo b{color:var(--rojo)} .tarjeta.naranja b{color:var(--naranja)}
 .tarjeta.verde b{color:var(--verde)} .tarjeta.azul b{color:var(--azul)}
+.tarjeta.gris b{color:var(--tenue)}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 th{text-align:left;background:var(--panel2);padding:8px 10px;border-bottom:2px solid var(--linea);
   font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--tenue);
@@ -323,11 +324,22 @@ function pintarResumen(ms) {
     lista.slice(0, 5).map((x) => `<li>${escapar(x.categoria)} · ${escapar(x.contratos)} · ${escapar(x.frentes)} · ${escapar(x.periodo)}</li>`).join('') +
     (lista.length > 5 ? `<li>… y ${lista.length - 5} más</li>` : '') + '</ul></div>';
 
+  const marca = (ok) => ok ? '✔' : '✖';
+  const estados = `
+    <p style="margin:10px 0 0"><b>Estado de cada condición:</b></p>
+    <ul class="limpia">
+      <li>${marca(c.coinciden)} Los dos caminos de reproducción de QGIS dan lo mismo, alerta por alerta.</li>
+      <li>${marca(c.hayEntrada)} La entrada contiene trazados legibles (${c.trazadosMotor}).</li>
+      <li>${marca(c.lecturaLimpia)} Todos los archivos se leyeron sin errores.</li>
+      <li>${marca(c.alcanceContrastado)} Todas las geometrías son de un tipo contrastado contra QGIS.</li>
+    </ul>`;
+
   $('fidelidad').innerHTML = c.completo
     ? `<div class="aviso ok" style="margin-top:10px">
          <b>Control de fidelidad superado.</b> ${escapar(resumirCotejo(c))}
          <details><summary>Qué se comprobó exactamente</summary>
            <ul class="limpia">${c.criterios.map((x) => `<li>${escapar(x)}</li>`).join('')}</ul>
+           ${estados}
            <p style="margin:8px 0 0">Se cotejaron <b>${c.coincidentes}</b> alertas una por una.
            Los totales de arriba son solo un resumen: la prueba es esta.</p>
          </details>
@@ -336,16 +348,22 @@ function pintarResumen(ms) {
          <b>No se puede afirmar fidelidad completa.</b> ${escapar(resumirCotejo(c))}
          <details open><summary>Qué se comprobó y qué no cuadra</summary>
            <ul class="limpia">${c.criterios.map((x) => `<li>${escapar(x)}</li>`).join('')}</ul>
+           ${estados}
            ${muestra(c.soloReplica, 'Solo en la reproducción de QGIS')}
            ${muestra(c.soloMotor, 'Solo en el motor nuevo en perfil legado')}
          </details>
        </div>`;
 
+  const noEval = N.filter((r) => !r.traslapeEvaluable).length;
+  const sinCoincidir = N.filter((r) => !r.hayTraslapeTemporal && r.traslapeEvaluable).length;
+
   $('tarjetasNuevo').innerHTML =
     tarjeta(N.length, 'relaciones dentro del umbral') +
     tarjeta(ni, 'con contacto físico real', 'rojo') +
     tarjeta(nt, 'con coincidencia en el tiempo', 'naranja') +
-    tarjeta(N.length - nt, 'sin coincidencia en el tiempo', 'azul') +
+    tarjeta(sinCoincidir, 'sin coincidencia en el tiempo', 'azul') +
+    // M4: "no lo sabemos" NUNCA se presenta como "no hay coincidencia".
+    tarjeta(noEval, 'temporalidad no evaluable<br>(fechas incompletas o inválidas)', noEval ? 'gris' : '') +
     tarjeta(ms + ' ms', 'tiempo de cálculo', 'verde');
 
   const idL = new Set(L.map(par));
@@ -382,7 +400,9 @@ function pintarResumen(ms) {
 const par = (r) => [r.idA, r.idB].sort().join('|');
 
 function estadoDe(r) {
-  if (!r.traslapeEvaluable) return { t: 'sin evaluar', c: 'p-gris' };
+  // "No evaluable" es un estado propio: significa que las fechas del trazado no
+  // permiten decidirlo. No es lo mismo que "no coinciden".
+  if (!r.traslapeEvaluable) return { t: 'temporalidad no evaluable', c: 'p-gris' };
   if (r.intersecanFisicamente && r.hayTraslapeTemporal) return { t: 'se tocan y coinciden', c: 'p-rojo' };
   if (r.intersecanFisicamente) return { t: 'se tocan, otro momento', c: 'p-naranja' };
   if (r.hayTraslapeTemporal) return { t: 'cerca y coinciden', c: 'p-naranja' };
@@ -393,6 +413,7 @@ const FILTROS = [
   ['todas', 'Todas'],
   ['tocan', 'Se tocan físicamente'],
   ['tiempo', 'Coinciden en el tiempo'],
+  ['noeval', 'Temporalidad no evaluable'],
   ['ambos', 'Se tocan Y coinciden'],
   ['desaparecen', 'Que el motor de QGIS marcaba y el nuevo no'],
   ['aparecen', 'Que el nuevo ve y QGIS no'],
@@ -422,6 +443,7 @@ function pintarRelaciones() {
       FILTRO === 'todas' ? true :
       FILTRO === 'tocan' ? r.intersecanFisicamente :
       FILTRO === 'tiempo' ? r.hayTraslapeTemporal :
+      FILTRO === 'noeval' ? !r.traslapeEvaluable :
       r.intersecanFisicamente && r.hayTraslapeTemporal);
   }
 
@@ -440,7 +462,11 @@ function pintarRelaciones() {
       <td>${escapar(r.frenteA ?? '—')}<br>${escapar(r.frenteB ?? '—')}</td>
       <td class="num">${r.distanciaMetros === null ? '—' : r.distanciaMetros.toFixed(1) + ' m'}</td>
       <td>${r.intersecanFisicamente ? '<b style="color:var(--rojo)">Sí</b>' : 'No'}</td>
-      <td>${r.hayTraslapeTemporal ? '<b style="color:var(--naranja)">Sí</b>' : (r.traslapeEvaluable ? 'No' : 'sin fechas')}</td>
+      <td>${r.hayTraslapeTemporal
+        ? '<b style="color:var(--naranja)">Sí</b>'
+        : (r.traslapeEvaluable
+            ? 'No'
+            : '<span class="pastilla p-gris" title="Las fechas del trazado no permiten decidirlo">No se puede saber</span>')}</td>
       <td class="mono">${r.traslapeInicio ? escapar(r.traslapeInicio) + '<br>' + escapar(r.traslapeFin) : '—'}</td>
       <td class="num">${r.traslapeDias || '—'}</td>
     </tr>`;
@@ -500,7 +526,7 @@ function descargarCsv(filas) {
   const cuerpo = filas.map((r) => [
     estadoDe(r).t, r.contratoA, r.contratoB, r.frenteA, r.frenteB, r.idA, r.idB,
     r.distanciaMetros, r.intersecanFisicamente ? 'si' : 'no',
-    r.hayTraslapeTemporal ? 'si' : (r.traslapeEvaluable ? 'no' : 'sin fechas'),
+    r.hayTraslapeTemporal ? 'si' : (r.traslapeEvaluable ? 'no' : 'no evaluable'),
     r.traslapeInicio, r.traslapeFin, r.traslapeDias, r.traslapeHoras,
     r.vigenciaA.inicio, r.vigenciaA.fin, r.vigenciaB.inicio, r.vigenciaB.fin,
     r.umbralAplicadoMetros,

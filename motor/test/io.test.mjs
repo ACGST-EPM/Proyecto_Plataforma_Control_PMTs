@@ -48,15 +48,20 @@ test('XML: un documento mal formado da un error entendible', () => {
 // ------------------------------------------------------------------ coordenadas
 
 test('coordenadas: formatos habituales y basura', () => {
-  assert.deepEqual(leerCoordenadas('-75.1,6.1,0 -75.2,6.2,0'), [[-75.1, 6.1], [-75.2, 6.2]]);
-  assert.deepEqual(leerCoordenadas('-75.1,6.1 -75.2,6.2'), [[-75.1, 6.1], [-75.2, 6.2]]);
-  assert.deepEqual(leerCoordenadas('-75.1, 6.1, 0\n -75.2, 6.2, 0'), [[-75.1, 6.1], [-75.2, 6.2]]);
-  const av = [];
-  assert.deepEqual(leerCoordenadas('-75.1,6.1 basura otra,cosa', av), [[-75.1, 6.1]]);
-  assert.ok(av.some((a) => a.includes('ilegibles')));
-  const av2 = [];
-  leerCoordenadas('500,600', av2);
-  assert.ok(av2.some((a) => a.includes('fuera del rango terrestre')));
+  // Formatos validos
+  assert.deepEqual(leerCoordenadas('-75.1,6.1,0 -75.2,6.2,0').puntos, [[-75.1, 6.1], [-75.2, 6.2]]);
+  assert.deepEqual(leerCoordenadas('-75.1,6.1 -75.2,6.2').puntos, [[-75.1, 6.1], [-75.2, 6.2]]);
+  assert.deepEqual(leerCoordenadas('-75.1, 6.1, 0\n -75.2, 6.2, 0').puntos, [[-75.1, 6.1], [-75.2, 6.2]]);
+  assert.equal(leerCoordenadas('-75.1,6.1,0 -75.2,6.2,0').valida, true);
+
+  // Basura: la lista entera queda invalida, no se acepta a medias.
+  const r = leerCoordenadas('-75.1,6.1 basura otra,cosa');
+  assert.equal(r.valida, false);
+  assert.ok(r.problemas.length > 0);
+
+  const r2 = leerCoordenadas('500,600');
+  assert.equal(r2.valida, false);
+  assert.ok(r2.problemas.some((a) => a.includes('fuera del rango terrestre')));
 });
 
 // ------------------------------------------------------------------ descripcion

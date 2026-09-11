@@ -114,16 +114,6 @@ if (csvLegado) {
   ]);
 }
 
-// Pares del legado, por identidad de frente+contrato (el legado no tiene ids).
-const paresLegado = new Set();
-const claseLegado = new Map();
-for (const f of legado.filas) {
-  if (f[0] === 'Trazado Normal') continue;
-  const k = f[1] + SEP + f[4];
-  paresLegado.add(k);
-  claseLegado.set(k, f[0]);
-}
-
 // ---------- 2-4. Perfiles del motor nuevo ----------
 const resultados = {};
 for (const p of PERFILES) {
@@ -212,28 +202,69 @@ if (erroresLectura.length) {
 }
 
 // ---------- 7. Relaciones que aparecen o desaparecen ----------
-const paresD = new Map();
-for (const rel of resultados.D.relaciones) {
-  paresD.set(rel.contratoA + ' vs ' + rel.contratoB + SEP + rel.frenteA + ' / ' + rel.frenteB, rel);
+//
+// El emparejamiento se hace por IDENTIFICADOR ESTABLE de los dos registros, no
+// por "contrato + nombre de frente". Antes se usaba el nombre, y eso junta en
+// una sola clave todas las revigencias de un mismo frente: en los datos reales
+// hay 93 frentes con mas de una vigencia y 148 registros que son revigencia, asi
+// que el recuento salia mal. Con el identificador se conserva la multiplicidad:
+// cada vigencia es un registro distinto y cada par cuenta por separado.
+const claveId = (rel) => [rel.idA, rel.idB].sort().join(SEP);
+
+function multiset(relaciones) {
+  const m = new Map();
+  for (const r of relaciones) {
+    const k = claveId(r);
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(r);
+  }
+  return m;
 }
-let coinciden = 0, soloLegado = 0, soloNuevo = 0;
-for (const k of paresLegado) if (paresD.has(k)) coinciden++; else soloLegado++;
-for (const k of paresD.keys()) if (!paresLegado.has(k)) soloNuevo++;
-tabla('7 · EMPAREJAMIENTO REGISTRO A REGISTRO (legado vs configuracion aprobada)', [
-  ['Relaciones en ambos motores', coinciden],
-  ['Solo en el legado (desaparecen)', soloLegado],
-  ['Solo en el nuevo (aparecen)', soloNuevo],
+
+const mLegado = multiset(resultados.B.relaciones);   // perfil legado del motor nuevo
+const mNuevo = multiset(resultados.D.relaciones);    // configuracion aprobada
+
+let enAmbos = 0;
+const desaparecen = [];
+const aparecen = [];
+for (const [k, lista] of mLegado) {
+  const otras = mNuevo.get(k) ?? [];
+  enAmbos += Math.min(lista.length, otras.length);
+  for (let i = otras.length; i < lista.length; i++) desaparecen.push(lista[i]);
+}
+for (const [k, lista] of mNuevo) {
+  const otras = mLegado.get(k) ?? [];
+  for (let i = otras.length; i < lista.length; i++) aparecen.push(lista[i]);
+}
+
+tabla('7 · EMPAREJAMIENTO REGISTRO A REGISTRO (por identificador estable)', [
+  ['Relaciones del perfil legado', resultados.B.relaciones.length],
+  ['Relaciones de la configuracion aprobada', resultados.D.relaciones.length],
+  ['Presentes en ambos', enAmbos],
+  ['Solo en el perfil legado (desaparecen)', desaparecen.length],
+  ['Solo en la configuracion aprobada (aparecen)', aparecen.length],
 ]);
 
-const ejemplos = [];
-for (const k of paresLegado) {
-  if (paresD.has(k)) continue;
-  ejemplos.push(k.replace(SEP, '  ·  '));
-  if (ejemplos.length >= 8) break;
+// Explicacion de CADA relacion que desaparece, por su causa medible.
+const porCausa = { distancia: 0, tiempo: 0, otra: 0 };
+const umbralNuevo = resultados.D.config.umbralMetros;
+for (const rel of desaparecen) {
+  if (rel.distanciaMetros !== null && rel.distanciaMetros > umbralNuevo) porCausa.distancia++;
+  else if (rel.hayTraslapeTemporal === false) porCausa.tiempo++;
+  else porCausa.otra++;
 }
-if (ejemplos.length) {
+console.log('\n  Por que desaparece cada una:');
+console.log(`    ${pad('estaban a mas de ' + umbralNuevo + ' m de distancia real', 52)}${num(porCausa.distancia, 6)}`);
+console.log(`    ${pad('dejaron de coincidir al comparar fecha + hora', 52)}${num(porCausa.tiempo, 6)}`);
+console.log(`    ${pad('otra causa (revisar)', 52)}${num(porCausa.otra, 6)}`);
+const suma = porCausa.distancia + porCausa.tiempo + porCausa.otra;
+console.log(`    ${pad('TOTAL explicado', 52)}${num(suma, 6)}  de ${desaparecen.length}`);
+
+if (desaparecen.length) {
   console.log('\n  Ejemplos de alertas que el motor nuevo ya NO emite:');
-  for (const e of ejemplos) console.log('    - ' + e);
-  console.log('    (motivo: estaban a mas de 120 m reales, o sus horarios no coinciden)');
+  for (const rel of desaparecen.slice(0, 8)) {
+    console.log(`    - ${rel.contratoA} vs ${rel.contratoB}  ·  ${rel.frenteA} / ${rel.frenteB}` +
+      `  ·  ${rel.distanciaMetros} m  ·  vigencia ${rel.vigenciaA.inicio?.slice(0, 10)}..${rel.vigenciaA.fin?.slice(0, 10)}`);
+  }
 }
 console.log('');

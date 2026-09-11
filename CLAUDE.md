@@ -26,7 +26,7 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
 Repo publicado: `ACGST-EPM/Control-y-Articulacion-de-PMTs-EPM` (GitHub Pages).
 Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada`, `02_Proyecto_QGIS`, `Control-y-Articulacion-de-PMTs-EPM`).
 
-## Estado de la migración (Etapa 1 terminada, en pausa para auditoría)
+## Estado de la migración (Etapa 1 terminada y corregida; en pausa para revisión)
 - El motor nuevo (`motor/`) corre **en paralelo**: no sustituye al tablero, no retira QGIS ni
   qgis2web, no toca el generador. `proceso_pmt_qgis.py` queda **congelado** como referencia; no se
   corrige para hacerlo coincidir con el nuevo.
@@ -36,6 +36,12 @@ Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada
   criticidad dentro del cálculo: van en `provisional.js` y siguen sin aprobarse.
 - Parámetros aprobados: umbral **120 m reales** (configurable), traslape con **fecha y hora**,
   tolerancia **0 minutos**. El ~243 m del legado es solo línea base de comparación.
+- Rondas **1.1** (endurecimiento) y **1.2** (13 hallazgos de la auditoría independiente de Codex) ya
+  aplicadas. Detalle en la sección 13 de `INFORME_ETAPA1.md`. Ninguna cifra publicada cambió.
+  `motor/test/auditoria-codex.test.mjs` lleva una prueba adversaria por hallazgo: **no la borres ni
+  la relajes**, es la prueba de que cada defecto está cerrado.
+- El motor mide en cualquier punto del planeta **siempre que cada par comparado quepa en 50 km**
+  (`RADIO_DOMINIO_METROS`). Fuera de ahí devuelve `null` y lo dice. No prometas más que eso.
 - **Nunca subas al repositorio** los KMZ de `01_KMZ_Entrada`, `reporte_dinamico.csv` ni los
   `crudo_*.json`: el repositorio es público y esos archivos llevan datos operativos y personales.
 

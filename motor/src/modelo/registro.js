@@ -44,7 +44,7 @@ export function aRegistro(pm, opciones = {}) {
   // temporal) cambiaria todos los identificadores y seria imposible comparar
   // dos configuraciones registro a registro. El identificador describe el DATO
   // DE ENTRADA, no como lo interpreta esta ejecucion.
-  const { id, origen: origenId } = calcularId(
+  const { id, origen: origenId, huellaContenido } = calcularId(
     {
       contrato: campos.contrato, frente, tipoCierre,
       direccion: campos.direccion,
@@ -57,6 +57,7 @@ export function aRegistro(pm, opciones = {}) {
   return {
     id,
     origenId,
+    huellaContenido,
     origenArchivo: pm.origen,
     indiceEnArchivo: pm.indice,
     carpeta: pm.carpeta,
@@ -75,6 +76,7 @@ export function aRegistro(pm, opciones = {}) {
     analizable: tieneGeometria && vigencia.valida && !!campos.contrato,
     descripcionEraHtml: eraHtml,
     duplicadoExacto: false,
+    idRepetidoEnOrigen: false,
     avisos,
   };
 }
