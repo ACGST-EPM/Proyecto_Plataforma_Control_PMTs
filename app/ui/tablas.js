@@ -9,7 +9,7 @@
  */
 import { $, esc, num, fechaLegible } from './dom.js';
 import { estadoEspacial, estadoTemporal, ESPACIAL, TEMPORAL,
-  ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL, LECTURA } from '../nucleo/modelo.js';
+  ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL, LECTURA, simbologiaDe } from '../nucleo/modelo.js';
 
 const CLASE_ESPACIAL = {
   [ESPACIAL.CONTACTO]: 'p-contacto', [ESPACIAL.CERCANIA]: 'p-cerca',
@@ -21,6 +21,56 @@ const CLASE_TEMPORAL = {
 };
 
 const orden = { pmt: { col: 'frente', asc: true }, rel: { col: 'distanciaMetros', asc: true } };
+
+/**
+ * PAGINACION. Con 460 PMT y 174 relaciones, una sola tabla con scroll obliga a
+ * arrastrar cientos de filas para llegar al final y hace que el navegador
+ * mantenga miles de celdas vivas. Se pagina en bloques, con el tamano a
+ * eleccion del usuario y con «todas» disponible para quien prefiera buscar con
+ * Ctrl+F. No se restaura DataTables: ordenar y paginar son treinta lineas y no
+ * justifican jQuery mas tres CDN.
+ */
+const TAMANOS = [50, 100, 250, 'todas'];
+const pagina = { pmt: { n: 0, tam: 50 }, rel: { n: 0, tam: 50 } };
+
+export function reiniciarPaginas() { pagina.pmt.n = 0; pagina.rel.n = 0; }
+
+function recortar(datos, clave) {
+  const p = pagina[clave];
+  if (p.tam === 'todas') return { vista: datos, desde: 1, hasta: datos.length, paginas: 1 };
+  const paginas = Math.max(1, Math.ceil(datos.length / p.tam));
+  if (p.n >= paginas) p.n = paginas - 1;
+  const desde = p.n * p.tam;
+  return { vista: datos.slice(desde, desde + p.tam), desde: desde + 1, hasta: Math.min(desde + p.tam, datos.length), paginas };
+}
+
+function pintarPaginador(idCaja, clave, total, info, repintar) {
+  const caja = $(idCaja);
+  if (!caja) return;
+  const p = pagina[clave];
+  if (!total) { caja.innerHTML = ''; return; }
+  const btn = (txt, destino, activo, titulo) =>
+    `<button class="b-suave b-mini" data-ir="${destino}" ${activo ? '' : 'disabled'} title="${esc(titulo)}">${txt}</button>`;
+  caja.innerHTML = `
+    <span class="pista-campo">Mostrando <b>${num(info.desde)}–${num(info.hasta)}</b> de <b>${num(total)}</b></span>
+    <span class="sep"></span>
+    ${btn('« Primera', 0, p.n > 0, 'Ir a la primera página')}
+    ${btn('‹ Anterior', p.n - 1, p.n > 0, 'Página anterior')}
+    <span class="pista-campo">Página ${p.tam === 'todas' ? 1 : p.n + 1} de ${info.paginas}</span>
+    ${btn('Siguiente ›', p.n + 1, p.n < info.paginas - 1, 'Página siguiente')}
+    ${btn('Última »', info.paginas - 1, p.n < info.paginas - 1, 'Ir a la última página')}
+    <label class="mini-campo">Filas
+      <select data-tam>${TAMANOS.map((t) => `<option value="${t}"${String(t) === String(p.tam) ? ' selected' : ''}>${t}</option>`).join('')}</select>
+    </label>`;
+  caja.querySelectorAll('[data-ir]').forEach((b) => {
+    b.onclick = () => { p.n = +b.dataset.ir; repintar(); };
+  });
+  const sel = caja.querySelector('[data-tam]');
+  if (sel) sel.onchange = (e) => {
+    p.tam = e.target.value === 'todas' ? 'todas' : +e.target.value;
+    p.n = 0; repintar();
+  };
+}
 
 function ordenar(filas, col, asc) {
   return [...filas].sort((a, b) => {
@@ -65,10 +115,13 @@ export function pintarPmts(filas, { onFila, seleccionado } = {}) {
   tabla.querySelector('thead').innerHTML = cabecera(COLS_PMT, 'pmt');
   conectarOrden(tabla, 'pmt', repintar);
 
-  const datos = ordenar(filas, orden.pmt.col, orden.pmt.asc);
+  const todos = ordenar(filas, orden.pmt.col, orden.pmt.asc);
+  const info = recortar(todos, 'pmt');
+  const datos = info.vista;
   const cuerpo = tabla.querySelector('tbody');
-  if (!datos.length) {
-    cuerpo.innerHTML = `<tr><td colspan="${COLS_PMT.length}" class="vacio">Ningun PMT coincide con los filtros aplicados.<br><small>Pruebe a quitar algun filtro.</small></td></tr>`;
+  pintarPaginador('pagPmt', 'pmt', todos.length, info, repintar);
+  if (!todos.length) {
+    cuerpo.innerHTML = `<tr><td colspan="${COLS_PMT.length}" class="vacio">Ningún PMT coincide con los filtros aplicados.<br><small>Pruebe a quitar algún filtro.</small></td></tr>`;
     return;
   }
   cuerpo.innerHTML = datos.map((x) => {
@@ -81,7 +134,7 @@ export function pintarPmts(filas, { onFila, seleccionado } = {}) {
       <td>${esc(x.contratista ?? '—')}</td>
       <td>${esc(x.proyecto ?? '—')}</td>
       <td>${esc(x.municipio ?? '—')}</td>
-      <td>${esc(x.tipoCierre ?? '—')}</td>
+      <td><span class="punto-cierre" style="background:${simbologiaDe(x.tipoCierre).color}"></span>${esc(x.tipoCierre ?? '—')}</td>
       <td class="mono">${esc(fechaLegible(x.inicio))}</td>
       <td class="mono">${esc(fechaLegible(x.fin))}</td>
       <td>${esc(x.tipoGeometria ?? 'sin geometria')}</td>
@@ -109,9 +162,12 @@ export function pintarRelaciones(relaciones, { onFila } = {}) {
   const conEstado = relaciones.map((r) => ({
     ...r, _espacial: ETIQUETA_ESPACIAL[estadoEspacial(r)], _temporal: ETIQUETA_TEMPORAL[estadoTemporal(r)],
   }));
-  const datos = ordenar(conEstado, orden.rel.col, orden.rel.asc);
+  const todos = ordenar(conEstado, orden.rel.col, orden.rel.asc);
+  const info = recortar(todos, 'rel');
+  const datos = info.vista;
   const cuerpo = tabla.querySelector('tbody');
-  if (!datos.length) {
+  pintarPaginador('pagRel', 'rel', todos.length, info, repintar);
+  if (!todos.length) {
     cuerpo.innerHTML = `<tr><td colspan="${COLS_REL.length}" class="vacio">No hay relaciones que mostrar con los filtros aplicados.</td></tr>`;
     return;
   }

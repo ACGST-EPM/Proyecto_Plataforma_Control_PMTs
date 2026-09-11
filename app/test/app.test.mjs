@@ -9,7 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { aFilaPmt, estadoEspacial, estadoTemporal, ESPACIAL, TEMPORAL, TIPOS_CIERRE, LECTURA } from '../nucleo/modelo.js';
+import { aFilaPmt, estadoEspacial, estadoTemporal, ESPACIAL, TEMPORAL, TIPOS_CIERRE, LECTURA, simbologiaDe, SIMBOLOGIA_CIERRE } from '../nucleo/modelo.js';
 import * as Filtro from '../nucleo/filtrado.js';
 import * as Export from '../nucleo/exportar.js';
 import { resumir, frasePrincipal, estadoArchivo } from '../nucleo/resumen.js';
@@ -32,11 +32,32 @@ const fila = (o = {}) => ({
 
 // ───────────────────────────── MODELO ─────────────────────────────
 
-test('MODELO: los tipos de cierre historicos siguen siendo validos', () => {
-  // Regla: la lista se AMPLIA, nunca se recorta. Nada que hoy sea valido
-  // puede dejar de serlo.
-  for (const t of ['total', 'parcial', 'ingreso y salida']) assert.ok(TIPOS_CIERRE.includes(t), t);
-  for (const t of ['ingreso', 'salida']) assert.ok(TIPOS_CIERRE.includes(t), t);
+test('MODELO: la lista de tipos de cierre es EXACTAMENTE la del contrato vigente', () => {
+  // Ni uno mas ni uno menos. "ingreso" y "salida" por separado se retiraron:
+  // no hay decision aprobada que los separe de "ingreso y salida".
+  assert.deepEqual([...TIPOS_CIERRE], ['total', 'parcial', 'ingreso y salida']);
+});
+
+test('MODELO: cada tipo de cierre tiene simbologia propia y distinguible', () => {
+  const vistos = new Set();
+  for (const t of [...TIPOS_CIERRE, '(sin dato)']) {
+    const s = simbologiaDe(t);
+    assert.ok(s.color && s.etiqueta, t);
+    // No puede depender solo del color: color + grosor + patron tienen que
+    // formar una combinacion unica, para quien no distinga los colores.
+    const firma = `${s.color}|${s.grosor}|${s.guion}`;
+    assert.ok(!vistos.has(firma), `la simbologia de "${t}" se repite`);
+    vistos.add(firma);
+  }
+  assert.equal(simbologiaDe('ingreso y salida').marcador, true, 'lleva marcador propio, como en QGIS');
+  assert.equal(simbologiaDe('total').marcador, false);
+});
+
+test('MODELO: un tipo desconocido no rompe el mapa, cae en "sin dato"', () => {
+  for (const t of [null, undefined, '', 'inventado', 'TOTAL ']) {
+    assert.ok(simbologiaDe(t).color, String(t));
+  }
+  assert.equal(simbologiaDe('TOTAL').etiqueta, 'Cierre total', 'no distingue mayusculas');
 });
 
 test('MODELO: "no evaluable" nunca se confunde con "no hay"', () => {
@@ -368,4 +389,98 @@ test('INGESTA: fecha Y hora, con tolerancia 0, es lo que se aplica', async () =>
   assert.equal(r.relaciones.length, 1);
   assert.equal(r.relaciones[0].hayTraslapeTemporal, false, 'con hora real NO coinciden');
   assert.equal(r.relaciones[0].traslapeEvaluable, true);
+});
+
+// ───────────────── FILTROS CRUZADOS (facetados) — regresion de Etapa 2.1 ─────────────────
+
+const universo = () => [
+  fila({ id: '1', contrato: 'CW1', contratista: 'ACME', proyecto: 'P1', municipio: 'Medellin', frente: 'F1', tipoCierre: 'total' }),
+  fila({ id: '2', contrato: 'CW1', contratista: 'ACME', proyecto: 'P1', municipio: 'Medellin', frente: 'F2', tipoCierre: 'parcial' }),
+  fila({ id: '3', contrato: 'CW2', contratista: 'BETA', proyecto: 'P2', municipio: 'Envigado', frente: 'F3', tipoCierre: 'total' }),
+  fila({ id: '4', contrato: 'CW3', contratista: 'GAMA', proyecto: 'P3', municipio: 'Itagui', frente: 'F4', tipoCierre: 'ingreso y salida' }),
+];
+const valores = (ops) => ops.map((o) => o.valor);
+
+test('FACETADO: elegir un contrato reduce contratistas, municipios y frentes compatibles', () => {
+  const f = { ...Filtro.filtrosVacios(), contrato: ['CW1'] };
+  const ops = Filtro.opcionesFacetadas(universo(), f);
+  assert.deepEqual(valores(ops.contratista), ['ACME'], 'solo el contratista de CW1');
+  assert.deepEqual(valores(ops.municipio), ['Medellin']);
+  assert.deepEqual(valores(ops.frente), ['F1', 'F2']);
+  assert.deepEqual(valores(ops.proyecto), ['P1']);
+});
+
+test('FACETADO: la lista del propio campo NO se autolimita', () => {
+  // Es la regla que permite seguir marcando mas valores del mismo campo.
+  const f = { ...Filtro.filtrosVacios(), contrato: ['CW1'] };
+  const ops = Filtro.opcionesFacetadas(universo(), f);
+  assert.deepEqual(valores(ops.contrato), ['CW1', 'CW2', 'CW3'], 'los tres contratos siguen disponibles');
+  assert.equal(ops.contrato.find((o) => o.valor === 'CW1').seleccionado, true);
+});
+
+test('FACETADO: el cruce funciona en las dos direcciones', () => {
+  const f = { ...Filtro.filtrosVacios(), municipio: ['Envigado'] };
+  const ops = Filtro.opcionesFacetadas(universo(), f);
+  assert.deepEqual(valores(ops.contrato), ['CW2'], 'elegir municipio reduce contratos');
+  assert.deepEqual(valores(ops.frente), ['F3']);
+  assert.deepEqual(valores(ops.municipio), ['Envigado', 'Itagui', 'Medellin'], 'pero no a si mismo');
+});
+
+test('FACETADO: seleccion multiple dentro de un campo amplia el resto', () => {
+  const f = { ...Filtro.filtrosVacios(), contrato: ['CW1', 'CW2'] };
+  const ops = Filtro.opcionesFacetadas(universo(), f);
+  assert.deepEqual(valores(ops.contratista), ['ACME', 'BETA']);
+  assert.deepEqual(valores(ops.municipio), ['Envigado', 'Medellin']);
+});
+
+test('FACETADO: una seleccion existente NO desaparece aunque deje de ser compatible', () => {
+  // Regla 2. Si el usuario marca CW1 y luego Envigado (incompatibles), CW1
+  // tiene que seguir visible y marcado para que pueda deshacerlo.
+  const f = { ...Filtro.filtrosVacios(), contrato: ['CW1'], municipio: ['Envigado'] };
+  const ops = Filtro.opcionesFacetadas(universo(), f);
+  const cw1 = ops.contrato.find((o) => o.valor === 'CW1');
+  assert.ok(cw1, 'CW1 sigue en la lista');
+  assert.equal(cw1.seleccionado, true);
+  assert.equal(cw1.n, 0, 'con recuento 0, para que se vea que ya no casa con nada');
+});
+
+test('FACETADO: la lista que el usuario esta tocando se marca para no repintarla', () => {
+  const ops = Filtro.opcionesFacetadas(universo(), Filtro.filtrosVacios(), 'contrato');
+  assert.equal(ops.contrato.enUso, true);
+  assert.ok(!ops.municipio.enUso);
+});
+
+test('FACETADO: los recuentos reflejan el cruce, no el total', () => {
+  const sinFiltro = Filtro.opcionesFacetadas(universo(), Filtro.filtrosVacios());
+  assert.equal(sinFiltro.tipoCierre.find((o) => o.valor === 'total').n, 2);
+  const conFiltro = Filtro.opcionesFacetadas(universo(), { ...Filtro.filtrosVacios(), municipio: ['Medellin'] });
+  assert.equal(conFiltro.tipoCierre.find((o) => o.valor === 'total').n, 1);
+});
+
+test('FACETADO: cubre los seis campos y ninguno queda fuera', () => {
+  const ops = Filtro.opcionesFacetadas(universo(), Filtro.filtrosVacios());
+  assert.deepEqual(Object.keys(ops).sort(), [...Filtro.CAMPOS_FACETADOS].sort());
+  for (const c of Filtro.CAMPOS_FACETADOS) assert.ok(ops[c].length > 0, c);
+});
+
+test('FACETADO: el rango de fechas estrecha TODAS las listas, incluida la del propio campo', () => {
+  // El rango de fechas no es una faceta: es un filtro transversal. La regla de
+  // "no autolimitarse" protege al campo frente a SU PROPIA seleccion, no frente
+  // al resto de filtros. Por eso aqui CW2 si desaparece de la lista de
+  // contratos: esta fuera del periodo que el usuario pidio ver.
+  const filas = [
+    fila({ id: 'a', contrato: 'CW1', frente: 'F1', inicioMs: Date.UTC(2026, 0, 1), finMs: Date.UTC(2026, 0, 31) }),
+    fila({ id: 'b', contrato: 'CW2', frente: 'F2', inicioMs: Date.UTC(2026, 6, 1), finMs: Date.UTC(2026, 6, 31) }),
+  ];
+  const conRango = Filtro.opcionesFacetadas(filas, { ...Filtro.filtrosVacios(), desde: '2026-01-01', hasta: '2026-02-01' });
+  assert.deepEqual(valores(conRango.contrato), ['CW1']);
+  assert.deepEqual(valores(conRango.frente), ['F1']);
+  const sinRango = Filtro.opcionesFacetadas(filas, Filtro.filtrosVacios());
+  assert.deepEqual(valores(sinRango.contrato), ['CW1', 'CW2'], 'sin rango vuelven los dos');
+});
+
+test('FACETADO: la busqueda libre tambien estrecha las listas', () => {
+  const ops = Filtro.opcionesFacetadas(universo(), { ...Filtro.filtrosVacios(), texto: 'BETA' });
+  assert.deepEqual(valores(ops.contrato), ['CW2']);
+  assert.deepEqual(valores(ops.municipio), ['Envigado']);
 });

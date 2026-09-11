@@ -102,7 +102,7 @@ export function filtrarRelaciones(relaciones, f, idsVisibles) {
   });
 }
 
-/** Valores disponibles para poblar cada desplegable, ya ordenados. */
+/** Valores disponibles para poblar un desplegable, ya ordenados. */
 export function opcionesDe(filas, campo) {
   const vistos = new Map();
   for (const x of filas) {
@@ -112,6 +112,55 @@ export function opcionesDe(filas, campo) {
   return [...vistos.entries()]
     .sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'es'))
     .map(([valor, n]) => ({ valor, n }));
+}
+
+/** Campos que participan en el cruce de filtros. */
+export const CAMPOS_FACETADOS = Object.freeze(
+  ['contratista', 'contrato', 'proyecto', 'municipio', 'frente', 'tipoCierre']);
+
+/**
+ * FILTROS CRUZADOS (facetados) — la capacidad del tablero historico que la
+ * Etapa 2 habia perdido al construir las listas una sola vez sobre todos los
+ * datos.
+ *
+ * Las tres reglas, que son las que hacen que esto se sienta bien al usarlo:
+ *
+ *  1. Cada lista se recalcula con TODOS los demas filtros aplicados, pero NO
+ *     con el suyo propio. Asi, elegir un contrato reduce los contratistas,
+ *     frentes y municipios compatibles, pero la lista de contratos sigue
+ *     entera y se pueden marcar varios.
+ *
+ *  2. Lo ya seleccionado NUNCA desaparece, aunque el recalculo no lo incluyera.
+ *     Si se borrase solo, el usuario perderia su seleccion sin haberla tocado.
+ *
+ *  3. La lista que el usuario esta manipulando en ese momento (`origen`) no se
+ *     reconstruye, para que no se le mueva debajo del raton mientras marca.
+ *
+ * @param {Array} todas   todas las filas cargadas (sin filtrar)
+ * @param {object} f      filtros actuales
+ * @param {string} [origen] campo que el usuario acaba de tocar
+ * @returns {Record<string, Array<{valor:string,n:number,seleccionado:boolean}>>}
+ */
+export function opcionesFacetadas(todas, f, origen = null) {
+  const salida = {};
+  for (const campo of CAMPOS_FACETADOS) {
+    // Regla 1: todos los filtros MENOS el de este campo.
+    const otros = { ...f, [campo]: [] };
+    const compatibles = filtrarPmts(todas, otros);
+    const ops = opcionesDe(compatibles, campo);
+
+    // Regla 2: recuperar lo seleccionado aunque ya no aparezca.
+    const presentes = new Set(ops.map((o) => o.valor));
+    for (const sel of f[campo] ?? []) {
+      if (!presentes.has(sel)) ops.push({ valor: sel, n: 0 });
+    }
+    ops.sort((a, b) => String(a.valor).localeCompare(String(b.valor), 'es'));
+
+    salida[campo] = ops.map((o) => ({ ...o, seleccionado: (f[campo] ?? []).includes(o.valor) }));
+    // Regla 3: marcar la lista en uso para que la interfaz no la repinte.
+    if (campo === origen) salida[campo].enUso = true;
+  }
+  return salida;
 }
 
 /**

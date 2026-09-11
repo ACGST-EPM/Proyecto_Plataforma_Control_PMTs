@@ -343,3 +343,109 @@ details.tecnico pre {
   overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ══════════════════════ Etapa 2.1 ══════════════════════ */
+
+/* Pistas y campos compactos */
+.pista-campo { font-size: .79rem; color: var(--tenue); }
+.mini-campo {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: .83rem; color: var(--tinta-2); white-space: nowrap;
+}
+.mini-campo select { width: auto; padding: 4px 7px; font-size: .82rem; }
+.mini-campo input[type="checkbox"] { accent-color: var(--epm-verde); }
+.campo > label.activo { color: var(--verde-oscuro); }
+.titulillo {
+  font-size: .76rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--tinta-2); margin-bottom: 6px;
+}
+
+.barra-acciones {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px;
+}
+
+/* Lista de archivos del análisis, con opción de quitar */
+.fuente {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border: 1px solid var(--borde); border-radius: 6px;
+  margin-bottom: 6px; background: var(--papel); font-size: .86rem;
+}
+.fuente .crece { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* Paginador */
+.paginador {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 10px 2px 0; font-size: .83rem;
+}
+.paginador .sep { flex: 1; }
+
+/* Punto de color del tipo de cierre en la tabla */
+.punto-cierre {
+  display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+  margin-right: 6px; vertical-align: baseline;
+}
+
+/* ─────────────── Informe ejecutivo ─────────────── */
+
+.informe {
+  background: #fff; color: var(--tinta);
+  padding: 26px 30px; border: 1px solid var(--borde); border-radius: 6px;
+  max-width: 1100px; margin: 0 auto;
+}
+.informe h1 { font-size: 1.35rem; margin: 0; }
+.informe h2 {
+  font-size: 1rem; color: var(--verde-oscuro); margin: 26px 0 10px;
+  border-bottom: 2px solid var(--verde-suave); padding-bottom: 5px;
+}
+.inf-p { font-size: .88rem; color: var(--tinta-2); }
+
+.inf-portada {
+  display: flex; align-items: center; gap: 16px;
+  border-bottom: 4px solid var(--epm-lima); padding-bottom: 14px; margin-bottom: 18px;
+}
+.inf-portada > div:nth-child(2) { flex: 1; }
+.inf-marca {
+  background: var(--epm-verde); color: #fff; font-weight: 700; font-size: 1.5rem;
+  letter-spacing: .06em; padding: 8px 14px; border-radius: 5px;
+}
+.inf-sub { margin: 3px 0 0; font-size: .85rem; color: var(--tenue); }
+.inf-fecha { font-size: .8rem; color: var(--tenue); text-align: right; }
+
+.inf-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+.inf-kpi { border: 1px solid var(--borde); border-left: 4px solid var(--gris); border-radius: 5px; padding: 9px 11px; }
+.inf-kpi-n { font-size: 1.45rem; font-weight: 700; line-height: 1.1; }
+.inf-kpi-t { font-size: .73rem; color: var(--tenue); }
+.inf-kpi.verde { border-left-color: var(--epm-verde); } .inf-kpi.verde .inf-kpi-n { color: var(--verde-oscuro); }
+.inf-kpi.nar   { border-left-color: var(--epm-naranja); background: var(--naranja-suave); } .inf-kpi.nar .inf-kpi-n { color: var(--naranja-oscuro); }
+.inf-kpi.rojo  { border-left-color: var(--rojo); background: var(--rojo-suave); } .inf-kpi.rojo .inf-kpi-n { color: var(--rojo); }
+.inf-kpi.azul  { border-left-color: var(--azul); } .inf-kpi.azul .inf-kpi-n { color: var(--azul); }
+.inf-kpi.gris  { border-left-color: var(--gris); background: var(--gris-suave); }
+
+.inf-tabla { width: 100%; border-collapse: collapse; font-size: .8rem; margin-bottom: 6px; }
+.inf-tabla th, .inf-tabla td { border: 1px solid var(--borde); padding: 5px 8px; text-align: left; vertical-align: top; }
+.inf-tabla thead th { background: var(--verde-suave); color: var(--verde-oscuro); font-size: .74rem; text-transform: uppercase; }
+.inf-tabla .num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+.inf-datos th { background: var(--gris-suave); width: 190px; font-weight: 600; }
+
+.inf-nota {
+  font-size: .82rem; background: var(--gris-suave); border-left: 3px solid var(--epm-verde);
+  padding: 9px 12px; margin: 12px 0; border-radius: 0 4px 4px 0;
+}
+.inf-nota-aviso { background: var(--naranja-suave); border-left-color: var(--epm-naranja); }
+
+.mapa-informe { width: 100%; height: auto; border: 1px solid var(--borde); border-radius: 5px; display: block; }
+.sin-mapa { padding: 30px; text-align: center; color: var(--tenue); background: var(--gris-suave); border-radius: 5px; }
+.inf-leyenda { display: flex; flex-wrap: wrap; gap: 13px; font-size: .78rem; color: var(--tinta-2); margin-top: 8px; }
+.inf-leyenda span { display: inline-flex; align-items: center; gap: 5px; }
+.inf-leyenda i { width: 18px; height: 4px; border-radius: 2px; display: inline-block; }
+
+@media print {
+  .informe { border: none; padding: 0; max-width: none; }
+  .informe h2 { break-after: avoid; }
+  .inf-tabla { break-inside: auto; }
+  .inf-tabla tr { break-inside: avoid; }
+  .inf-portada, .inf-kpis, .mapa-informe { break-inside: avoid; }
+  #panelInforme { box-shadow: none; border: none; }
+  #panelInforme > .cuerpo { padding: 0; }
+}
+@media (max-width: 700px) { .inf-kpis { grid-template-columns: repeat(2, 1fr); } }

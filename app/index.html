@@ -15,6 +15,7 @@
     <h1>Plataforma de Control y Articulación de PMTs</h1>
     <p class="sub">Centro de Gestión Servicios Técnicos · análisis de interferencias entre Planes de Manejo de Tránsito</p>
   </div>
+  <button id="btnGuardarProyecto" class="b-lima no-imprimir oculto" title="Guarda todo el análisis en un archivo para volver a abrirlo sin recargar los KMZ">💾 Guardar proyecto</button>
   <button id="btnEmpezarDeNuevo" class="b-suave no-imprimir oculto">Empezar de nuevo</button>
 </header>
 
@@ -29,6 +30,7 @@
         <p class="pista">…o pulse el botón. Puede seleccionar varios a la vez, de cualquier carpeta de su computador.</p>
         <p style="margin-top:14px">
           <button class="b-verde" id="btnElegir">Elegir archivos…</button>
+          <button class="b-suave" id="btnAbrirProyecto2" title="Abrir un análisis que guardó antes">Abrir un proyecto guardado…</button>
         </p>
         <input type="file" id="entrada" accept=".kmz,.kml" multiple hidden>
         <p class="pista" style="margin-top:14px">
@@ -38,6 +40,8 @@
       </div>
       <div id="listaSeleccion" style="margin-top:14px"></div>
       <div id="progreso" class="frase oculto" style="margin-top:14px"></div>
+      <input type="file" id="entradaAnadir" accept=".kmz,.kml" multiple hidden>
+      <input type="file" id="entradaProyecto" accept=".json,.pmt.json" hidden>
     </div>
   </section>
 
@@ -46,6 +50,10 @@
     <h2><span class="paso">2</span> Esto es lo que se encontró</h2>
     <div class="cuerpo">
       <div id="fraseResumen" class="frase"></div>
+      <div class="barra-acciones no-imprimir">
+        <button class="b-verde b-mini" id="btnAnadir" title="Suma más archivos al análisis actual">＋ Añadir más archivos</button>
+        <button class="b-suave b-mini" id="btnAbrirProyecto">Abrir otro proyecto…</button>
+      </div>
       <div class="tarjetas" id="tarjetas"></div>
       <div id="siguientePaso" class="frase" style="margin-top:16px;background:var(--azul-suave);border-left-color:var(--azul)"></div>
     </div>
@@ -65,24 +73,14 @@
           <h2><span class="paso">3</span> Mapa</h2>
           <div class="cuerpo" style="padding-bottom:0">
             <div class="barra-mapa no-imprimir">
-              <label style="display:flex;align-items:center;gap:6px;font-size:.85rem">
-                <input type="checkbox" id="verRelaciones" checked style="accent-color:#009300"> Mostrar las relaciones
-              </label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:.85rem">
-                <input type="checkbox" id="verFondo" checked style="accent-color:#009300"> Mapa de fondo
-              </label>
+              <label class="mini-campo"><input type="checkbox" id="verRelaciones" checked> Mostrar las relaciones</label>
+              <span id="elegirFondo"></span>
               <span class="sep"></span>
               <button class="b-suave b-mini" id="btnEncuadrar">Ver todo</button>
             </div>
             <div id="avisoMapa" class="frase atencion oculto" style="margin-bottom:10px;font-size:.86rem"></div>
             <div id="mapa"></div>
-            <div class="leyenda">
-              <span><i class="muestra" style="background:#009300"></i> Trazado del PMT</span>
-              <span><i class="muestra" style="background:#d56b00"></i> Se tocan físicamente</span>
-              <span><i class="muestra" style="background:#1565c0"></i> Cerca, sin tocarse</span>
-              <span><i class="muestra" style="background:#5e35b1"></i> No se pudo analizar</span>
-              <span style="color:#6b7075">Línea discontinua = no coinciden en el tiempo</span>
-            </div>
+            <div class="leyenda" id="leyendaMapa"></div>
           </div>
         </div>
 
@@ -106,6 +104,7 @@
 
       <div id="pest_pmt">
         <div class="tabla-caja"><table class="datos" id="tablaPmt"><thead></thead><tbody></tbody></table></div>
+        <div class="paginador no-imprimir" id="pagPmt"></div>
       </div>
 
       <div id="pest_rel" class="oculto">
@@ -114,6 +113,7 @@
           <b>Todavía no se clasifica ninguna como crítica</b>: esa decisión se tomará cuando se puedan ver los casos reales.
         </div>
         <div class="tabla-caja"><table class="datos" id="tablaRel"><thead></thead><tbody></tbody></table></div>
+        <div class="paginador no-imprimir" id="pagRel"></div>
       </div>
 
       <div id="pest_cal" class="oculto"><div id="panelCalidad"></div></div>
@@ -131,7 +131,7 @@
         <button class="b-verde"  id="expRelCsv">Relaciones en Excel (CSV)</button>
         <button class="b-lima"   id="expGeoJson">Trazados en GeoJSON</button>
         <button class="b-lima"   id="expKml">Trazados en KML</button>
-        <button class="b-nar"    id="expImprimir">Informe para imprimir o PDF</button>
+        <button class="b-nar"    id="expInforme">Ver informe ejecutivo</button>
         <button class="b-suave"  id="expLegado" title="Mismas 11 columnas que producía QGIS, por si algo todavía las espera">CSV compatible con el formato antiguo</button>
       </div>
       <p style="font-size:.82rem;color:var(--tenue);margin-bottom:0;margin-top:12px">
@@ -140,7 +140,18 @@
     </div>
   </section>
 
-  <div class="imprimir-solo" id="piePdf"></div>
+  <!-- ─────────────── INFORME EJECUTIVO ─────────────── -->
+  <section class="panel oculto" id="panelInforme" style="margin-top:20px">
+    <h2 class="no-imprimir">Informe ejecutivo</h2>
+    <div class="cuerpo">
+      <div class="barra-acciones no-imprimir">
+        <button class="b-nar" id="btnImprimirInforme">🖨 Imprimir o guardar como PDF</button>
+        <button class="b-suave" id="btnCerrarInforme">Cerrar informe</button>
+        <span class="pista-campo">En el diálogo de impresión elija «Guardar como PDF» como destino.</span>
+      </div>
+      <div id="informe" class="informe"></div>
+    </div>
+  </section>
 
 </main>
 

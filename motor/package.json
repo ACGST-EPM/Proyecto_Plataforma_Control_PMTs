@@ -12,7 +12,8 @@
     "construir-app": "node ../herramientas/construir-app.mjs"
   },
   "devDependencies": {
-    "@turf/turf": "7.4.0"
+    "@turf/turf": "7.4.0",
+    "playwright": "1.56.1"
   },
   "engines": {
     "node": ">=18.0.0"

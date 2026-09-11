@@ -17,14 +17,44 @@ export const CAMPOS_PMT = Object.freeze([
 ]);
 
 /**
- * Tipos de cierre reconocidos.
+ * Tipos de cierre. LISTA CERRADA, la misma del generador y del motor.
  *
- * `total`, `parcial` e `ingreso y salida` son la lista historica cerrada que
- * produce `Generador_KMZ.html` y que valida el motor. `ingreso` y `salida` se
- * aceptan ademas por separado: se anaden SIN retirar el valor compuesto, de
- * modo que ningun KMZ que hoy sea valido deja de serlo.
+ * En la Etapa 2 se habian anadido `ingreso` y `salida` por separado. Se retiran:
+ * no existe una decision aprobada que separe esos dos valores, y el contrato
+ * vigente del proyecto —el que produce `Generador_KMZ.html` y el que valida
+ * `motor/src/io/descripcion.js`— sigue siendo exactamente estos tres.
  */
-export const TIPOS_CIERRE = Object.freeze(['total', 'parcial', 'ingreso y salida', 'ingreso', 'salida']);
+export const TIPOS_CIERRE = Object.freeze(['total', 'parcial', 'ingreso y salida']);
+
+/**
+ * SIMBOLOGIA CARTOGRAFICA por tipo de cierre.
+ *
+ * Conserva el significado del mapa de QGIS, que la Etapa 2 habia perdido al
+ * pintarlo todo del mismo verde:
+ *   · cierre TOTAL              rojo, trazo grueso  (via cerrada por completo)
+ *   · cierre PARCIAL            ambar, trazo medio  (via con paso restringido)
+ *   · INGRESO Y SALIDA          azul + marcador circular propio sobre el trazado
+ *   · sin dato / no reconocido  gris
+ *
+ * Cambios deliberados frente a QGIS, por legibilidad y accesibilidad:
+ *   · el amarillo puro (#ffff00) del cierre parcial es ilegible sobre fondo
+ *     claro; se sustituye por un ambar oscuro con contraste suficiente;
+ *   · cada tipo lleva ademas un GROSOR y un PATRON distintos, para que no
+ *     dependa solo del color: quien no distinga rojo de verde sigue leyendo el
+ *     mapa. El color nunca es la unica senal.
+ */
+export const SIMBOLOGIA_CIERRE = Object.freeze({
+  'total':            { color: '#c62828', grosor: 5,   guion: null,    etiqueta: 'Cierre total',      marcador: false },
+  'parcial':          { color: '#e08600', grosor: 4,   guion: '10 5',  etiqueta: 'Cierre parcial',    marcador: false },
+  'ingreso y salida': { color: '#0066cc', grosor: 3.5, guion: '2 6',   etiqueta: 'Ingreso y salida',  marcador: true },
+  '(sin dato)':       { color: '#6b7075', grosor: 3,   guion: '4 4',   etiqueta: 'Sin tipo de cierre', marcador: false },
+});
+
+/** Simbologia de un registro, con respaldo seguro si el tipo no se reconoce. */
+export function simbologiaDe(tipoCierre) {
+  const k = String(tipoCierre ?? '').trim().toLowerCase();
+  return SIMBOLOGIA_CIERRE[k] ?? SIMBOLOGIA_CIERRE['(sin dato)'];
+}
 
 /** Estado de evaluacion espacial de una relacion, sin ambiguedad posible. */
 export const ESPACIAL = Object.freeze({

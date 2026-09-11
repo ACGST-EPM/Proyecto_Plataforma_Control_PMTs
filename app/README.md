@@ -19,6 +19,24 @@
 **Sus archivos no salen de su computador.** No hay servidor, no hay subida, no
 hay llamada a ninguna API. Todo el cálculo ocurre en el navegador.
 
+## Etapa 2.1 — qué se corrigió
+
+La Etapa 2 se entregó demasiado pronto. La usuaria probó el producto y el **mapa
+base salía en blanco**; una auditoría encontró además regresiones frente al
+tablero histórico. La matriz completa está en `MATRIZ_PARIDAD_ETAPA2.md`.
+
+**La causa del mapa en blanco, medida:** la capa de teselas llevaba
+`crossOrigin: true`. Eso hace que el navegador pida la imagen en modo CORS y la
+**descarte** si la respuesta no trae `Access-Control-Allow-Origin` — que es lo
+que ocurre en cuanto un proxy corporativo reescribe la respuesta. Comprobado en
+las 8 combinaciones de origen × `crossOrigin` × CORS del servidor: **el único
+caso que falla es ese**. `crossOrigin` no aportaba nada y se retiró. También se
+quitó el prefijo `{s}.`, que la propia política de OpenStreetMap desaconseja.
+
+Además: simbología por tipo de cierre, filtros cruzados, paginación, informe
+ejecutivo propio, gestión de archivos, proyectos guardables y 21 pruebas de
+navegador real.
+
 ## Arquitectura
 
 ```
@@ -34,8 +52,14 @@ app/
     resumen.js      cifras y frase honesta de cabecera
   ui/               lo que toca el DOM → se prueba en navegador
     dom.js  mapa.js  tablas.js  controles.js
+    mapas-base.js   catálogo de proveedores de mapa base, con respaldo
+    proyecto.js     formato `.pmt.json` versionado: guardar y reabrir
+  ui/
+    informe.js      informe ejecutivo con mapa vectorial propio
   vendor/leaflet/   Leaflet 1.9.4 (BSD-2-Clause), incluido en el repositorio
-  test/             37 pruebas de la lógica pura
+  test/
+    app.test.mjs        49 pruebas de la lógica pura
+    navegador.test.mjs  21 pruebas de la aplicación empaquetada, en Chromium real
 ```
 
 El motor geoespacial y temporal **no se tocó**: vive en `motor/`, con sus 218
@@ -61,6 +85,14 @@ copia a una carpeta compartida, se adjunta en un correo o se sirve desde
 cualquier sitio. No depende de GitHub Pages ni de ninguna estructura de
 carpetas, lo que deja abierta cualquier opción de publicación corporativa.
 
+**Mapa base desacoplado del proveedor.** El mapa base es una capa
+intercambiable, no algo escrito a pelo en el código. Hay varios proveedores,
+una cadena de respaldo automática y un hueco reservado para un servidor de
+teselas de EPM que se configura desde la propia interfaz, sin tocar código
+(`PENDIENTE DE VALIDACIÓN CORPORATIVA`: no consta que exista uno). Si ninguno
+responde, se dice con todas las letras que **lo que falta es el fondo, no los
+datos**.
+
 **Leaflet en vez del mapa de qgis2web.** El mapa de qgis2web es *estático*: para
 actualizarlo hay que volver a abrir QGIS y regenerarlo, que es justo el paso que
 esta etapa elimina. Además el tablero lo incrustaba en un `<iframe>` y tenía que
@@ -75,10 +107,18 @@ los saltos de página y desde el diálogo de impresión se guarda como PDF igual
 ## Construir
 
 ```bash
-npm run preparar        # instala las dependencias de desarrollo del motor
-npm test                # 218 pruebas del motor + 37 de la aplicación
-npm run construir:app   # genera dist/Plataforma_PMTs.html
+npm run preparar          # instala dependencias de desarrollo (npm ci)
+npm test                  # 229 pruebas del motor + 49 de la aplicación
+npm run test:navegador    # 21 pruebas en Chromium real sobre dist/
+npm run test:todo         # todo lo anterior
+npm run construir:app     # genera dist/Plataforma_PMTs.html
 ```
+
+Las pruebas de navegador conducen el archivo de `dist/` desde `file://`, igual
+que la usuaria: cargan archivos, cruzan filtros, mueven el recorrido temporal,
+descargan las exportaciones, generan el informe y **simulan una oficina sin
+salida a internet**. La Etapa 2 no las tenía, y por eso se entregaron defectos
+que solo se ven al abrir la aplicación.
 
 Durante el desarrollo se trabaja sobre `app/` en módulos separados. El archivo
 de `dist/` se genera con el empaquetador propio de `herramientas/construir-app.mjs`,

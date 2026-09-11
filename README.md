@@ -12,9 +12,10 @@ arrastre sus KMZ o KML y listo. No hay que instalar nada ni tener internet.
 **Si va a tocar el código:**
 
 ```bash
-npm run preparar     # instala dependencias de desarrollo (npm ci, versiones fijas)
-npm test             # 218 pruebas del motor + 37 de la aplicación
-npm run construir    # regenera dist/Plataforma_PMTs.html y dist/verificador.html
+npm run preparar       # instala dependencias de desarrollo (npm ci, versiones fijas)
+npm test               # 229 pruebas del motor + 49 de la aplicación
+npm run test:navegador # 21 pruebas en Chromium real sobre el archivo de dist/
+npm run construir      # regenera dist/Plataforma_PMTs.html y dist/verificador.html
 ```
 
 Requiere **Node 18 o superior** (por `DecompressionStream`, que es lo que abre
@@ -30,6 +31,8 @@ los KMZ sin librerías externas).
 | `motor/dist/verificador.html` | Compara el motor nuevo con el de QGIS, caso por caso. |
 | `Generador_KMZ.html` | Captura estandarizada de trazados y genera los KMZ. |
 | `contratos_db.json` | Base maestra de contratos. |
+| `MATRIZ_PARIDAD_ETAPA2.md` | Comparación capacidad por capacidad: tablero histórico vs. aplicación nueva. |
+| `PROPUESTA_AUTOMATIZACION.md` | Propuesta de automatización futura. **Nada conectado; para decidir.** |
 
 ### Referencia histórica, ya no necesaria para operar
 
@@ -52,7 +55,10 @@ los KMZ sin librerías externas).
 ## Estado
 
 Etapa 1 (motor en paralelo) cerrada y auditada de forma independiente.
-Etapa 2 (integración y flujo directo KMZ/KML) implementada.
+Etapa 2 (integración y flujo directo KMZ/KML) implementada, y **corregida en la
+Etapa 2.1** tras la prueba real de la usuaria y una auditoría funcional: mapa
+base, simbología, filtros cruzados, paginación, informe ejecutivo, gestión de
+archivos y proyectos guardables.
 La publicación corporativa se evalúa en una etapa específica: la aplicación está
 diseñada para no depender estructuralmente de GitHub Pages.
 

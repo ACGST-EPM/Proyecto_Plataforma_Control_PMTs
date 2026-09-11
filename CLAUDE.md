@@ -29,7 +29,22 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
 Repo publicado: `ACGST-EPM/Control-y-Articulacion-de-PMTs-EPM` (GitHub Pages).
 Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada`, `02_Proyecto_QGIS`, `Control-y-Articulacion-de-PMTs-EPM`).
 
-## Estado de la migración (Etapa 2 implementada; en pausa para auditoría)
+## Estado de la migración (Etapa 2.1 implementada; en pausa para auditoría)
+- **El mapa base NUNCA lleva `crossOrigin`.** Fue la causa del mapa en blanco: obliga a CORS y el
+  navegador descarta teselas válidas si un proxy corporativo quita la cabecera. Demostrado en las 8
+  combinaciones posibles. Tampoco se usa el prefijo `{s}.` (la política de OSM lo desaconseja).
+- El mapa base es **intercambiable** (`app/nucleo/mapas-base.js`), con respaldo automático y un hueco
+  para un servidor de EPM configurable desde la interfaz. No hay evidencia de que exista tal servidor.
+- **Filtros cruzados**: cada lista se recalcula con los demás filtros pero NO se autolimita, lo
+  seleccionado nunca desaparece y la lista en uso no se repinta. Si toca `opcionesFacetadas()`,
+  conserve las tres reglas.
+- `motor/src/geo/acercamiento.js` calcula los puntos reales de aproximación, **solo para dibujar**.
+  Una prueba exige que su distancia coincida con `medir()`: no la relaje.
+- Pruebas: 229 motor + 49 app + **21 de navegador real** (`npm run test:navegador`). La Etapa 2 no
+  tenía pruebas de navegador y por eso se entregaron defectos que solo se ven al abrir la aplicación.
+- Proyectos `.pmt.json` con esquema versionado. **Llevan datos operativos: no subirlos al repositorio.**
+
+### Estado anterior (Etapa 2)
 - **La operación normal YA NO requiere** QGIS, Python/PyQGIS, qgis2web, `reporte_dinamico.csv`,
   API de GitHub ni GitHub Pages. `proceso_pmt_qgis.py` queda como **oráculo de regresión**: el motor
   reproduce su salida 708/708 y esa comprobación debe seguir pasando.
@@ -67,10 +82,10 @@ Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada
 - **Formato del campo Descripción del KMZ** (lo produce el generador y lo lee el motor):
   `fecha_inicio: AAAA-MM-DD HH:MM:SS | fecha_fin: ... | tipo_cierre: <total|parcial|ingreso y salida> | direccion: ... | municipio: ... | contrato: ... | contratista: ... | proyecto: ...`
   Separador ` | `. Los textos libres eliminan cualquier `|` interno.
-- **Lista `tipo_cierre`**: `total`, `parcial`, `ingreso y salida` (histórica, la que produce el
-  generador). En la Etapa 2 se AMPLIÓ con `ingreso` y `salida` por separado, porque la usuaria los
-  declaró como tipos existentes. La lista solo se amplía, nunca se recorta: nada que hoy sea válido
-  puede dejar de serlo. Si añade un valor, actualice generador Y motor a la vez.
+- **Lista cerrada `tipo_cierre`**: `total`, `parcial`, `ingreso y salida`. Son EXACTAMENTE tres.
+  En la Etapa 2 se añadieron `ingreso` y `salida` por separado sin decisión aprobada; en la 2.1 se
+  retiraron. Si algún día se separan, hay que actualizar generador Y motor a la vez y migrar los KMZ
+  existentes. En los 8 KMZ reales hay 35 trazados con `ingreso y salida` como valor único.
 - **Columnas del CSV** (`reporte_dinamico.csv`): `CATEGORIA, CONTRATO, CONTRATISTA, MUNICIPIO, FRENTE, DIRECCION, ESTADO_CIERRE, HORARIO, FECHA_INICIO, FECHA_FIN, DURACION_DIAS`. El dashboard depende de estos índices (0..10).
 - **Capas QGIS** (nombres exactos): `🚀 GESTIÓN PMT MAESTRA`, `📍 INGRESO Y SALIDA` (punto azul), `🔵 CERCANÍA (120m)`, `🟠 INTERFERENCIA REAL`, `📋 REPORTE DINÁMICO`.
 - **Marca EPM**: verde `#009300`, lima `#b7c200`, naranja `#d56b00`.
