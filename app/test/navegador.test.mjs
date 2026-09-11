@@ -164,7 +164,7 @@ test('añadir, reemplazar y quitar archivos sin recargar la pagina', saltar, asy
   await p.setInputFiles('#entradaAnadir', [KMZ_B]);
   await p.waitForFunction(() => document.querySelector('#cuentaPmt').textContent === '4', null, { timeout: 30000 });
   assert.equal(await txt(p, '#cuentaPmt'), '4');
-  assert.ok((await txt(p, '#listaSeleccion')).includes('beta.kmz'));
+  assert.ok((await txt(p, '#listaFuentes')).includes('beta.kmz'));
 
   // Reemplazar el mismo nombre no duplica
   await p.setInputFiles('#entradaAnadir', [KMZ_B]);
@@ -174,7 +174,7 @@ test('añadir, reemplazar y quitar archivos sin recargar la pagina', saltar, asy
   // Quitar
   await p.click('[data-quitar="beta.kmz"]');
   await p.waitForFunction(() => document.querySelector('#cuentaPmt').textContent === '2', null, { timeout: 30000 });
-  assert.ok(!(await txt(p, '#listaSeleccion')).includes('beta.kmz'));
+  assert.ok(!(await txt(p, '#listaFuentes')).includes('beta.kmz'));
   assert.deepEqual(p.erroresJs, []);
   await p.close();
 });
@@ -183,7 +183,7 @@ test('un archivo roto no impide analizar los buenos, y se dice cual fallo', salt
   const p = await abrir();
   await cargar(p, [KMZ_A, KMZ_ROTO]);
   assert.equal(await txt(p, '#cuentaPmt'), '2', 'los buenos se procesan igual');
-  const lista = await txt(p, '#listaSeleccion');
+  const lista = await txt(p, '#listaFuentes');
   assert.ok(lista.includes('roto.kmz') && /No se pudo leer/i.test(lista), lista);
   await p.click('.pestanas button[data-pest="cal"]');
   assert.ok((await txt(p, '#panelCalidad')).includes('roto.kmz'));
@@ -193,7 +193,7 @@ test('un archivo roto no impide analizar los buenos, y se dice cual fallo', salt
 test('un archivo parcial se marca PARCIAL, no completo ni fallido', saltar, async () => {
   const p = await abrir();
   await cargar(p, [KML_PARCIAL]);
-  const lista = await txt(p, '#listaSeleccion');
+  const lista = await txt(p, '#listaFuentes');
   assert.ok(/Parcial/i.test(lista), lista);
   assert.equal(await txt(p, '#cuentaPmt'), '1', 'lo que si se pudo leer se conserva');
   await p.close();
@@ -517,11 +517,11 @@ test('PROYECTO: un archivo manipulado se rechaza con un motivo entendible', salt
   const p = await abrir({ sinRed: true });
   await p.setInputFiles('#entradaProyecto', [malo]);
   await p.waitForTimeout(700);
-  assert.ok(/no es un proyecto/i.test(await txt(p, '#progreso')), await txt(p, '#progreso'));
+  assert.ok(/no es un proyecto/i.test(await txt(p, '#avisoGlobal')), await txt(p, '#avisoGlobal'));
 
   await p.setInputFiles('#entradaProyecto', [futuro]);
   await p.waitForTimeout(700);
-  assert.ok(/version mas reciente|versión más reciente/i.test(await txt(p, '#progreso')), await txt(p, '#progreso'));
+  assert.ok(/version mas reciente|versión más reciente/i.test(await txt(p, '#avisoGlobal')), await txt(p, '#avisoGlobal'));
   await p.close();
 });
 
@@ -536,7 +536,7 @@ test('REINICIO: empezar de nuevo deja la aplicacion limpia, sin recargar', salta
   await p.waitForTimeout(600);
   assert.equal(await p.evaluate(() => window.__marca), 1, 'no se recargo la pagina');
   assert.ok(await p.isHidden('#panelResumen'));
-  assert.equal(await txt(p, '#listaSeleccion'), '');
+  assert.equal(await txt(p, '#listaFuentes'), '');
   // Y se puede volver a cargar sin arrastrar nada de la sesion anterior.
   await cargar(p, [KMZ_B]);
   assert.equal(await txt(p, '#cuentaPmt'), '2');
@@ -603,7 +603,7 @@ test('2.2 · ABRIR PROYECTO + AÑADIR KMZ no pierde nada', saltar, async () => {
     pmtAntes + 1, { timeout: 30000 });
   assert.equal(+(await txt(q, '#cuentaPmt')), pmtAntes + 1, 'añadir SUMA, no reemplaza');
   assert.ok(+(await txt(q, '#cuentaRel')) >= relAntes, 'y las relaciones no desaparecen');
-  const lista = await txt(q, '#listaSeleccion');
+  const lista = await txt(q, '#listaFuentes');
   assert.ok(lista.includes('combinado.pmt.json') && lista.includes('gama.kml'), lista);
   assert.deepEqual(q.erroresJs, []);
   await q.close();
@@ -797,5 +797,137 @@ test('2.2 · identidad de fuentes: mismo nombre, otro contenido, y quitar', salt
   await p.click('[data-quitar="alfa.kmz"]');
   await p.waitForTimeout(700);
   assert.ok(await p.isVisible('#panelCarga'));
+  await p.close();
+});
+
+/* ═══════════════════ ETAPA 2.3 ═══════════════════ */
+
+test('2.3 · el gestor de FUENTES queda visible tras abrir un proyecto', saltar, async () => {
+  // ANTES: abrir un proyecto ocultaba `panelCarga`, y con él la lista de
+  // fuentes y sus botones «Quitar». No había forma de gestionar nada.
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  p.on('dialog', (d) => d.accept('Gestor visible'));
+  const [d] = await Promise.all([p.waitForEvent('download', { timeout: 20000 }), p.click('#btnGuardarProyecto')]);
+  const ruta = path.join(TMP, 'gestor.pmt.json');
+  await d.saveAs(ruta);
+  await p.close();
+
+  const q = await abrir({ sinRed: true });
+  await q.setInputFiles('#entradaProyecto', [ruta]);
+  await q.waitForSelector('#panelResumen:not(.oculto)', { timeout: 30000 });
+  await q.waitForTimeout(700);
+
+  assert.ok(await q.isVisible('#panelFuentes'), 'el gestor de fuentes tiene que verse');
+  assert.ok(await q.isVisible('#listaFuentes'));
+  assert.ok(await q.isVisible('#btnAnadir'), 'y desde ahí se puede añadir');
+  const quitar = await q.$$('[data-quitar]');
+  assert.ok(quitar.length > 0, 'y quitar');
+  assert.ok(await quitar[0].isVisible(), 'el botón «Quitar» es accesible');
+  await q.close();
+});
+
+test('2.3 · un error al abrir un proyecto inválido NUNCA queda oculto', saltar, async () => {
+  const malo = escribir('invalido23.pmt.json', JSON.stringify({ marca: 'otra', esquema: 1, trazados: [] }));
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A]);                       // ya hay análisis: panelCarga oculto
+  assert.ok(await p.isHidden('#panelCarga'));
+  await p.setInputFiles('#entradaProyecto', [malo]);
+  await p.waitForTimeout(800);
+  assert.ok(await p.isVisible('#avisoGlobal'), 'el aviso vive fuera del panel de carga');
+  assert.ok(/no se pudo abrir/i.test(await txt(p, '#avisoGlobal')), await txt(p, '#avisoGlobal'));
+  assert.equal(await txt(p, '#cuentaPmt'), '2', 'y el análisis anterior no se pierde');
+  await p.close();
+});
+
+test('2.3 · guardar y abrir conserva Polygon, MultiLineString y MultiPolygon', saltar, async () => {
+  const geom = escribir('geometrias23.kmz', F.kmz([
+    F.placemark('POLIGONO', desc('CW20'), F.poligono([[-75.600, 6.200], [-75.590, 6.200], [-75.590, 6.210], [-75.600, 6.210], [-75.600, 6.200]])),
+    F.placemark('PUNTO-DENTRO', desc('CW21'), F.punto([-75.595, 6.205])),
+    F.placemark('MULTILINEA', desc('CW22'), F.multiGeometria(F.linea([[-75.5800, 6.2000], [-75.5790, 6.2000]]))),
+  ]));
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [geom]);
+  const pmtAntes = await txt(p, '#cuentaPmt');
+  const relAntes = await txt(p, '#cuentaRel');
+  assert.equal(pmtAntes, '3');
+  assert.ok(+relAntes >= 1, 'el punto está dentro del polígono');
+
+  p.on('dialog', (d) => d.accept('Geometrias'));
+  const [d] = await Promise.all([p.waitForEvent('download', { timeout: 20000 }), p.click('#btnGuardarProyecto')]);
+  const ruta = path.join(TMP, 'geom23.pmt.json');
+  await d.saveAs(ruta);
+  await p.close();
+
+  const q = await abrir({ sinRed: true });
+  await q.setInputFiles('#entradaProyecto', [ruta]);
+  await q.waitForSelector('#panelResumen:not(.oculto)', { timeout: 30000 });
+  await q.waitForTimeout(700);
+  assert.equal(await txt(q, '#cuentaPmt'), pmtAntes, 'no se pierde ningún trazado');
+  assert.equal(await txt(q, '#cuentaRel'), relAntes, 'ni ninguna relación');
+  await q.close();
+});
+
+test('2.3 · una fecha imposible restaurada no deja un filtro invisible', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  p.on('dialog', (d) => d.accept('Fecha mala'));
+  const [d] = await Promise.all([p.waitForEvent('download', { timeout: 20000 }), p.click('#btnGuardarProyecto')]);
+  const ruta = path.join(TMP, 'fechamala.pmt.json');
+  await d.saveAs(ruta);
+  const obj = JSON.parse(fs.readFileSync(ruta, 'utf8'));
+  obj.filtros = { ...(obj.filtros ?? {}), desde: '2026-99-99', hasta: null,
+    contratista: [], contrato: [], proyecto: [], municipio: [], frente: [], tipoCierre: [], relacion: [], texto: '' };
+  fs.writeFileSync(ruta, JSON.stringify(obj));
+  await p.close();
+
+  const q = await abrir({ sinRed: true });
+  await q.setInputFiles('#entradaProyecto', [ruta]);
+  await q.waitForSelector('#panelResumen:not(.oculto)', { timeout: 30000 });
+  await q.waitForTimeout(800);
+  assert.equal(await q.inputValue('#fDesde'), '', 'el control está vacío…');
+  assert.equal(await txt(q, '#cuentaPmt'), '4', '…y NO hay ningún filtro aplicado en la sombra');
+  await q.close();
+});
+
+test('2.3 · el último día con actividad es seleccionable en el recorrido', saltar, async () => {
+  const cruce = escribir('cruce23.kmz', F.kmz([
+    F.placemark('NOCTURNO', desc('CW30', { inicio: '2026-03-01 23:00:00', fin: '2026-03-03 01:00:00' }), F.punto([-75.6000, 6.2000])),
+  ]));
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [cruce]);
+  const max = await p.inputValue('#barraTiempo').then(() => p.$eval('#barraTiempo', (b) => +b.max));
+  assert.equal(max, 2, 'el deslizador llega hasta el tercer día');
+  await p.evaluate(() => { const b = document.getElementById('barraTiempo'); b.value = b.max; b.dispatchEvent(new Event('input')); });
+  await p.waitForTimeout(500);
+  assert.equal(await txt(p, '#fechaViva'), '2026-03-03');
+  assert.equal(await txt(p, '#cuentaPmt'), '1', 'y ese día sigue mostrando el PMT');
+  await p.close();
+});
+
+test('2.3 · INFORME: la tarjeta de no evaluables coincide con su tabla', saltar, async () => {
+  const lejos = escribir('antipodas23.kmz', F.kmz([
+    F.placemark('AQUI', desc('CW40'), F.punto([0, 0])),
+    F.placemark('ALLI', desc('CW41'), F.punto([180, 0])),
+  ]));
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [lejos]);
+  assert.equal(await txt(p, '#cuentaNoEval'), '1');
+  await p.click('#expInforme');
+  await p.waitForSelector('#panelInforme:not(.oculto)', { timeout: 20000 });
+  await p.waitForTimeout(500);
+
+  // La tarjeta y la tabla del informe tienen que decir lo mismo.
+  const tarjeta = await p.$$eval('#informe .inf-kpi', (n) => {
+    const t = n.find((x) => /no se pudieron analizar/i.test(x.textContent));
+    return t ? +t.querySelector('.inf-kpi-n').textContent.trim() : null;
+  });
+  const filasTabla = await p.$$eval('#informe table', (tablas) => {
+    const t = tablas.find((x) => /Motivo/i.test(x.querySelector('thead')?.textContent ?? ''));
+    return t ? t.querySelectorAll('tbody tr').length : 0;
+  });
+  assert.equal(tarjeta, 1, `la tarjeta dice ${tarjeta}`);
+  assert.equal(filasTabla, 1, `la tabla tiene ${filasTabla} filas`);
+  assert.equal(tarjeta, filasTabla, 'tarjeta y tabla tienen que coincidir');
   await p.close();
 });

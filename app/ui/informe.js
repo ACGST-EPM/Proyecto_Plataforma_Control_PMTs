@@ -229,12 +229,12 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
     porCierre[TIPOS_CIERRE.includes(k) ? k : '(sin dato)']++;
   }
 
-  const conContacto = relaciones.filter((r) => estadoEspacial(r) === ESPACIAL.CONTACTO);
-  const aLaVez = relaciones.filter((r) => estadoTemporal(r) === TEMPORAL.COINCIDE);
+  // Las cifras vienen del MISMO modelo de resumen que usa el tablero, calculado
+  // sobre el MISMO alcance que las tablas de este informe. Antes el informe las
+  // recalculaba por su cuenta y la tarjeta de no evaluables decía 0 mientras su
+  // propia tabla mostraba 1.
   const contactoYTiempo = relaciones.filter((r) =>
     estadoEspacial(r) === ESPACIAL.CONTACTO && estadoTemporal(r) === TEMPORAL.COINCIDE);
-  const noEval = relaciones.filter((r) =>
-    estadoEspacial(r) === ESPACIAL.NO_EVALUABLE || estadoTemporal(r) === TEMPORAL.NO_EVALUABLE);
 
   // Se listan primero las que coinciden en espacio Y tiempo, luego el resto por
   // distancia. Es un ORDEN, no una clasificacion de criticidad.
@@ -303,14 +303,15 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
   </div>
 
   <div class="inf-kpis">
-    ${tarjeta(filas.length, 'PMT analizados', 'verde')}
-    ${tarjeta(contratos.length, 'contratos')}
-    ${tarjeta(municipios.length, 'municipios')}
-    ${tarjeta(relaciones.length, 'relaciones entre contratos', relaciones.length ? 'azul' : '')}
-    ${tarjeta(conContacto.length, 'llegan a tocarse', conContacto.length ? 'nar' : '')}
-    ${tarjeta(aLaVez.length, 'coinciden en el tiempo', aLaVez.length ? 'nar' : '')}
+    ${tarjeta(resumen.pmts, 'PMT analizados', 'verde')}
+    ${tarjeta(resumen.contratos, 'contratos')}
+    ${tarjeta(resumen.municipios, 'municipios')}
+    ${tarjeta(resumen.relaciones, 'relaciones entre contratos', resumen.relaciones ? 'azul' : '')}
+    ${tarjeta(resumen.contacto, 'llegan a tocarse', resumen.contacto ? 'nar' : '')}
+    ${tarjeta(resumen.aLaVez, 'coinciden en el tiempo', resumen.aLaVez ? 'nar' : '')}
     ${tarjeta(contactoYTiempo.length, 'se tocan Y coinciden', contactoYTiempo.length ? 'nar' : '')}
-    ${tarjeta(noEval.length, 'no se pudieron analizar', noEval.length ? 'rojo' : 'gris')}
+    ${tarjeta(resumen.espacialNoEval + resumen.temporalNoEval, 'no se pudieron analizar',
+      (resumen.espacialNoEval + resumen.temporalNoEval) ? 'rojo' : 'gris')}
   </div>
 
   <h2>Qué se analizó</h2>
@@ -361,15 +362,15 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
   El orden <b>no es una clasificación de criticidad</b>.</p>
   <div class="inf-detalles">${paraDetalle.map((r) => mapaDetalle(r, porId)).join('')}</div>` : ''}
 
-  ${(noEvaluables ?? []).length ? `
+  ${resumen.noEvaluables?.length ? `
   <h2>Parejas que no se pudieron evaluar</h2>
   <div class="inf-nota inf-nota-aviso">
-    <b>${num(noEvaluables.length)} pareja(s) cuya distancia no se pudo determinar.</b>
+    <b>${num(resumen.noEvaluables.length)} pareja(s) cuya distancia no se pudo determinar.</b>
     No significa que estén lejos ni que no haya interferencia: significa que no se pudo comprobar.
   </div>
   <table class="inf-tabla">
     <thead><tr><th>Contrato A</th><th>Frente A</th><th>Contrato B</th><th>Frente B</th><th>Motivo</th></tr></thead>
-    <tbody>${noEvaluables.slice(0, 40).map((h) => `<tr>
+    <tbody>${resumen.noEvaluables.slice(0, 40).map((h) => `<tr>
       <td>${esc(h.contratoA ?? '—')}</td><td>${esc(h.frenteA ?? '—')}</td>
       <td>${esc(h.contratoB ?? '—')}</td><td>${esc(h.frenteB ?? '—')}</td>
       <td><small>${esc((h.avisos ?? h.errores ?? []).join(' · ') || 'sin motivo registrado')}</small></td>

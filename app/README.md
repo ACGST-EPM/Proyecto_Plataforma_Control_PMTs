@@ -60,6 +60,25 @@ conector visual se sitúa bien en polígonos y en el antimeridiano; el informe
 declara su alcance real, sitúa los contactos donde ocurren, trae mapas de
 detalle y se imprime solo; y `4×` corre a 4× de verdad.
 
+## Etapa 2.3 — cierre de integridad
+
+Siete defectos más, reproducidos por una auditoría independiente. En vez de
+parchear cada ejemplo, se corrigió la **clase** de error y se dejó escrita la
+propiedad que cada uno violaba:
+
+| Defecto | Clase de error | Invariante que ahora se prueba |
+|---|---|---|
+| `Polygon` de un anillo se perdía al guardar | deducir la estructura en vez de conocerla | guardar y abrir conserva la geometría |
+| ms de 2030 con texto de 2026 | dos verdades para una fecha | el dato mostrado es el dato calculado |
+| gestor de fuentes oculto tras abrir un proyecto | error escrito donde nadie lo ve | un error nunca queda invisible |
+| último día del recorrido inalcanzable | redondear duración en vez de contar días | el último día con actividad es seleccionable |
+| `aproximación(A,B) ≠ aproximación(B,A)` | contención probada en una sola dirección | A/B = B/A |
+| tarjeta 0 con tabla 1 | dos sitios calculando la misma cifra | resumen = detalle |
+| `2026-99-99` filtrando en la sombra | validar formato en vez de calendario | visual = estado interno |
+
+La comprobación de simetría es una **prueba de propiedad** sobre 900 pares
+generados al azar, no un puñado de casos escritos a mano.
+
 ## Arquitectura
 
 ```

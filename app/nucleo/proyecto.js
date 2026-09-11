@@ -40,6 +40,9 @@
  * repositorio público**.
  */
 
+import { validarGeometria as validarGeo } from './geojson.js';
+import { normalizarVigencia } from './tiempo.js';
+
 export const ESQUEMA = 2;
 export const ESQUEMA_MINIMO_LEGIBLE = 1;
 export const EXTENSION = '.pmt.json';
@@ -64,45 +67,14 @@ export function huellaDe(texto) {
 }
 
 /**
- * Valida una geometría GeoJSON: tipo conocido y coordenadas dentro del planeta.
- * Devuelve la geometría si es válida, o `null` con el motivo.
+ * Valida una geometría. Delega en `geojson.js`, que tiene una regla explícita
+ * por tipo: nada se deduce de la profundidad de los arrays, que es lo que hacía
+ * que un `Polygon` de un solo anillo se confundiera con una coordenada.
  */
 export function validarGeometria(g) {
-  if (g === null || g === undefined) return { ok: true, geometria: null };
-  if (!esObjeto(g) || typeof g.type !== 'string') return { ok: false, motivo: 'geometría sin tipo' };
-
-  const TIPOS = ['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon', 'GeometryCollection'];
-  if (!TIPOS.includes(g.type)) return { ok: false, motivo: `tipo de geometría desconocido: "${g.type}"` };
-
-  if (g.type === 'GeometryCollection') {
-    if (!Array.isArray(g.geometries)) return { ok: false, motivo: 'GeometryCollection sin geometrías' };
-    for (const sub of g.geometries) {
-      const r = validarGeometria(sub);
-      if (!r.ok) return r;
-    }
-    return { ok: true, geometria: g };
-  }
-
-  if (!Array.isArray(g.coordinates)) return { ok: false, motivo: `${g.type} sin coordenadas` };
-
-  let total = 0, malas = 0, fuera = 0;
-  const revisar = (v) => {
-    if (!Array.isArray(v)) { malas++; return; }
-    if (typeof v[0] === 'number' || v.length < 2 || typeof v[0] !== 'object') {
-      total++;
-      const [lon, lat] = v;
-      if (!esNumFinito(lon) || !esNumFinito(lat)) { malas++; return; }
-      if (lon < -180 || lon > 180 || lat < -90 || lat > 90) fuera++;
-      return;
-    }
-    v.forEach(revisar);
-  };
-  revisar(g.coordinates);
-
-  if (!total) return { ok: false, motivo: `${g.type} sin ningún vértice` };
-  if (malas) return { ok: false, motivo: `${malas} coordenada(s) que no son números` };
-  if (fuera) return { ok: false, motivo: `${fuera} coordenada(s) fuera del planeta` };
-  return { ok: true, geometria: g };
+  const r = validarGeo(g);
+  if (!r.ok) return { ok: false, motivo: r.motivo };
+  return { ok: true, geometria: g ?? null };
 }
 
 /**
@@ -163,8 +135,11 @@ export function crearProyecto({ filas, relaciones, noEvaluables, archivos, confi
     trazados: (filas ?? []).map((x) => ({
       id: x.id, frente: x.frente, contrato: x.contrato, contratista: x.contratista,
       proyecto: x.proyecto, municipio: x.municipio, direccion: x.direccion,
-      tipoCierre: x.tipoCierre, inicio: x.inicio, fin: x.fin,
-      inicioMs: x.inicioMs, finMs: x.finMs, vigenciaValida: x.vigenciaValida,
+      tipoCierre: x.tipoCierre,
+      // CANÓNICO: solo el texto. Los milisegundos son derivados y NO se
+      // guardan: dos representaciones de la misma fecha pueden contradecirse,
+      // y entonces lo mostrado y lo calculado dejan de ser lo mismo.
+      inicio: x.inicio, fin: x.fin,
       tipoGeometria: x.tipoGeometria, tieneGeometria: x.tieneGeometria,
       analizable: x.analizable, origenArchivo: x.origenArchivo, carpeta: x.carpeta,
       avisos: x.avisos ?? [], geometria: x.geometria,
@@ -254,7 +229,7 @@ export function leerProyecto(texto) {
 
   const trazados = [];
   const vistos = new Set();
-  let descartados = 0, geometriasInvalidas = 0, duplicados = 0;
+  let descartados = 0, geometriasInvalidas = 0, duplicados = 0, fechasDescartadas = 0;
 
   for (const t of d.trazados) {
     if (!esObjeto(t) || typeof t.id !== 'string' || !t.id.trim()) { descartados++; continue; }
@@ -271,21 +246,25 @@ export function leerProyecto(texto) {
       avisosTrazado.push(`geometría descartada al abrir el proyecto: ${g.motivo}`);
     }
 
-    const inicioMs = esNumFinito(t.inicioMs) ? t.inicioMs : null;
-    const finMs = esNumFinito(t.finMs) ? t.finMs : null;
-    const vigenciaValida = t.vigenciaValida === true && inicioMs !== null && finMs !== null && finMs >= inicioMs;
+    // VIGENCIA: el texto manda y los milisegundos se derivan de él. Si el
+    // archivo trae unos que no cuadran, la vigencia se descarta entera: no se
+    // elige en silencio entre dos fechas que se contradicen.
+    const vig = normalizarVigencia({ inicio: t.inicio, fin: t.fin, inicioMs: t.inicioMs, finMs: t.finMs });
+    for (const a of vig.avisos) avisosTrazado.push(a);
+    if (!vig.valida && (t.inicio || t.fin)) fechasDescartadas++;
 
     vistos.add(t.id);
     trazados.push({
       id: t.id,
       frente: t.frente ?? null, contrato: t.contrato ?? null, contratista: t.contratista ?? null,
       proyecto: t.proyecto ?? null, municipio: t.municipio ?? null, direccion: t.direccion ?? null,
-      tipoCierre: t.tipoCierre ?? null, inicio: t.inicio ?? null, fin: t.fin ?? null,
-      inicioMs, finMs, vigenciaValida,
+      tipoCierre: t.tipoCierre ?? null,
+      inicio: vig.inicio, fin: vig.fin,
+      inicioMs: vig.inicioMs, finMs: vig.finMs, vigenciaValida: vig.valida,
       geometria,
       tipoGeometria: geometria?.type ?? null,
       tieneGeometria: !!geometria,
-      analizable: !!geometria && vigenciaValida && !!t.contrato,
+      analizable: !!geometria && vig.valida && !!t.contrato,
       origenArchivo: t.origenArchivo ?? null, carpeta: t.carpeta ?? null,
       avisos: avisosTrazado,
     });
@@ -294,6 +273,7 @@ export function leerProyecto(texto) {
   if (descartados) avisos.push(`Se descartaron ${descartados} trazado(s) con datos incompletos o mal formados.`);
   if (duplicados) avisos.push(`Se descartaron ${duplicados} trazado(s) con un identificador repetido.`);
   if (geometriasInvalidas) avisos.push(`${geometriasInvalidas} trazado(s) traían una geometría inválida; se conservan sin geometría y quedan fuera del análisis espacial.`);
+  if (fechasDescartadas) avisos.push(`${fechasDescartadas} trazado(s) traían fechas ilegibles o contradictorias; se conservan sin vigencia y no entran en la comparación temporal.`);
   if (!trazados.length) return { ok: false, motivo: 'El proyecto no contiene ningún trazado utilizable.' };
 
   // ── Relaciones: SI VIENEN, SE IGNORAN ──

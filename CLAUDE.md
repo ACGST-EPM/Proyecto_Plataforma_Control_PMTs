@@ -29,7 +29,35 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
 Repo publicado: `ACGST-EPM/Control-y-Articulacion-de-PMTs-EPM` (GitHub Pages).
 Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada`, `02_Proyecto_QGIS`, `Control-y-Articulacion-de-PMTs-EPM`).
 
-## Estado de la migración (Etapa 2.2 implementada; en pausa para auditoría)
+## Estado de la migración (Etapa 2.3 implementada; en pausa para auditoría)
+
+### Invariantes de aplicación — no los rompa
+- **Representación visual = estado interno.** Ningún filtro puede estar activo sin verse en su
+  control. `Controles.verificarSincronia()` lo comprueba tras pintar y retira lo que el control no
+  pueda representar.
+- **El dato mostrado es el dato con el que se calcula.** El texto `AAAA-MM-DD HH:MM:SS` es CANÓNICO;
+  los milisegundos son DERIVADOS y **no se persisten**. Si un archivo trae unos que contradicen al
+  texto, la vigencia se descarta: no se elige en silencio (`app/nucleo/tiempo.js`).
+- **Guardar y abrir no cambia la semántica.** Hay pruebas de ida y vuelta por tipo de geometría.
+- **Resumen = detalle.** Tablero, informe y exportaciones usan `resumir(analisis, filas, relaciones,
+  noEvaluables)` con el MISMO alcance. No recalcule una cifra por su cuenta en el informe.
+- **A/B = B/A.** `puntosMasCercanos` delega la distancia en `medir()` y prueba la contención en las
+  dos direcciones. Si no puede situar el punto con fiabilidad, devuelve `ubicado:false` y **no
+  dibuja** en vez de inventar una ubicación.
+- **El último día con actividad siempre es seleccionable** (`dominioRecorrido`, en días calendario,
+  nunca redondeando duraciones).
+- **Un error nunca queda invisible**: todos van a `#avisoGlobal`, que vive fuera del panel de carga.
+- **Un dato derivado nunca sustituye al motor.**
+
+### Otras reglas de la 2.3
+- `app/nucleo/geojson.js` valida con una **regla explícita por tipo**. No vuelva a deducir la
+  estructura por la profundidad de los arrays: eso rechazaba `Polygon`, `MultiLineString` y
+  `MultiPolygon` de un solo elemento.
+- El **gestor de fuentes** (`#panelFuentes`) queda visible siempre que haya análisis.
+- Las fechas de filtro se validan contra el calendario real, no con una expresión regular.
+- Pruebas: 229 motor + 102 app + **37 de navegador real**.
+
+### Estado anterior (Etapa 2.2)
 - **Un `.pmt.json` NUNCA dicta resultados.** Guarda trazados (entrada), procedencia, configuración y
   una instantánea de recuentos marcada como informativa. Las relaciones **se recalculan siempre** al
   abrir. `leerProyecto()` valida esquema (rechaza 0, −1 y futuros), IDs duplicados, geometrías,

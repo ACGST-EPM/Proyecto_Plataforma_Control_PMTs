@@ -190,6 +190,29 @@ export function limitesDelDia(ms) {
 }
 
 /**
+ * DOMINIO DEL RECORRIDO, en DIAS CALENDARIO.
+ *
+ * Antes el deslizador se dimensionaba redondeando la DURACION entre el primer y
+ * el ultimo instante. Con una vigencia del 1 de marzo a las 23:00 al 3 de marzo
+ * a la 01:00 la duracion es de 26 horas, que redondea a 1 dia, y el 3 de marzo
+ * —un dia con actividad real— quedaba fuera del deslizador.
+ *
+ * Ahora se cuentan DIAS DE CALENDARIO entre el primero y el ultimo, que es
+ * exactamente lo que el recorrido representa. El ultimo dia con cualquier
+ * actividad siempre es alcanzable.
+ */
+export function dominioRecorrido(filas) {
+  const r = rangoTemporal(filas);
+  if (!r) return null;
+  const primerDia = limitesDelDia(r.min).inicio;
+  const ultimoDia = limitesDelDia(r.max).inicio;
+  return {
+    primerDia, ultimoDia,
+    dias: Math.round((ultimoDia - primerDia) / MS_DIA),   // indice maximo del deslizador
+  };
+}
+
+/**
  * PMT que tienen actividad en el DIA CALENDARIO que contiene a `ms`.
  * Un PMT sin vigencia valida NO cuenta: no se puede afirmar que este vigente.
  */

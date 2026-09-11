@@ -7,7 +7,28 @@
  */
 import { estadoEspacial, estadoTemporal, ESPACIAL, TEMPORAL, LECTURA } from './modelo.js';
 
-export function resumir(analisis, filas, relaciones) {
+/**
+ * MODELO DE RESUMEN ÚNICO.
+ *
+ * ══ POR QUÉ ════════════════════════════════════════════════════════════════
+ *
+ * El informe calculaba sus tarjetas por su cuenta, filtrando `relaciones`, y las
+ * tablas de detalle usaban otra colección. Resultado medido: la tabla mostraba
+ * 1 pareja no evaluable y la tarjeta decía 0, porque los pares no evaluables NO
+ * están en `relaciones` — el motor los devuelve aparte, precisamente para que no
+ * se confundan con relaciones normales.
+ *
+ * La clase de error es «dos sitios calculando la misma cifra». Se elimina
+ * haciendo que el tablero, el informe y las exportaciones llamen todos a
+ * `resumir()` con el MISMO alcance. Si una tarjeta y su tabla difieren, es que
+ * se les pasó un alcance distinto, y eso es visible en la llamada.
+ *
+ * @param {object|null} analisis    resultado del motor (para la calidad de la entrada)
+ * @param {Array} filas             PMT del alcance
+ * @param {Array} relaciones        relaciones del alcance
+ * @param {Array} [noEvaluables]    pares del alcance que NO se pudieron medir
+ */
+export function resumir(analisis, filas, relaciones, noEvaluables = []) {
   const c = analisis?.calidad ?? {};
   const est = analisis?.estadisticas ?? {};
 
@@ -30,8 +51,11 @@ export function resumir(analisis, filas, relaciones) {
     municipios: new Set(filas.map((x) => x.municipio).filter(Boolean)).size,
     relaciones: relaciones.length,
     contacto, cercania, aLaVez, contactoALaVez,
-    espacialNoEval: espacialNoEval + (est.paresNoEvaluablesEspacialmente ?? 0),
+    // Los pares no evaluables llegan en su propia colección: NO están en
+    // `relaciones`. Se cuentan de ahí, que es la única fuente correcta.
+    espacialNoEval: espacialNoEval + (noEvaluables?.length ?? 0),
     temporalNoEval,
+    noEvaluables: noEvaluables ?? [],
     // Calidad de la entrada
     archivosCompletos: c.archivosCompletos ?? 0,
     archivosParciales: c.archivosParciales ?? 0,

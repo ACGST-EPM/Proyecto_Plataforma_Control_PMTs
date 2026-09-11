@@ -96,6 +96,12 @@ function conectarCarga() {
 
   $('btnEmpezarDeNuevo').onclick = () => reiniciar();
   $('btnGuardarProyecto').onclick = () => guardarProyecto();
+  $('btnDetalleFuentes').onclick = (e) => {
+    const abierto = e.target.getAttribute('aria-expanded') === 'true';
+    e.target.setAttribute('aria-expanded', String(!abierto));
+    e.target.textContent = abierto ? 'Ver detalle' : 'Ocultar detalle';
+    mostrar('listaFuentes', !abierto);
+  };
 }
 
 function reiniciar() {
@@ -111,21 +117,31 @@ function reiniciar() {
     archivos: [], analisis: null, visibles: [], relVisibles: [],
     seleccionado: null, instanteRecorrido: null, nombreProyecto: '',
   });
-  $('listaSeleccion').innerHTML = '';
-  mostrar('progreso', false);
-  for (const p of ['panelResumen', 'panelExplorar', 'panelDetalle', 'panelExportar']) mostrar(p, false);
+  $('listaFuentes').innerHTML = '';
+  $('cuentaFuentes').textContent = '0';
+  ocultarAviso();
+  for (const p of ['panelFuentes', 'panelResumen', 'panelExplorar', 'panelDetalle', 'panelExportar', 'panelInforme']) mostrar(p, false);
   mostrar('panelCarga', true);
   mostrar('btnEmpezarDeNuevo', false);
   mostrar('btnGuardarProyecto', false);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+/**
+ * Avisa al usuario. Escribe SIEMPRE en la zona global, que vive fuera del panel
+ * de carga y nunca se oculta. Antes los mensajes iban dentro de `panelCarga`, y
+ * al abrir un proyecto ese panel se ocultaba: un error al abrir un archivo
+ * invalido quedaba escrito en un sitio que nadie podia ver.
+ */
 function avisar(texto, clase = '') {
-  const n = $('progreso');
-  n.className = 'frase ' + clase;
+  const n = $('avisoGlobal');
+  n.className = 'frase no-imprimir ' + clase;
   n.innerHTML = texto;
-  mostrar('progreso', true);
+  mostrar('avisoGlobal', true);
+  if (clase === 'error') n.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
+
+const ocultarAviso = () => mostrar('avisoGlobal', false);
 
 /**
  * IDENTIDAD DE UNA FUENTE: el NOMBRE del archivo, y su CONTENIDO para saber si
@@ -247,7 +263,7 @@ async function reanalizar(fuentes, opciones = {}) {
       },
     });
     pintarListaFuentes();
-    mostrar('progreso', false);
+    ocultarAviso();
     pintarTodo(ms, opciones.extra ? { ...opciones.extra, notas } : (notas.length ? { notas } : null));
   } catch (e) {
     avisar(`<b>Ocurrió un error inesperado al procesar las fuentes.</b><br>` +
@@ -301,12 +317,13 @@ function calidadDe(filas, diagnostico, analisisArchivos) {
 
 /** Lista siempre visible de qué compone el análisis actual, con opción de quitar. */
 function pintarListaFuentes() {
-  const caja = $('listaSeleccion');
+  const caja = $('listaFuentes');
+  if (!caja) return;
+  $('cuentaFuentes').textContent = num(estado.fuentes.length);
   if (!estado.fuentes.length) { caja.innerHTML = ''; return; }
   const diag = new Map(Ingesta.diagnosticoArchivos(estado.archivos).map((d) => [d.nombre, d]));
   const clase = { [LECTURA.COMPLETA]: 'p-ok', [LECTURA.PARCIAL]: 'p-parcial', [LECTURA.FALLIDA]: 'p-fallo' };
-  caja.innerHTML = `<div class="titulillo">Fuentes del análisis actual (${num(estado.fuentes.length)})</div>` +
-    estado.fuentes.map((f) => {
+  caja.innerHTML = estado.fuentes.map((f) => {
       if (f.clase === 'proyecto') {
         return `<div class="fuente">
           <span class="pastilla p-avez">Proyecto</span>
@@ -330,8 +347,9 @@ function pintarListaFuentes() {
 
 function soloCalidad() {
   const diag = Ingesta.diagnosticoArchivos(estado.archivos);
+  mostrar('panelFuentes', true);
   mostrar('panelDetalle', true);
-  Tablas.pintarCalidad(diag, resumir(null, [], []), []);
+  Tablas.pintarCalidad(diag, resumir(null, [], [], []), []);
   irAPestana('cal');
   mostrar('btnEmpezarDeNuevo', true);
 }
@@ -414,7 +432,10 @@ async function abrirProyecto(file, { acumular = false } = {}) {
 /* ───────────────────────── Pintado ───────────────────────── */
 
 function pintarTodo(ms, extra = null) {
-  for (const p of ['panelResumen', 'panelExplorar', 'panelDetalle', 'panelExportar']) mostrar(p, true);
+  // El gestor de fuentes queda SIEMPRE visible mientras haya un analisis: es
+  // desde donde se anade, se quita y se ven los diagnosticos.
+  for (const p of ['panelFuentes', 'panelResumen', 'panelExplorar', 'panelDetalle', 'panelExportar']) mostrar(p, true);
+  mostrar('panelCarga', false);
   mostrar('btnEmpezarDeNuevo', true);
   mostrar('btnGuardarProyecto', true);
 
@@ -422,7 +443,10 @@ function pintarTodo(ms, extra = null) {
   montarControlFondo();
   // Los filtros guardados solo se restauran al ABRIR un proyecto por si solo.
   // Si se estan anadiendo fuentes, mandan los filtros que el usuario tiene puestos.
-  if (extra?.soloProyecto && extra.proyecto?.filtros) Controles.fijarFiltros(extra.proyecto.filtros);
+  if (extra?.soloProyecto && extra.proyecto?.filtros) {
+    const rechazados = Controles.fijarFiltros(extra.proyecto.filtros) ?? [];
+    if (rechazados.length) (extra.notas ??= []).push(...rechazados);
+  }
   Controles.montarFiltros(estado.filas, aplicarFiltros);
   Controles.montarRecorrido(estado.filas, (instante) => {
     estado.instanteRecorrido = instante;
@@ -432,7 +456,7 @@ function pintarTodo(ms, extra = null) {
   aplicarFiltros();
   Mapa.encuadrar();
 
-  const res = resumir(estado.analisis, estado.filas, estado.relaciones);
+  const res = resumir(estado.analisis, estado.filas, estado.relaciones, estado.noEvaluables);
   pintarResumen(res, ms, extra);
   Tablas.pintarCalidad(
     Ingesta.diagnosticoArchivos(estado.archivos), res,
@@ -588,7 +612,8 @@ export function verInforme() {
     filas: estado.visibles, relaciones: estado.relVisibles, porId: estado.porId,
     noEvaluables: estado.noEvalVisibles ?? estado.noEvaluables,
     archivos: Ingesta.diagnosticoArchivos(estado.archivos),
-    resumen: resumir(estado.analisis, estado.visibles, estado.relVisibles),
+    // MISMO alcance para las tarjetas y para las tablas del informe.
+    resumen: resumir(estado.analisis, estado.visibles, estado.relVisibles, estado.noEvalVisibles ?? estado.noEvaluables),
     filtros: Controles.actuales(), config: CONFIG,
     versionReglas: VERSION_REGLAS,
     // Si el recorrido esta activo, el informe cubre SOLO ese dia y debe decirlo.

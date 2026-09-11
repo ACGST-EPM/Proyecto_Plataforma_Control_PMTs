@@ -13,8 +13,8 @@ arrastre sus KMZ o KML y listo. No hay que instalar nada ni tener internet.
 
 ```bash
 npm run preparar       # instala dependencias de desarrollo (npm ci, versiones fijas)
-npm test               # 229 pruebas del motor + 75 de la aplicación
-npm run test:navegador # 31 pruebas en Chromium real sobre el archivo de dist/
+npm test               # 229 pruebas del motor + 102 de la aplicación
+npm run test:navegador # 37 pruebas en Chromium real sobre el archivo de dist/
 npm run construir      # regenera dist/Plataforma_PMTs.html y dist/verificador.html
 ```
 

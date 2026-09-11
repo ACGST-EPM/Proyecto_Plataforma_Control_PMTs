@@ -12,7 +12,8 @@
  */
 import { $, $$, esc, num, crear, soloDia } from './dom.js';
 import * as Filtro from '../nucleo/filtrado.js';
-import { vigentesEnDia, rangoTemporal, limitesDelDia } from '../nucleo/filtrado.js';
+import { vigentesEnDia, rangoTemporal, limitesDelDia, dominioRecorrido } from '../nucleo/filtrado.js';
+import { validarFechaCalendario } from '../nucleo/tiempo.js';
 
 const ETIQUETAS = {
   contratista: 'Contratista', contrato: 'Contrato', proyecto: 'Proyecto',
@@ -30,10 +31,15 @@ export const actuales = () => filtros;
  * `.pmt.json` editado a mano no puede colar un filtro con forma imposible.
  */
 export function fijarFiltros(f) {
+  rechazados = [];
   const base = Filtro.filtrosVacios();
-  if (!f || typeof f !== 'object') { filtros = base; return; }
+  if (!f || typeof f !== 'object') { filtros = base; return rechazados; }
   const lista = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
-  const fecha = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  // VALIDACION REAL DE CALENDARIO, no de formato: "2026-99-99" pasa cualquier
+  // expresion regular y no existe. Un filtro que el <input type=date> no puede
+  // representar quedaba activo con el campo vacio, y la tabla salia en cero sin
+  // que nada lo explicara.
+  const fecha = (v) => (validarFechaCalendario(v).ok ? v : null);
   filtros = {
     ...base,
     contratista: lista(f.contratista), contrato: lista(f.contrato), proyecto: lista(f.proyecto),
@@ -42,7 +48,22 @@ export function fijarFiltros(f) {
     desde: fecha(f.desde), hasta: fecha(f.hasta),
     texto: typeof f.texto === 'string' ? f.texto : '',
   };
+  // Rango invertido: no se aplica a medias.
+  if (filtros.desde && filtros.hasta && filtros.desde > filtros.hasta) {
+    rechazados.push(`el rango de fechas estaba invertido (${filtros.desde} a ${filtros.hasta}); no se aplicó`);
+    filtros.desde = null; filtros.hasta = null;
+  }
+  for (const [k, v] of Object.entries(f ?? {})) {
+    if (['desde', 'hasta'].includes(k) && v && !filtros[k]) {
+      rechazados.push(`la fecha «${v}» no existe en el calendario; ese filtro no se aplicó`);
+    }
+  }
+  return rechazados;
 }
+
+/** Motivos por los que se descartó algo al restaurar filtros, para poder decirlo. */
+let rechazados = [];
+export const filtrosRechazados = () => [...rechazados];
 
 /**
  * Devuelve los filtros y el recorrido a cero. `Empezar de nuevo` tiene que
@@ -133,6 +154,39 @@ export function montarFiltros(filas, onCambio) {
   }));
 
   refrescarListas(null);
+  verificarSincronia();
+}
+
+/**
+ * INVARIANTE: representación visual = estado interno.
+ *
+ * Después de pintar los controles se comprueba que cada filtro activo se vea de
+ * verdad en su control. Si el navegador rechazó un valor —un `<input type=date>`
+ * se vacía solo ante una fecha que no puede representar— el filtro se retira,
+ * porque un filtro activo e invisible deja al usuario delante de una tabla en
+ * cero sin nada que lo explique.
+ *
+ * Devuelve los filtros que hubo que retirar, para poder decirlo.
+ */
+export function verificarSincronia() {
+  const retirados = [];
+  for (const campo of ['desde', 'hasta']) {
+    const valor = filtros[campo];
+    if (!valor) continue;
+    const control = $(campo === 'desde' ? 'fDesde' : 'fHasta');
+    if (!control) continue;
+    if (control.value !== valor) {
+      retirados.push(`el control de fecha no pudo representar «${valor}»; ese filtro se retiró`);
+      filtros[campo] = null;
+      control.value = '';
+    }
+  }
+  const t = $('fTexto');
+  if (t && filtros.texto && t.value !== filtros.texto) {
+    t.value = filtros.texto;                      // el texto siempre es representable
+  }
+  if (retirados.length) { rechazados.push(...retirados); alCambiar(); }
+  return retirados;
 }
 
 function cambiar(origen) {
@@ -177,7 +231,7 @@ export function limpiar() {
 
 /* ───────────────────────── Recorrido temporal ───────────────────────── */
 
-let rango = null, tocando = false, temporizador = null, alPaso = () => {}, filasRec = [];
+let rango = null, dominio = null, tocando = false, temporizador = null, alPaso = () => {}, filasRec = [];
 
 /**
  * VELOCIDADES. El valor es el MULTIPLICADOR, no el intervalo: el intervalo se
@@ -204,12 +258,15 @@ export function montarRecorrido(filas, onPaso) {
   alPaso = onPaso;
   filasRec = filas;
   rango = rangoTemporal(filas);
+  dominio = dominioRecorrido(filas);
   const caja = $('recorrido');
-  if (!rango) {
+  if (!rango || !dominio) {
     caja.innerHTML = '<div style="color:var(--tenue);font-size:.86rem">Los datos cargados no tienen fechas válidas, así que no se puede recorrer el tiempo.</div>';
     return;
   }
-  const dias = Math.max(1, Math.round((rango.max - rango.min) / 86400000));
+  // Dias de CALENDARIO, no duracion redondeada: asi el ultimo dia con
+  // actividad siempre se puede seleccionar.
+  const dias = dominio.dias;
   caja.innerHTML = `
     <button id="btnPlay" class="b-verde" aria-label="Reproducir el recorrido">▶ Reproducir</button>
     <input type="range" id="barraTiempo" min="0" max="${dias}" value="0" aria-label="Día del recorrido">
@@ -240,7 +297,7 @@ export function volverATodo() {
 function aplicarPaso(dia) {
   // Se ancla al INICIO del dia calendario: el recorrido representa dias
   // completos, no el instante que resulte de arrastrar la hora del primer dato.
-  const ms = limitesDelDia(rango.min).inicio + dia * 86400000;
+  const ms = dominio.primerDia + dia * 86400000;
   $('fechaViva').textContent = soloDia(ms);
   const n = vigentesEnDia(filasRec, ms).length;
   $('vigentesAhora').textContent = `${num(n)} PMT con actividad ese día completo`;

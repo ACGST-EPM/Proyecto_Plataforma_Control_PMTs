@@ -19,10 +19,20 @@
  * este resultado no alimenta ningun calculo: solo decide donde se pinta una
  * linea.
  */
-import { descomponer, cajaDe, RADIO_DOMINIO_METROS } from './geometria.js';
+import { descomponer, cajaDe, RADIO_DOMINIO_METROS, medir } from './geometria.js';
 import { planoParaCajas } from './plano-local.js';
 import { unir, radioAproximadoMetros, cotaInferiorMetros } from './cajas.js';
 import { ajustarACero, puntoEnAnillo, distPuntoAnillo } from './segmentos.js';
+
+/**
+ * Margen para dar por buena una ubicacion frente a la distancia canonica.
+ *
+ * Un milimetro: muy por encima del efecto arco-cuerda documentado (2,6 mm por
+ * kilometro de tramo) seria demasiado, y por debajo del micrometro rechazaria
+ * ubicaciones correctas por ruido de coma flotante. Se usa solo para decidir si
+ * se dibuja el conector; nunca altera la distancia, que es la del motor.
+ */
+const TOLERANCIA_UBICACION_M = 0.05;
 
 /** Punto mas cercano de un segmento a un punto, como parametro t en [0,1]. */
 function tCercanoPuntoSegmento(p, a, b) {
@@ -149,11 +159,26 @@ function partesDe(geom) {
  *          se inventa una ubicacion.
  */
 export function puntosMasCercanos(geomA, geomB) {
-  const partesA = partesDe(geomA), partesB = partesDe(geomB);
   const vacio = { a: null, b: null, metros: null, evaluable: false, contacto: false };
+
+  // ── LA DISTANCIA LA DICE EL MOTOR, SIEMPRE ──
+  //
+  // Este modulo localiza DONDE se aproximan dos geometrias; cuanto distan lo
+  // decide `medir()`, que es la regla canonica. Antes calculaba su propia
+  // distancia y podia separarse de ella: `medir()` subdivide las partes que no
+  // caben en el dominio y declara no evaluable un minimo POSITIVO cuando queda
+  // algun par sin resolver, y esa regla no estaba aqui. En un barrido aleatorio
+  // aparecian casos donde el motor decia "no se puede medir" y el dibujo
+  // enseñaba un numero.
+  //
+  // Delegando, las dos cosas no pueden divergir por construccion.
+  const canonico = medir(geomA, geomB);
+  if (canonico.metros === null) return vacio;
+
+  const partesA = partesDe(geomA), partesB = partesDe(geomB);
   if (!partesA.length || !partesB.length) return vacio;
 
-  let min = Infinity, mejorA = null, mejorB = null, algunaEvaluada = false;
+  let min = Infinity, mejorA = null, mejorB = null;
 
   for (const pa of partesA) {
     if (min === 0) break;
@@ -161,23 +186,22 @@ export function puntosMasCercanos(geomA, geomB) {
       if (cotaInferiorMetros(pa.caja, pb.caja) >= min) continue;
       const union = unir(pa.caja, pb.caja);
       if (radioAproximadoMetros(union) > RADIO_DOMINIO_METROS) continue;
-      algunaEvaluada = true;
 
       const plano = planoParaCajas([pa.caja, pb.caja]);
       const P = plano.proyectar;
 
-      // Contencion antes que nada: si algo cae DENTRO de un poligono, el
-      // contacto esta ahi mismo y ningun borde puede mejorarlo.
+      // CONTENCION, EN LAS DOS DIRECCIONES.
+      //
+      // Si algo cae DENTRO de un poligono, el contacto esta ahi mismo y ningun
+      // borde puede mejorarlo. Probar una sola direccion rompia la simetria en
+      // cuanto las dos partes eran poligonos: un poligono pequeño contenido en
+      // uno grande daba 0 m en un orden y ~1.106 m en el contrario, porque
+      // ningun vertice del grande cae dentro del pequeño.
       if (pa.tipo === 'poligono' || pb.tipo === 'poligono') {
-        const pg = pa.tipo === 'poligono' ? pa : pb;
-        const otra = pa.tipo === 'poligono' ? pb : pa;
-        const dentro = buscarContenido(pg, otra, P);
-        if (dentro) {
-          min = 0;
-          mejorA = pa.tipo === 'poligono' ? [...dentro] : [...dentro];
-          mejorB = [...dentro];
-          break;
-        }
+        let dentro = null;
+        if (pb.tipo === 'poligono') dentro = buscarContenido(pb, pa, P);
+        if (!dentro && pa.tipo === 'poligono') dentro = buscarContenido(pa, pb, P);
+        if (dentro) { min = 0; mejorA = [...dentro]; mejorB = [...dentro]; break; }
       }
 
       for (const tramoA of tramosDe(pa)) {
@@ -191,7 +215,6 @@ export function puntosMasCercanos(geomA, geomB) {
               const r = cercanosSegmentoSegmento(a1, a2, b1, b2);
               if (r.d >= min) continue;
               min = r.d;
-              // Vuelta al terreno: mismo parametro sobre el segmento original.
               const ga1 = tramoA[i], ga2 = tramoA[Math.min(i + 1, tramoA.length - 1)];
               const gb1 = tramoB[j], gb2 = tramoB[Math.min(j + 1, tramoB.length - 1)];
               mejorA = interpGeo(ga1, ga2, r.t);
@@ -203,7 +226,21 @@ export function puntosMasCercanos(geomA, geomB) {
     }
   }
 
-  if (!algunaEvaluada || !Number.isFinite(min)) return vacio;
-  const metros = ajustarACero(min);
-  return { a: mejorA, b: mejorB, metros, evaluable: true, contacto: metros === 0 };
+  // La ubicacion tiene que corresponderse con la distancia canonica. Si no
+  // coincide —porque el motor resolvio el minimo subdividiendo partes que aqui
+  // se omitieron— se devuelve la distancia buena SIN ubicacion, en vez de
+  // dibujar un segmento en un sitio que no es. Mejor no pintar nada que pintar
+  // algo falso.
+  const metros = canonico.metros;
+  const localizado = Number.isFinite(min) ? ajustarACero(min) : null;
+  const fiable = localizado !== null && Math.abs(localizado - metros) <= TOLERANCIA_UBICACION_M;
+
+  return {
+    a: fiable ? mejorA : null,
+    b: fiable ? mejorB : null,
+    metros,
+    evaluable: true,
+    contacto: metros === 0,
+    ubicado: fiable,
+  };
 }

@@ -21,6 +21,11 @@
 
 <main class="envoltorio">
 
+  <!-- Zona de avisos SIEMPRE visible: un error jamás puede quedarse escondido
+       porque el panel que lo contenía esté oculto. -->
+  <div id="avisoGlobal" class="frase oculto no-imprimir" role="status" aria-live="polite"></div>
+
+
   <!-- ─────────────── PASO 1 · CARGA ─────────────── -->
   <section class="panel no-imprimir" id="panelCarga">
     <h2><span class="paso">1</span> Seleccione los archivos de sus PMT</h2>
@@ -38,10 +43,23 @@
           Sus archivos <b>no salen de su computador</b>: todo el análisis ocurre aquí mismo.
         </p>
       </div>
-      <div id="listaSeleccion" style="margin-top:14px"></div>
       <div id="progreso" class="frase oculto" style="margin-top:14px"></div>
       <input type="file" id="entradaAnadir" accept=".kmz,.kml" multiple hidden>
       <input type="file" id="entradaProyecto" accept=".json,.pmt.json" hidden>
+    </div>
+  </section>
+
+  <!-- ─────────────── GESTOR DE FUENTES (siempre visible con datos) ─────────────── -->
+  <section class="panel oculto no-imprimir" id="panelFuentes">
+    <h2>Fuentes del análisis <span class="cuenta" id="cuentaFuentes">0</span></h2>
+    <div class="cuerpo">
+      <div class="barra-acciones">
+        <button class="b-verde b-mini" id="btnAnadir" title="Suma más archivos al análisis actual">＋ Añadir archivos</button>
+        <button class="b-suave b-mini" id="btnAbrirProyecto">Añadir un proyecto guardado…</button>
+        <span class="sep"></span>
+        <button class="b-suave b-mini" id="btnDetalleFuentes" aria-expanded="true">Ocultar detalle</button>
+      </div>
+      <div id="listaFuentes"></div>
     </div>
   </section>
 
@@ -50,10 +68,7 @@
     <h2><span class="paso">2</span> Esto es lo que se encontró</h2>
     <div class="cuerpo">
       <div id="fraseResumen" class="frase"></div>
-      <div class="barra-acciones no-imprimir">
-        <button class="b-verde b-mini" id="btnAnadir" title="Suma más archivos al análisis actual">＋ Añadir más archivos</button>
-        <button class="b-suave b-mini" id="btnAbrirProyecto">Abrir otro proyecto…</button>
-      </div>
+
       <div class="tarjetas" id="tarjetas"></div>
       <div id="siguientePaso" class="frase" style="margin-top:16px;background:var(--azul-suave);border-left-color:var(--azul)"></div>
     </div>
