@@ -1,0 +1,17 @@
+{
+  "name": "plataforma-pmts-epm",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Plataforma de Control y Articulacion de PMTs (Grupo EPM). Aplicacion web que lee KMZ/KML directamente, detecta interferencias espacio-temporales entre contratos y las presenta en mapa, tabla e informe. No requiere QGIS.",
+  "engines": { "node": ">=18.0.0" },
+  "scripts": {
+    "preparar": "cd motor && npm ci",
+    "test": "npm run test:motor && npm run test:app",
+    "test:motor": "cd motor && npm test",
+    "test:app": "node --test app/test/*.test.mjs",
+    "construir": "node herramientas/construir-app.mjs && cd motor && npm run construir",
+    "construir:app": "node herramientas/construir-app.mjs",
+    "comparar": "cd motor && npm run comparar"
+  }
+}

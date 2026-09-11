@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plataforma de Control y Articulación de PMTs — Grupo EPM</title>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+
+<header class="cabecera">
+  <span class="marca-epm">EPM</span>
+  <div class="crece">
+    <h1>Plataforma de Control y Articulación de PMTs</h1>
+    <p class="sub">Centro de Gestión Servicios Técnicos · análisis de interferencias entre Planes de Manejo de Tránsito</p>
+  </div>
+  <button id="btnEmpezarDeNuevo" class="b-suave no-imprimir oculto">Empezar de nuevo</button>
+</header>
+
+<main class="envoltorio">
+
+  <!-- ─────────────── PASO 1 · CARGA ─────────────── -->
+  <section class="panel no-imprimir" id="panelCarga">
+    <h2><span class="paso">1</span> Seleccione los archivos de sus PMT</h2>
+    <div class="cuerpo">
+      <div class="zona-soltar" id="zona">
+        <p class="grande">Arrastre aquí sus archivos KMZ o KML</p>
+        <p class="pista">…o pulse el botón. Puede seleccionar varios a la vez, de cualquier carpeta de su computador.</p>
+        <p style="margin-top:14px">
+          <button class="b-verde" id="btnElegir">Elegir archivos…</button>
+        </p>
+        <input type="file" id="entrada" accept=".kmz,.kml" multiple hidden>
+        <p class="pista" style="margin-top:14px">
+          No necesita abrir QGIS, ni generar el reporte, ni publicar nada.<br>
+          Sus archivos <b>no salen de su computador</b>: todo el análisis ocurre aquí mismo.
+        </p>
+      </div>
+      <div id="listaSeleccion" style="margin-top:14px"></div>
+      <div id="progreso" class="frase oculto" style="margin-top:14px"></div>
+    </div>
+  </section>
+
+  <!-- ─────────────── PASO 2 · RESUMEN ─────────────── -->
+  <section class="panel oculto" id="panelResumen">
+    <h2><span class="paso">2</span> Esto es lo que se encontró</h2>
+    <div class="cuerpo">
+      <div id="fraseResumen" class="frase"></div>
+      <div class="tarjetas" id="tarjetas"></div>
+      <div id="siguientePaso" class="frase" style="margin-top:16px;background:var(--azul-suave);border-left-color:var(--azul)"></div>
+    </div>
+  </section>
+
+  <!-- ─────────────── PASO 3 · EXPLORAR ─────────────── -->
+  <section class="oculto" id="panelExplorar">
+    <div class="rejilla">
+
+      <div class="panel" style="margin-bottom:0">
+        <h2>Filtros</h2>
+        <div class="cuerpo" id="filtros"></div>
+      </div>
+
+      <div>
+        <div class="panel" style="margin-bottom:20px">
+          <h2><span class="paso">3</span> Mapa</h2>
+          <div class="cuerpo" style="padding-bottom:0">
+            <div class="barra-mapa no-imprimir">
+              <label style="display:flex;align-items:center;gap:6px;font-size:.85rem">
+                <input type="checkbox" id="verRelaciones" checked style="accent-color:#009300"> Mostrar las relaciones
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:.85rem">
+                <input type="checkbox" id="verFondo" checked style="accent-color:#009300"> Mapa de fondo
+              </label>
+              <span class="sep"></span>
+              <button class="b-suave b-mini" id="btnEncuadrar">Ver todo</button>
+            </div>
+            <div id="avisoMapa" class="frase atencion oculto" style="margin-bottom:10px;font-size:.86rem"></div>
+            <div id="mapa"></div>
+            <div class="leyenda">
+              <span><i class="muestra" style="background:#009300"></i> Trazado del PMT</span>
+              <span><i class="muestra" style="background:#d56b00"></i> Se tocan físicamente</span>
+              <span><i class="muestra" style="background:#1565c0"></i> Cerca, sin tocarse</span>
+              <span><i class="muestra" style="background:#5e35b1"></i> No se pudo analizar</span>
+              <span style="color:#6b7075">Línea discontinua = no coinciden en el tiempo</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-bottom:0">
+          <h2>Recorrido en el tiempo</h2>
+          <div class="cuerpo"><div class="recorrido" id="recorrido"></div></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─────────────── PASO 4 · DETALLE ─────────────── -->
+  <section class="panel oculto" id="panelDetalle" style="margin-top:20px">
+    <div class="pestanas no-imprimir" role="tablist">
+      <button role="tab" aria-selected="true"  data-pest="pmt">PMT <span class="cuenta" id="cuentaPmt">0</span></button>
+      <button role="tab" aria-selected="false" data-pest="rel">Relaciones <span class="cuenta" id="cuentaRel">0</span></button>
+      <button role="tab" aria-selected="false" data-pest="cal">Calidad de los datos <span class="cuenta" id="cuentaCal">0</span></button>
+    </div>
+    <div class="cuerpo">
+
+      <div id="pest_pmt">
+        <div class="tabla-caja"><table class="datos" id="tablaPmt"><thead></thead><tbody></tbody></table></div>
+      </div>
+
+      <div id="pest_rel" class="oculto">
+        <div class="frase" style="font-size:.88rem">
+          Aquí están los <b>hechos</b> de cada pareja: a qué distancia están, si llegan a tocarse y si coinciden en el tiempo.
+          <b>Todavía no se clasifica ninguna como crítica</b>: esa decisión se tomará cuando se puedan ver los casos reales.
+        </div>
+        <div class="tabla-caja"><table class="datos" id="tablaRel"><thead></thead><tbody></tbody></table></div>
+      </div>
+
+      <div id="pest_cal" class="oculto"><div id="panelCalidad"></div></div>
+
+    </div>
+  </section>
+
+  <!-- ─────────────── PASO 5 · EXPORTAR ─────────────── -->
+  <section class="panel oculto no-imprimir" id="panelExportar" style="margin-top:20px">
+    <h2><span class="paso">4</span> Guardar o compartir los resultados</h2>
+    <div class="cuerpo">
+      <p style="margin-top:0;color:var(--tinta-2)">Se exporta <b>lo que está viendo ahora</b>, con los filtros aplicados.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:9px">
+        <button class="b-verde"  id="expPmtCsv">PMT en Excel (CSV)</button>
+        <button class="b-verde"  id="expRelCsv">Relaciones en Excel (CSV)</button>
+        <button class="b-lima"   id="expGeoJson">Trazados en GeoJSON</button>
+        <button class="b-lima"   id="expKml">Trazados en KML</button>
+        <button class="b-nar"    id="expImprimir">Informe para imprimir o PDF</button>
+        <button class="b-suave"  id="expLegado" title="Mismas 11 columnas que producía QGIS, por si algo todavía las espera">CSV compatible con el formato antiguo</button>
+      </div>
+      <p style="font-size:.82rem;color:var(--tenue);margin-bottom:0;margin-top:12px">
+        El informe usa la impresión del navegador: desde ahí puede elegir «Guardar como PDF».
+      </p>
+    </div>
+  </section>
+
+  <div class="imprimir-solo" id="piePdf"></div>
+
+</main>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -8,7 +8,8 @@
     "test": "node --test test/*.test.mjs",
     "inventario": "node herramientas/inventario.mjs",
     "comparar": "node herramientas/comparar.mjs",
-    "construir": "node herramientas/construir-verificador.mjs"
+    "construir": "node herramientas/construir-verificador.mjs",
+    "construir-app": "node ../herramientas/construir-app.mjs"
   },
   "devDependencies": {
     "@turf/turf": "7.4.0"

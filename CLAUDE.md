@@ -14,7 +14,10 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
 ## Componentes y archivos (nombres definitivos)
 - `Generador_KMZ.html` — captura estandarizada + genera KMZ (Leaflet + JSZip). Autocontenido.
 - `proceso_pmt_qgis.py` — motor de análisis; se pega en la Consola de Python de QGIS. Genera capas + `reporte_dinamico.csv`.
-- `Plataforma_PMTs.html` — dashboard (Bootstrap + DataTables + Select2). Lee `reporte_dinamico.csv`.
+- `dist/Plataforma_PMTs.html` — **LA APLICACIÓN (Etapa 2).** Un solo archivo, doble clic, sin internet.
+  Lee KMZ/KML directamente. Fuente en `app/` (ver `app/README.md`); se regenera con `npm run construir:app`.
+- `Plataforma_PMTs.html` — tablero ANTERIOR (Bootstrap + DataTables + Select2, lee `reporte_dinamico.csv`,
+  mapa qgis2web en iframe, API de GitHub). **Sustituido.** Se conserva durante la transición; no lo modifiques.
 - `contratos_db.json` — base maestra de contratos (contrato → contratista, proyecto, municipios[]).
 - `DOCUMENTACION_Plataforma_PMTs_EPM.md` — documento maestro con todo el detalle.
 - `AUDITORIA_ETAPA0_Plataforma_PMTs.md` — auditoría técnica del estado real (Etapa 0, aprobada).
@@ -26,7 +29,22 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
 Repo publicado: `ACGST-EPM/Control-y-Articulacion-de-PMTs-EPM` (GitHub Pages).
 Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada`, `02_Proyecto_QGIS`, `Control-y-Articulacion-de-PMTs-EPM`).
 
-## Estado de la migración (Etapa 1 terminada y corregida; en pausa para revisión)
+## Estado de la migración (Etapa 2 implementada; en pausa para auditoría)
+- **La operación normal YA NO requiere** QGIS, Python/PyQGIS, qgis2web, `reporte_dinamico.csv`,
+  API de GitHub ni GitHub Pages. `proceso_pmt_qgis.py` queda como **oráculo de regresión**: el motor
+  reproduce su salida 708/708 y esa comprobación debe seguir pasando.
+- Punto de entrada único: `npm run preparar` · `npm test` (218 motor + 37 app) · `npm run construir`.
+  **`motor/package-lock.json` SÍ se versiona**: sin él `npm ci` falla y se pierden 3 pruebas.
+- La aplicación **no clasifica criticidad**. Presenta hechos separados (distancia, contacto físico,
+  coincidencia temporal). No introduzcas «crítico/alto/medio» sin decisión operativa explícita.
+- Regla que atraviesa el producto: **«no se encontró relación» y «no se pudo analizar» nunca se
+  presentan igual**. Contador, color, filtro y pastilla propios para cada uno.
+- `app/nucleo/` es lógica pura sin DOM (se prueba en Node); `app/ui/` toca el DOM (se prueba en
+  navegador). No mezcles las dos cosas.
+- Leaflet 1.9.4 (BSD-2-Clause) está **vendorizado** en `app/vendor/`. No lo sustituyas por una CDN:
+  la aplicación debe funcionar sin internet.
+
+### Estado anterior (Etapa 1, cerrada y auditada)
 - El motor nuevo (`motor/`) corre **en paralelo**: no sustituye al tablero, no retira QGIS ni
   qgis2web, no toca el generador. `proceso_pmt_qgis.py` queda **congelado** como referencia; no se
   corrige para hacerlo coincidir con el nuevo.
@@ -49,7 +67,10 @@ Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada
 - **Formato del campo Descripción del KMZ** (lo produce el generador y lo lee el motor):
   `fecha_inicio: AAAA-MM-DD HH:MM:SS | fecha_fin: ... | tipo_cierre: <total|parcial|ingreso y salida> | direccion: ... | municipio: ... | contrato: ... | contratista: ... | proyecto: ...`
   Separador ` | `. Los textos libres eliminan cualquier `|` interno.
-- **Lista cerrada `tipo_cierre`**: `total`, `parcial`, `ingreso y salida`.
+- **Lista `tipo_cierre`**: `total`, `parcial`, `ingreso y salida` (histórica, la que produce el
+  generador). En la Etapa 2 se AMPLIÓ con `ingreso` y `salida` por separado, porque la usuaria los
+  declaró como tipos existentes. La lista solo se amplía, nunca se recorta: nada que hoy sea válido
+  puede dejar de serlo. Si añade un valor, actualice generador Y motor a la vez.
 - **Columnas del CSV** (`reporte_dinamico.csv`): `CATEGORIA, CONTRATO, CONTRATISTA, MUNICIPIO, FRENTE, DIRECCION, ESTADO_CIERRE, HORARIO, FECHA_INICIO, FECHA_FIN, DURACION_DIAS`. El dashboard depende de estos índices (0..10).
 - **Capas QGIS** (nombres exactos): `🚀 GESTIÓN PMT MAESTRA`, `📍 INGRESO Y SALIDA` (punto azul), `🔵 CERCANÍA (120m)`, `🟠 INTERFERENCIA REAL`, `📋 REPORTE DINÁMICO`.
 - **Marca EPM**: verde `#009300`, lima `#b7c200`, naranja `#d56b00`.
