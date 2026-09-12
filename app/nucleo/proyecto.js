@@ -282,6 +282,19 @@ export function leerProyecto(texto) {
         'identificador no lo respalda; la marca se ignora.');
     }
 
+    // AVISOS DERIVADOS: SE RECALCULAN, NO SE ACUMULAN.
+    //
+    // `normalizarVigencia` deriva sus avisos del texto guardado, asi que en cada
+    // apertura vuelve a producir los mismos. Al anadirlos a los que ya venian
+    // dentro del archivo, guardar y abrir cuatro veces dejaba cuatro copias de
+    // «la fecha de fin es anterior a la de inicio». Eso es guardar y abrir
+    // CAMBIANDO el dato, aunque sea solo ruido.
+    //
+    // Se resuelve para toda la familia: un aviso repetido literalmente no
+    // aporta nada, asi que se conserva la primera aparicion y se descartan las
+    // demas. Tambien limpia archivos que ya vinieran con avisos duplicados.
+    const avisosUnicos = [...new Set(avisosTrazado)];
+
     vistos.add(t.id);
     trazados.push({
       id: t.id,
@@ -297,7 +310,7 @@ export function leerProyecto(texto) {
       tieneGeometria: !!geometria,
       analizable: !!geometria && vig.valida && !!t.contrato,
       origenArchivo: t.origenArchivo ?? null, carpeta: t.carpeta ?? null,
-      avisos: avisosTrazado,
+      avisos: avisosUnicos,
     });
   }
 

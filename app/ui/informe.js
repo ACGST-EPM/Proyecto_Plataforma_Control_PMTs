@@ -361,6 +361,7 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
     ['Trazados sin contrato (excluidos del análisis de interferencias)', resumen.sinContrato],
     ['Trazados sin municipio', resumen.sinMunicipio],
     ['Duplicados exactos dentro de un mismo archivo', resumen.duplicados],
+    ['Identificador repetido en el KMZ para trazados distintos', resumen.idsRepetidos],
     ['Parejas cuya distancia no se pudo medir', resumen.espacialNoEval],
     ['Parejas cuyas fechas no permiten decidir el traslape', resumen.temporalNoEval],
   ].filter(([, n]) => n > 0);

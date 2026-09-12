@@ -45,7 +45,13 @@ export function relacionesACsv(relaciones, porId) {
       ETIQUETA_ESPACIAL[estadoEspacial(r)], ETIQUETA_TEMPORAL[estadoTemporal(r)],
       r.traslapeInicio ?? '', r.traslapeFin ?? '', r.traslapeDias ?? '',
       a?.municipio ?? '', b?.municipio ?? '',
-      (r.motivoNoEvaluable ?? r.avisos?.join(' | ') ?? ''),
+      // El motivo lo publica el motor como `motivoNoEvaluableEspacial`. El
+      // nombre corto que habia aqui no existe en ningun sitio, asi que la
+      // columna caia siempre al respaldo y publicaba avisos donde prometia un
+      // motivo. Ahora se leen los dos motivos, cada uno con su etiqueta.
+      [r.motivoNoEvaluableEspacial ? `distancia: ${r.motivoNoEvaluableEspacial}` : '',
+       r.traslapeEvaluable === false && r.motivoSinTraslape ? `fechas: ${r.motivoSinTraslape}` : '']
+        .filter(Boolean).join(' | '),
     ];
   });
   return BOM + csvFilas([cab, ...cuerpo]);

@@ -201,7 +201,10 @@ export function pintarCalidad(diagnosticos, resumen, avisosPorPmt) {
   const caja = $('panelCalidad');
   const trozos = [];
 
-  trozos.push('<h3 style="margin:0 0 10px;font-size:.95rem">Archivos seleccionados</h3>');
+  // ALCANCE: esta pestana habla SIEMPRE de todo lo cargado. Decirlo evita que
+  // parezca que contradice a las otras tres, que hablan de lo visible.
+  trozos.push(`<h3 style="margin:0 0 10px;font-size:.95rem">Archivos seleccionados ` +
+    `<small style="font-weight:400;color:#6b7075">· ${num(resumen.pmtsCargados ?? resumen.pmts)} PMT cargados en total</small></h3>`);
   for (const d of diagnosticos) {
     const motivos = d.motivos.length
       ? '<ul>' + d.motivos.map((m) => `<li>${esc(m.simple)}</li>`).join('') + '</ul>' : '';
@@ -230,6 +233,7 @@ export function pintarCalidad(diagnosticos, resumen, avisosPorPmt) {
     ['Sin contrato (no entran en el analisis de interferencias)', resumen.sinContrato],
     ['Sin municipio', resumen.sinMunicipio],
     ['Duplicados exactos dentro de un mismo archivo', resumen.duplicados],
+    ['Identificador repetido en el KMZ para trazados distintos', resumen.idsRepetidos],
   ].filter(([, n]) => n > 0);
 
   if (problemas.length) {

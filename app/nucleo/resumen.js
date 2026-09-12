@@ -89,6 +89,7 @@ export function resumir(analisis, filas, relaciones, noEvaluables = [], opciones
     sinContrato: c.sinContrato ?? 0,
     sinMunicipio: c.sinMunicipio ?? 0,
     duplicados: c.duplicadosExactos ?? 0,
+    idsRepetidos: c.idsRepetidosEnOrigen ?? 0,
     conAvisos: c.conAvisos ?? 0,
     msTotal: est.msTotalProceso ?? est.msTotal ?? 0,
   };

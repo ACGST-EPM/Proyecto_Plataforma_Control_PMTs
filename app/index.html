@@ -127,6 +127,10 @@
     </div>
     <div class="cuerpo">
 
+      <!-- ALCANCE DE LA PESTANA: tres de ellas cuentan lo VISIBLE y la de calidad
+           cuenta TODO lo cargado. Sin decirlo, parecen contradecirse. -->
+      <div id="alcancePestana" class="alcance-pestana"></div>
+
       <div id="pest_pmt">
         <div class="tabla-caja"><table class="datos" id="tablaPmt"><thead></thead><tbody></tbody></table></div>
         <div class="paginador no-imprimir" id="pagPmt"></div>
@@ -137,6 +141,7 @@
           Aquí están los <b>hechos</b> de cada pareja: a qué distancia están, si llegan a tocarse y si coinciden en el tiempo.
           <b>Todavía no se clasifica ninguna como crítica</b>: esa decisión se tomará cuando se puedan ver los casos reales.
         </div>
+        <div id="notaParejaFuera" class="frase atencion oculto" style="font-size:.86rem"></div>
         <div class="tabla-caja"><table class="datos" id="tablaRel"><thead></thead><tbody></tbody></table></div>
         <div class="paginador no-imprimir" id="pagRel"></div>
       </div>
@@ -152,7 +157,7 @@
   <section class="panel oculto no-imprimir" id="panelExportar" style="margin-top:20px">
     <h2><span class="paso">4</span> Guardar o compartir los resultados</h2>
     <div class="cuerpo">
-      <p style="margin-top:0;color:var(--tinta-2)">Se exporta <b>lo que está viendo ahora</b>, con los filtros aplicados.</p>
+      <p style="margin-top:0;color:var(--tinta-2)" id="alcanceExportar">Se exporta <b>lo que está viendo ahora</b>, con los filtros aplicados.</p>
       <div style="display:flex;flex-wrap:wrap;gap:9px">
         <button class="b-verde"  id="expPmtCsv">PMT en Excel (CSV)</button>
         <button class="b-verde"  id="expRelCsv">Relaciones en Excel (CSV)</button>

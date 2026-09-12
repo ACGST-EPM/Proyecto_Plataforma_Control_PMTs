@@ -107,8 +107,20 @@ export function normalizarVigencia({ inicio, fin, inicioMs, finMs }) {
   const ini = normalizarInstante(inicio, { horaPorDefecto: '00:00:00' });
   const f = normalizarInstante(fin, { horaPorDefecto: '23:59:59' });
 
-  if (!ini.ok) avisos.push(`fecha de inicio inservible: ${ini.motivo}`);
-  if (!f.ok) avisos.push(`fecha de fin inservible: ${f.motivo}`);
+  // AUSENTE NO ES UN FALLO DE LECTURA, ES UN ESTADO.
+  //
+  // Avisar de un extremo que sencillamente no viene añadía un aviso NUEVO en
+  // cada apertura del proyecto: guardar y abrir cuatro veces dejaba cuatro
+  // copias de «fecha de fin inservible: marca de tiempo ausente» encima del
+  // aviso de verdad, el que explicaba por qué se perdió («no se reconoce como
+  // fecha: "no definida"»). Eso es guardar y abrir CAMBIANDO la semántica, que
+  // es justo lo que no puede pasar.
+  //
+  // Solo se avisa de lo que aporta informacion: un valor que VINO y no se pudo
+  // leer. La ausencia ya está dicha en `estado` y en `inicioValido`/`finValido`.
+  const presente = (v) => v !== null && v !== undefined && v !== '';
+  if (!ini.ok && presente(inicio)) avisos.push(`fecha de inicio inservible: ${ini.motivo}`);
+  if (!f.ok && presente(fin)) avisos.push(`fecha de fin inservible: ${f.motivo}`);
 
   // CONTRADICCIÓN entre el texto y los milisegundos guardados: no se elige.
   // El texto es canónico, así que se conserva; lo que se descarta es el número,
@@ -141,8 +153,7 @@ export function normalizarVigencia({ inicio, fin, inicioMs, finMs }) {
     inicioOriginal: inicio ?? null, finOriginal: fin ?? null,
   };
 
-  const ausente = (inicio === null || inicio === undefined || inicio === '') &&
-                  (fin === null || fin === undefined || fin === '');
+  const ausente = !presente(inicio) && !presente(fin);
 
   if (malIni || malFin) {
     return { valida: false, estado: 'incoherente', ...base, avisos };

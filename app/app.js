@@ -379,8 +379,11 @@ function guardarProyecto() {
     nombre, versionReglas: VERSION_REGLAS,
   });
   descargar(Proyecto.nombreArchivo(nombre), Proyecto.serializar(p), 'application/json;charset=utf-8');
-  avisar(`Proyecto <b>«${esc(nombre)}»</b> guardado. Al abrirlo, la aplicación <b>vuelve a calcular</b> ` +
-    `las relaciones con el motor: el archivo guarda los trazados, no los resultados.`, '');
+  const filtrado = estado.visibles.length !== estado.filas.length;
+  avisar(`Proyecto <b>«${esc(nombre)}»</b> guardado con <b>los ${num(estado.filas.length)} PMT cargados</b>` +
+    `${filtrado ? ` (no solo los ${num(estado.visibles.length)} que se ven ahora; los filtros se guardan aparte y se vuelven a aplicar al abrirlo)` : ''}. ` +
+    `Al abrirlo, la aplicación <b>vuelve a calcular</b> las relaciones con el motor: ` +
+    `el archivo guarda los trazados, no los resultados.`, '');
   setTimeout(() => mostrar('progreso', false), 8000);
 }
 
@@ -655,15 +658,43 @@ function aplicarFiltros() {
   estado.relVisibles = relVisibles;
   estado.noEvalVisibles = noEvalVisibles;
 
+  // EL MAPA dibuja TODO y atenua en gris lo que queda fuera de los filtros. Eso
+  // es util —se ve el contexto— pero solo si la leyenda lo dice.
   Mapa.pintarPmts(estado.filas, estado.porId, ids);
+  const pista = $('pistaFueraFiltro');
+  if (pista) {
+    const fuera = estado.filas.length - visibles.length;
+    mostrar('pistaFueraFiltro', fuera > 0);
+    if (fuera > 0) pista.innerHTML = `<i class="muestra" style="background:#b6bcc1"></i>` +
+      `${num(fuera)} fuera de los filtros (se dibujan en gris, no entran en las cifras)`;
+  }
   Mapa.pintarRelaciones(relVisibles, $('verRelaciones').checked);
 
   Tablas.pintarPmts(visibles, { onFila: seleccionar, seleccionado: estado.seleccionado });
   Tablas.pintarRelaciones(relVisibles, { onFila: (r) => Mapa.irARelacion(r) });
+
+  // UNA RELACION SE VE SI AL MENOS UNO DE SUS DOS EXTREMOS ESTA VISIBLE.
+  //
+  // Es lo correcto —ocultarla haria creer que un PMT filtrado no interfiere con
+  // nada— pero entonces en la tabla de relaciones aparecen contratos que el
+  // filtro deberia haber quitado. Sin explicarlo, parece que el filtro falla.
+  const conParejaFuera = relVisibles.filter((r) => !(ids.has(r.idA) && ids.has(r.idB))).length;
+  const notaRel = $('notaParejaFuera');
+  if (notaRel) {
+    mostrar('notaParejaFuera', conParejaFuera > 0);
+    if (conParejaFuera > 0) {
+      notaRel.innerHTML = `<b>${num(conParejaFuera)} de estas ${num(relVisibles.length)} relaciones ` +
+        `tienen su pareja fuera de los filtros.</b> Se muestran a propósito: si se ocultaran, ` +
+        `parecería que un PMT filtrado no interfiere con nada. Por eso puede ver aquí contratos ` +
+        `que no están en la pestaña de PMT.`;
+    }
+  }
   Tablas.pintarNoEvaluables(noEvalVisibles, estado.porId);
 
   // LAS TARJETAS SIGUEN AL ALCANCE VISIBLE: se repintan con cada filtro.
   pintarTarjetas();
+  pintarAlcancePestana();
+  pintarAlcanceExportar();
   // Y si hay un informe en pantalla, deja de corresponder: se marca.
   revisarInforme('Ha cambiado lo que se está viendo (filtros o día del recorrido).');
 
@@ -680,14 +711,60 @@ function seleccionar(id) {
   Tablas.pintarPmts(estado.visibles, { onFila: seleccionar, seleccionado: id });
 }
 
+let pestanaActual = 'pmt';
+
 function irAPestana(cual) {
+  pestanaActual = cual;
   for (const b of $$('.pestanas button')) b.setAttribute('aria-selected', String(b.dataset.pest === cual));
   for (const p of ['pmt', 'rel', 'noeval', 'cal']) mostrar('pest_' + p, p === cual);
+  pintarAlcancePestana();
+}
+
+/**
+ * CADA PESTANA DICE DE QUE ALCANCE HABLA.
+ *
+ * Tres pestañas cuentan lo VISIBLE y la de calidad cuenta TODO lo cargado. Son
+ * dos universos legítimos, pero puestos uno al lado del otro sin etiqueta
+ * parecen contradecirse: 14 PMT arriba y «460 registros» dentro de calidad.
+ */
+function pintarAlcancePestana() {
+  const caja = $('alcancePestana');
+  if (!caja) return;
+  const total = estado.filas.length;
+  const vis = estado.visibles.length;
+  const filtrado = vis !== total;
+  const dia = estado.instanteRecorrido !== null ? ` y del día <b>${esc(diaDe(estado.instanteRecorrido))}</b>` : '';
+  if (pestanaActual === 'cal') {
+    caja.innerHTML = `Esta pestaña habla de <b>todo lo cargado</b>: ${num(total)} PMT de ` +
+      `${num(estado.archivos.length)} archivo(s). <b>No cambia con los filtros.</b>`;
+    return;
+  }
+  caja.innerHTML = filtrado || dia
+    ? `Esta pestaña habla del <b>resultado visible</b>: ${num(vis)} PMT de los ${num(total)} cargados${dia}.`
+    : `Esta pestaña habla de <b>los ${num(total)} PMT cargados</b>: no hay filtros puestos.`;
 }
 
 /* ───────────────────────── Exportaciones e informe ───────────────────────── */
 
 const marca = () => new Date().toISOString().slice(0, 10);
+
+/**
+ * LO QUE PROMETE EL PANEL DE EXPORTACION TIENE QUE SER LO QUE ENTREGA.
+ *
+ * Decia «se exporta lo que esta viendo ahora» sin decir cuanto era eso, y al
+ * lado hay un boton —«Guardar proyecto»— que hace lo contrario: guarda TODO lo
+ * cargado. Dos alcances distintos a un palmo, ninguno con su cifra.
+ */
+function pintarAlcanceExportar() {
+  const caja = $('alcanceExportar');
+  if (!caja) return;
+  const total = estado.filas.length, vis = estado.visibles.length;
+  const dia = estado.instanteRecorrido !== null ? `, y solo del día ${esc(diaDe(estado.instanteRecorrido))}` : '';
+  caja.innerHTML = vis === total && !dia
+    ? `Se exportan los <b>${num(total)} PMT cargados</b>: no hay filtros puestos.`
+    : `Se exporta <b>lo que está viendo ahora</b>: <b>${num(vis)}</b> PMT de los ${num(total)} cargados${dia}. ` +
+      `<br><small>El botón «Guardar proyecto» es distinto: guarda <b>los ${num(total)}</b>, con los filtros anotados aparte.</small>`;
+}
 
 function conectarExportaciones() {
   $('expPmtCsv').onclick = () => descargar(`PMT_${marca()}.csv`, Export.pmtsACsv(estado.visibles), 'text/csv;charset=utf-8');
@@ -765,7 +842,8 @@ function conectarResto() {
     `<span><i class="muestra" style="background:#c62828"></i>Se tocan</span>` +
     `<span><i class="muestra" style="background:#1565c0"></i>Cerca, sin tocarse</span>` +
     `<span><i class="muestra" style="background:#6a1b9a"></i>No se pudo analizar</span>` +
-    `<span class="pista-campo">Línea discontinua = no coinciden en el tiempo</span>`;
+    `<span class="pista-campo">Línea discontinua = no coinciden en el tiempo</span>` +
+    `<span id="pistaFueraFiltro" class="oculto"></span>`;
 }
 
 conectarCarga();

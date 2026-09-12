@@ -517,3 +517,10 @@ details.tecnico pre {
 }
 .aviso-caducado b { font-weight: 700; }
 .informe.caducado { opacity: .45; filter: grayscale(.6); }
+
+/* ── Alcance de cada pestana de detalle ── */
+.alcance-pestana {
+  font-size: .82rem; color: var(--tinta-2); margin: 0 0 12px;
+  padding: 7px 11px; background: var(--gris-suave); border-radius: 6px;
+}
+.alcance-pestana b { color: var(--tinta); }
