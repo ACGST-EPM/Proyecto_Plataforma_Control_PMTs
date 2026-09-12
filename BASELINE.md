@@ -120,8 +120,8 @@ cd motor && node herramientas/comparar.mjs <carpeta-con-los-8-KMZ>
 
 ```
 Motor ......................  231   (1 omitida: depende de una referencia externa opcional)
-Aplicación (lógica pura) ...  139
-Navegador real .............   44   (file:// y HTTP)
+Aplicación (lógica pura) ...  164
+Navegador real .............   45   (file:// y HTTP)
 ```
 
 ```bash
@@ -138,6 +138,7 @@ npm run test:todo       # las tres cosas
 | `app/test/propiedades.test.mjs` | los invariantes del producto, sobre conjuntos generados |
 | `app/test/baseline.test.mjs` | los parámetros aprobados y la trazabilidad de versiones |
 | `app/test/navegador.test.mjs` | lo que solo se ve al abrir la aplicación de verdad |
+| `app/test/fuentes.test.mjs` | el modelo de fuentes y versiones, con un origen simulado |
 
 ---
 
@@ -222,6 +223,7 @@ Cada cosa que sale de la plataforma se puede identificar sin preguntarle a nadie
 | Etapa | Commit | Reglas | Cifras |
 |---|---|---|---|
 | 2.4 + gate de cierre | `fc3042f` | 1.2.0 | sin cambios respecto a la Etapa 1 |
+| Etapa 3 · gestión de fuentes | en curso | 1.2.0 | sin cambios: no toca el cálculo |
 | 2.3 | `16c3730` | 1.2.0 | sin cambios |
 | 2.2 | `9f801a0` | 1.2.0 | sin cambios |
 | 2.1 | `5689f6b` | 1.2.0 | sin cambios |

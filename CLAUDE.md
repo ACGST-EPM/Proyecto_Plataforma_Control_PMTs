@@ -25,11 +25,28 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
 - `motor/` — **motor geoespacial y temporal nuevo, en paralelo** (Etapa 1). No sustituye a nada
   todavía. Ver `motor/README.md` para las decisiones técnicas; `motor/dist/verificador.html` se abre
   con doble clic y compara el motor de QGIS con el nuevo, caso por caso.
+- `app/fuentes/` — **gestión de fuentes, versiones y actualización incremental** (Etapa 3).
+  Lógica pura, sin DOM y **sin saber de dónde vienen los datos**: huellas de contenido, inventario,
+  detector de cambios, bitácora y el contrato del proveedor (`listar()` / `leer()`).
+- `dist/Vista_previa_Datos.html` — **maqueta** de cómo se vería la plataforma cuando los KMZ lleguen
+  solos. Usa la tubería real con un origen **simulado**; no hay nada corporativo conectado.
+  Se regenera con `npm run construir:prototipo`. **Archivo aparte a propósito**: no puede
+  confundirse con la aplicación.
+
+### Documentos de referencia (leer antes de decidir algo grande)
+- `BASELINE.md` — qué versión produjo qué, con qué reglas, y cómo reproducirlo desde un clon limpio.
+- `ARQUITECTURA_OPERATIVA.md` — proceso AS-IS y TO-BE, modelo de fuentes, estrategia incremental,
+  persistencia y flujo de automatización. Todo marcado CONFIRMADO / HIPÓTESIS / VALIDAR EPM.
+- `INVESTIGACION_MICROSOFT_EPM.md` — qué es posible con SharePoint, Graph, Power Automate, SPFx,
+  Teams y Azure, con documentación oficial; cuatro arquitecturas comparadas y una recomendación.
+- `DESCUBRIMIENTO_EPM.md` — las 17 preguntas exactas para TI, cada una con qué decisión desbloquea.
+- `ESCALABILIDAD.md` — medida real de 460 a 10.000 PMT y a partir de cuándo hay que actuar.
+- `SEGURIDAD_MODELO_AMENAZAS.md` — qué se protege, de quién, qué está cerrado y qué no.
 
 Repo publicado: `ACGST-EPM/Control-y-Articulacion-de-PMTs-EPM` (GitHub Pages).
 Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada`, `02_Proyecto_QGIS`, `Control-y-Articulacion-de-PMTs-EPM`).
 
-## Estado de la migración (Etapa 2.4 implementada; en pausa para auditoría final)
+## Estado (Etapa 2 CERRADA y congelada en `BASELINE.md`; Etapa 3 en curso)
 
 ### Invariantes de aplicación — no los rompa
 - **Representación visual = estado interno.** Ningún filtro puede estar activo sin verse en su
@@ -72,6 +89,26 @@ Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada
   (`x.duplicadoExacto`), no sobre el análisis de archivos, así que vale igual venga de un
   KMZ o de un proyecto. Al abrir un proyecto la marca solo se acepta si el identificador
   la respalda (sufijo `~N`): un archivo editado no puede inflar el recuento.
+
+### Etapa 3 (en curso) — plataforma operativa
+- **Una abstracción sin al menos dos usos reales es deuda, no diseño.** Por eso hay
+  `SourceProvider` (local + simulado) y bitácora, pero NO `ProjectRepository` ni
+  `NotificationProvider`: tendrían una sola implementación trivial o ninguna regla que aplicar.
+- **Tres preguntas distintas, que no se mezclan**: ¿mismos bytes? (huella) · ¿mismo archivo, más
+  nuevo? (proveedor + ruta) · ¿mismo PMT? (identificador estable). Confundirlas hace que renombrar
+  parezca un alta y una baja, o que una copia duplique 60 trazados.
+- **Mover ≠ copiar ≠ alta.** Si el contenido ya se conocía y su ruta anterior **ya no está**, se
+  movió; si **sigue ahí**, es una copia y no se procesa.
+- **El reloj del origen no decide.** `modificadoDeclarado` es informativo; decide la huella.
+- **Una fuente que no se pudo leer NO se da por vigente con su versión anterior.**
+- **La bitácora no inventa quién hizo qué.** Sin identidad, el actor es `equipo-local`.
+- **No se afirma nada antes de saberlo**: al revisar, todavía no se ha leído ningún archivo, así que
+  no se puede decir qué PMT cambian.
+- Toda cifra que sale del producto lleva **procedencia**: app, motor, reglas, fecha y parámetros.
+  En el CSV va en el nombre del archivo; el **CSV legado no se toca** (11 columnas, invariante).
+- **Un error nunca queda invisible, tampoco los no previstos**: `error` y `unhandledrejection` van a
+  `#avisoGlobal`.
+- Pruebas: **231 motor + 164 app + 45 de navegador real**.
 
 ### Otras reglas de la 2.4
 - `motor/src/geo/plano-local.js` añade `desproyectar()` (inverso del plano ENU, iterando
