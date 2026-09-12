@@ -79,6 +79,30 @@ propiedad que cada uno violaba:
 La comprobación de simetría es una **prueba de propiedad** sobre 900 pares
 generados al azar, no un puñado de casos escritos a mano.
 
+## Etapa 2.4 — cierre de fidelidad
+
+Cinco comportamientos más, todos reproducidos antes de tocar una línea.
+
+| Defecto | Clase de error | Invariante que ahora se prueba |
+|---|---|---|
+| un fin ilegible borraba también el inicio válido | un fallo parcial destruye lo válido que lo acompaña | guardar y abrir conserva cada extremo por separado |
+| el informe seguía en pantalla tras quitar una fuente | un resultado pintado sobrevive al estado que lo produjo | un informe caducado se marca y **no se imprime** |
+| tarjetas 2/2 con tabla e informe 1/1 | una cifra sin alcance | mismo alcance ⇒ mismas cifras, y el alcance se enseña |
+| `ubicado:true` con los dos puntos en el mismo sitio | validar un número intermedio en vez del producto | `ubicado ⇒ distanciaGeodésica(a,b) ≈ distancia canónica` |
+| el conteo de duplicados desaparecía al abrir el proyecto | un contador sin evidencia | el recuento sale de las filas, y la marca exige respaldo |
+
+Cómo se ve en la pantalla:
+
+- **Las tarjetas cuentan lo que se está viendo.** Encima va una línea que dice
+  `460 PMT cargados · 14 visibles con los filtros puestos`, con un botón para
+  quitarlos. Los archivos van en su propia fila, etiquetada «no cambia con los
+  filtros», porque hablan de otra cosa.
+- **Un informe que ya no corresponde lo dice.** Se atenúa, aparece un aviso
+  naranja y el botón de imprimir queda bloqueado hasta pulsar «Actualizar el
+  informe». Nunca sale un PDF con cifras que ya no existen.
+- **El conector del mapa no miente.** Si sus dos puntos no distan lo que dice el
+  motor, no se dibuja: se enseña la distancia y se calla la ubicación.
+
 ## Arquitectura
 
 ```
@@ -91,7 +115,9 @@ app/
     ingesta.js      archivos → análisis, y traducción de diagnósticos
     filtrado.js     filtros y recorrido temporal
     exportar.js     CSV, GeoJSON, KML y CSV compatible con el formato antiguo
-    resumen.js      cifras y frase honesta de cabecera
+    resumen.js      cifras y frase honesta de cabecera, con su alcance
+    tiempo.js       una sola verdad para cada fecha, extremo a extremo
+    geojson.js      validación de geometría con una regla explícita por tipo
   ui/               lo que toca el DOM → se prueba en navegador
     dom.js  mapa.js  tablas.js  controles.js
     mapas-base.js   catálogo de proveedores de mapa base, con respaldo

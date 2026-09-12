@@ -29,7 +29,7 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
 Repo publicado: `ACGST-EPM/Control-y-Articulacion-de-PMTs-EPM` (GitHub Pages).
 Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada`, `02_Proyecto_QGIS`, `Control-y-Articulacion-de-PMTs-EPM`).
 
-## Estado de la migración (Etapa 2.3 implementada; en pausa para auditoría)
+## Estado de la migración (Etapa 2.4 implementada; en pausa para auditoría final)
 
 ### Invariantes de aplicación — no los rompa
 - **Representación visual = estado interno.** Ningún filtro puede estar activo sin verse en su
@@ -48,6 +48,40 @@ Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada
   nunca redondeando duraciones).
 - **Un error nunca queda invisible**: todos van a `#avisoGlobal`, que vive fuera del panel de carga.
 - **Un dato derivado nunca sustituye al motor.**
+- **Un fallo parcial no destruye lo válido que lo acompaña.** Cada extremo de una
+  vigencia tiene su propio estado (`inicioValido` / `finValido`). Si solo se lee uno, se
+  conserva ese; `valida` sigue significando UNA cosa: «se puede comparar en el tiempo», y
+  para eso hacen falta los dos. Estados: `completa`, `incompleta`, `ilegible`,
+  `incoherente`, `invertida`, `ausente` (`app/nucleo/tiempo.js`).
+- **Ninguna cifra viaja sin su alcance.** `resumir()` devuelve siempre `pmts`
+  (lo visible), `pmtsCargados` (el total) y `filtrado`. Las tarjetas del tablero enseñan
+  el ALCANCE VISIBLE y se repintan con cada filtro; el total va a su lado, etiquetado.
+  «Calidad de los datos» y el cotejo con la instantánea usan el TOTAL, y se dice.
+- **Un resultado ya pintado no sobrevive al estado que lo produjo.** El informe lleva un
+  SELLO del estado (fuentes, filtros, día, recuentos). Si cambia, queda marcado como
+  caducado, se atenúa y **no se deja imprimir** hasta regenerarlo (política B: invalidación
+  explícita; se descartó regenerar solo porque el recorrido dispara un cambio cada pocas
+  décimas de segundo y porque un informe que se rehace sin avisar es indistinguible de uno
+  que no ha cambiado).
+- **`ubicado: true` significa que el dibujo es fiable.** Se comprueba la separación
+  GEODÉSICA de los dos puntos que se van a dibujar contra la distancia canónica, no un
+  número intermedio. Si no cuadra, se intenta deshaciendo la proyección
+  (`plano.desproyectar`); si sigue sin cuadrar, `ubicado:false`, se conserva la distancia
+  y **no se dibuja nada**.
+- **Ningún contador sin evidencia.** `duplicadosExactos` se cuenta sobre los TRAZADOS
+  (`x.duplicadoExacto`), no sobre el análisis de archivos, así que vale igual venga de un
+  KMZ o de un proyecto. Al abrir un proyecto la marca solo se acepta si el identificador
+  la respalda (sufijo `~N`): un archivo editado no puede inflar el recuento.
+
+### Otras reglas de la 2.4
+- `motor/src/geo/plano-local.js` añade `desproyectar()` (inverso del plano ENU, iterando
+  sobre la altura elipsoidal). **No interviene en ninguna medida**: solo sitúa dibujos.
+  Interpolar en grados sobre el tramo original NO da la misma línea que la recta del plano
+  que el motor mide: en 66 km sobre un paralelo se separan 9,4 m.
+- La prueba «el desvío crece con el tramo» fue **sustituida**: ese crecimiento era el
+  defecto. Ahora se exige que esté ACOTADO a cualquier largo, más una prueba de propiedad
+  sobre geometrías generadas (semilla fija) del invariante de ubicación.
+- Pruebas: **231 motor + 121 app + 43 de navegador real**.
 
 ### Otras reglas de la 2.3
 - `app/nucleo/geojson.js` valida con una **regla explícita por tipo**. No vuelva a deducir la

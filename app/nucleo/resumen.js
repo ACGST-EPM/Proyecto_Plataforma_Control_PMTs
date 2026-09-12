@@ -23,12 +23,31 @@ import { estadoEspacial, estadoTemporal, ESPACIAL, TEMPORAL, LECTURA } from './m
  * `resumir()` con el MISMO alcance. Si una tarjeta y su tabla difieren, es que
  * se les pasó un alcance distinto, y eso es visible en la llamada.
  *
+ * ══ EL ALCANCE VIAJA CON LAS CIFRAS ════════════════════════════════════════
+ *
+ * Con un filtro puesto, las tarjetas decían 2 PMT y 2 contratos mientras la
+ * tabla y el informe decían 1 y 1. Las dos cosas eran ciertas —una contaba lo
+ * CARGADO y la otra lo VISIBLE— pero en la pantalla no se distinguían, así que
+ * parecían un error de la herramienta.
+ *
+ * La clase de error es «una cifra sin alcance». Se elimina haciendo que el
+ * alcance sea parte del resumen y no un dato que hay que recordar aparte:
+ *
+ *   `pmts`         PMT del alcance que se ha pedido (lo que se está viendo).
+ *   `pmtsCargados` PMT cargados en total, venga o no filtrado.
+ *   `filtrado`     true si el alcance pedido es menor que el total.
+ *
+ * INVARIANTE: mismo alcance ⇒ mismas cifras. Tablero, pestañas, informe y
+ * exportaciones llaman todos a `resumir()`; si dos números difieren es porque
+ * se pidieron alcances distintos, y eso se ve escrito en la pantalla.
+ *
  * @param {object|null} analisis    resultado del motor (para la calidad de la entrada)
  * @param {Array} filas             PMT del alcance
  * @param {Array} relaciones        relaciones del alcance
  * @param {Array} [noEvaluables]    pares del alcance que NO se pudieron medir
+ * @param {{total?:number}} [opciones] `total` = PMT cargados, para situar el alcance
  */
-export function resumir(analisis, filas, relaciones, noEvaluables = []) {
+export function resumir(analisis, filas, relaciones, noEvaluables = [], opciones = {}) {
   const c = analisis?.calidad ?? {};
   const est = analisis?.estadisticas ?? {};
 
@@ -44,8 +63,13 @@ export function resumir(analisis, filas, relaciones, noEvaluables = []) {
     if (e === ESPACIAL.CONTACTO && t === TEMPORAL.COINCIDE) contactoALaVez++;
   }
 
+  const cargados = Number.isInteger(opciones.total) ? opciones.total : filas.length;
+
   return {
     pmts: filas.length,
+    // ALCANCE: siempre presente, para que ninguna cifra viaje sin él.
+    pmtsCargados: cargados,
+    filtrado: filas.length !== cargados,
     contratos: new Set(filas.map((x) => x.contrato).filter(Boolean)).size,
     contratistas: new Set(filas.map((x) => x.contratista).filter(Boolean)).size,
     municipios: new Set(filas.map((x) => x.municipio).filter(Boolean)).size,
@@ -96,11 +120,17 @@ export function estadoArchivo(a) {
  * presentar un cero tranquilizador.
  */
 export function frasePrincipal(r) {
-  if (!r.pmts) return 'No se encontro ningun PMT en los archivos seleccionados.';
-  const partes = [`Se analizaron ${r.pmts} PMT de ${r.contratos} contrato(s).`];
+  if (!r.pmts) {
+    return r.filtrado && r.pmtsCargados
+      ? `Ningun PMT de los ${r.pmtsCargados} cargados cumple los filtros puestos ahora mismo.`
+      : 'No se encontro ningun PMT en los archivos seleccionados.';
+  }
+  const partes = [r.filtrado
+    ? `Se estan mostrando ${r.pmts} PMT de ${r.contratos} contrato(s), de los ${r.pmtsCargados} cargados.`
+    : `Se analizaron ${r.pmts} PMT de ${r.contratos} contrato(s).`];
   if (r.relaciones === 0) partes.push('No se encontro ninguna relacion entre contratos distintos.');
   else {
-    partes.push(`Se encontraron ${r.relaciones} relacion(es) entre contratos distintos, ` +
+    partes.push(`Se ${r.filtrado ? 'muestran' : 'encontraron'} ${r.relaciones} relacion(es) entre contratos distintos, ` +
       `de las cuales ${r.aLaVez} coinciden tambien en el tiempo y ${r.contacto} llegan a tocarse.`);
   }
   const pendientes = [];

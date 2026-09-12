@@ -23,6 +23,7 @@ import { descomponer, cajaDe, RADIO_DOMINIO_METROS, medir } from './geometria.js
 import { planoParaCajas } from './plano-local.js';
 import { unir, radioAproximadoMetros, cotaInferiorMetros } from './cajas.js';
 import { ajustarACero, puntoEnAnillo, distPuntoAnillo } from './segmentos.js';
+import { distanciaGeodesica } from './geodesica.js';
 
 /**
  * Margen para dar por buena una ubicacion frente a la distancia canonica.
@@ -179,6 +180,10 @@ export function puntosMasCercanos(geomA, geomB) {
   if (!partesA.length || !partesB.length) return vacio;
 
   let min = Infinity, mejorA = null, mejorB = null;
+  // Coordenadas del minimo EN EL PLANO, que es donde el motor lo calcula.
+  // Guardarlas permite deshacer la proyeccion si la interpolacion en grados no
+  // reproduce la distancia canonica (ver `ubicarSobreElPlano`, mas abajo).
+  let planoMejor = null, planoPuntoA = null, planoPuntoB = null;
 
   for (const pa of partesA) {
     if (min === 0) break;
@@ -201,7 +206,13 @@ export function puntosMasCercanos(geomA, geomB) {
         let dentro = null;
         if (pb.tipo === 'poligono') dentro = buscarContenido(pb, pa, P);
         if (!dentro && pa.tipo === 'poligono') dentro = buscarContenido(pa, pb, P);
-        if (dentro) { min = 0; mejorA = [...dentro]; mejorB = [...dentro]; break; }
+        if (dentro) {
+          min = 0; mejorA = [...dentro]; mejorB = [...dentro];
+          // Es un vertice real del dato, no una interpolacion: no hay nada que
+          // deshacer, y su separacion geodesica es cero, igual que la distancia.
+          planoMejor = null; planoPuntoA = null; planoPuntoB = null;
+          break;
+        }
       }
 
       for (const tramoA of tramosDe(pa)) {
@@ -219,6 +230,7 @@ export function puntosMasCercanos(geomA, geomB) {
               const gb1 = tramoB[j], gb2 = tramoB[Math.min(j + 1, tramoB.length - 1)];
               mejorA = interpGeo(ga1, ga2, r.t);
               mejorB = interpGeo(gb1, gb2, r.u);
+              planoMejor = plano; planoPuntoA = r.pa; planoPuntoB = r.pb;
             }
           }
         }
@@ -226,21 +238,50 @@ export function puntosMasCercanos(geomA, geomB) {
     }
   }
 
-  // La ubicacion tiene que corresponderse con la distancia canonica. Si no
-  // coincide —porque el motor resolvio el minimo subdividiendo partes que aqui
-  // se omitieron— se devuelve la distancia buena SIN ubicacion, en vez de
-  // dibujar un segmento en un sitio que no es. Mejor no pintar nada que pintar
-  // algo falso.
+  // ══ LA UBICACION SE COMPRUEBA SOBRE LOS PUNTOS QUE SE VAN A DIBUJAR ══════
+  //
+  // Antes se comprobaba `min`, el numero intermedio, contra la distancia
+  // canonica. Como los dos salen del mismo calculo en el plano, la comprobacion
+  // siempre pasaba... aunque las COORDENADAS devueltas no se correspondieran
+  // con ese numero. El caso que lo demostro: un punto en [-75,6 · 6,2] frente a
+  // una linea de [-75,9 · 6,2] a [-75,3 · 6,2]. El motor dice 9,387513 m y la
+  // funcion devolvia `ubicado: true` con los dos extremos en [-75,6 · 6,2]: un
+  // conector de longitud cero rotulado "9,4 m".
+  //
+  // La causa es que interpolar en GRADOS sobre el tramo original no da la misma
+  // linea que la recta del plano, que es la que el motor mide. Asi que:
+  //   1) se mide de verdad la separacion geodesica de los dos puntos elegidos;
+  //   2) si no cuadra, se intenta una ubicacion correcta deshaciendo la
+  //      proyeccion (el punto del plano llevado al terreno);
+  //   3) si sigue sin cuadrar, no se dibuja nada.
+  //
+  // INVARIANTE: `ubicado === true` implica
+  //             distanciaGeodesica(a, b) ≈ distancia canonica.
   const metros = canonico.metros;
   const localizado = Number.isFinite(min) ? ajustarACero(min) : null;
-  const fiable = localizado !== null && Math.abs(localizado - metros) <= TOLERANCIA_UBICACION_M;
 
-  return {
-    a: fiable ? mejorA : null,
-    b: fiable ? mejorB : null,
-    metros,
-    evaluable: true,
-    contacto: metros === 0,
-    ubicado: fiable,
-  };
+  // Primer filtro, el de siempre: si el minimo que se ha encontrado aqui no es
+  // el del motor —porque `medir()` subdividio partes que aqui se omitieron— no
+  // hay ubicacion que valga.
+  const mismoMinimo = localizado !== null && Math.abs(localizado - metros) <= TOLERANCIA_UBICACION_M;
+  const cuadra = (a, b) => a !== null && b !== null &&
+    Math.abs(distanciaGeodesica(a, b) - metros) <= TOLERANCIA_UBICACION_M;
+
+  let a = null, b = null;
+  if (mismoMinimo) {
+    if (cuadra(mejorA, mejorB)) {
+      // La interpolacion en grados sirve: se prefiere porque cae exactamente
+      // sobre el trazado tal y como se dibuja en el mapa.
+      a = mejorA; b = mejorB;
+    } else if (planoMejor) {
+      // Segundo intento: el punto del plano, llevado al terreno. Es la posicion
+      // del minimo en el modelo con el que el motor mide.
+      const da = planoMejor.desproyectar(planoPuntoA);
+      const db = planoMejor.desproyectar(planoPuntoB);
+      if (cuadra(da, db)) { a = da; b = db; }
+    }
+  }
+
+  const ubicado = a !== null && b !== null;
+  return { a, b, metros, evaluable: true, contacto: metros === 0, ubicado };
 }

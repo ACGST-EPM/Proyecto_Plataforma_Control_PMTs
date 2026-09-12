@@ -211,12 +211,103 @@ export function mapaDetalle(rel, porId, { ancho = 470, alto = 300 } = {}) {
   </div>`;
 }
 
+/* ═══════════════ VIGENCIA DEL INFORME (un informe viejo no puede parecer nuevo) ═══
+ *
+ * ══ EL DEFECTO ════════════════════════════════════════════════════════════
+ *
+ * Se generaba el informe, se quitaba una fuente, la aplicación recalculaba
+ * todo… y el informe seguía en pantalla, con el archivo retirado dentro y sus
+ * cifras antiguas, listo para imprimirse como si fuera el de ahora. Lo mismo al
+ * cambiar un filtro o el día del recorrido.
+ *
+ * ══ LA CLASE DE ERROR ═════════════════════════════════════════════════════
+ *
+ * «Un resultado que ya se pintó sobrevive al estado que lo produjo». No es solo
+ * la fuente retirada: es cualquier cambio en aquello sobre lo que se generó.
+ *
+ * ══ LA POLÍTICA ELEGIDA: B (invalidación explícita) ═══════════════════════
+ *
+ * Se descartó regenerar solo (A) por dos razones concretas:
+ *   · el recorrido del tiempo dispara un cambio cada pocas décimas de segundo,
+ *     y el informe dibuja hasta trece mapas: regenerarlo en cada paso convierte
+ *     la animación en un pase de diapositivas;
+ *   · un informe que se rehace solo, sin avisar, es indistinguible de uno que no
+ *     ha cambiado. La usuaria imprime pensando que es el que estaba leyendo.
+ *
+ * Con la invalidación explícita el informe caducado NO desaparece —se puede
+ * seguir leyendo— pero se marca, se atenúa y NO se deja imprimir hasta pulsar
+ * «Actualizar el informe». Nunca hay un PDF con cifras que ya no existen.
+ *
+ * El SELLO es la huella del estado con el que se generó: fuentes, filtros, día
+ * y recuentos. Si el sello de ahora no es el del informe, está caducado.
+ */
+let selloDelInforme = null;
+let caducado = false;
+
+/** Sello del informe que hay en pantalla, o `null` si no hay ninguno. */
+export const selloActual = () => selloDelInforme;
+
+/** ¿Hay un informe pintado ahora mismo? */
+export const hayInforme = () => selloDelInforme !== null;
+
+/** ¿Está caducado el informe que hay en pantalla? */
+export const estaCaducado = () => caducado;
+
+/** Olvida el informe: se usa al cerrarlo y al empezar de nuevo. */
+export function olvidar() {
+  selloDelInforme = null;
+  caducado = false;
+  const aviso = $('avisoInforme');
+  if (aviso) { aviso.classList.add('oculto'); aviso.innerHTML = ''; }
+  const cuerpo = $('informe');
+  if (cuerpo) { cuerpo.classList.remove('caducado'); cuerpo.innerHTML = ''; }
+}
+
+/**
+ * Compara el estado de ahora con el del informe pintado. Si no coinciden, lo
+ * marca como caducado. Devuelve `true` si acaba de caducar.
+ *
+ * @param {string} sello        huella del estado actual
+ * @param {string} [motivo]     qué cambió, en lenguaje llano
+ * @param {Function} [onActualizar] qué hacer al pulsar «Actualizar el informe»
+ */
+export function revisarVigencia(sello, motivo, onActualizar) {
+  if (selloDelInforme === null) return false;
+
+  // Si el estado ha VUELTO a ser el del informe —se quitó el filtro que se
+  // acababa de poner, por ejemplo—, el informe corresponde otra vez y se
+  // desmarca. Dejarlo caducado seria mentir en la otra direccion: avisar de una
+  // diferencia que ya no existe, y bloquear una impresion legitima.
+  if (sello === selloDelInforme) {
+    if (caducado) marcarAlDia();
+    return false;
+  }
+
+  caducado = true;
+  const cuerpo = $('informe');
+  if (cuerpo) cuerpo.classList.add('caducado');
+  const aviso = $('avisoInforme');
+  if (aviso) {
+    aviso.classList.remove('oculto');
+    aviso.innerHTML =
+      `<span><b>Este informe ya no corresponde a lo que se está viendo.</b> ` +
+      `${esc(motivo ?? 'El análisis ha cambiado desde que se generó.')} ` +
+      `Hasta que lo actualice no se puede imprimir, para que no salga un PDF con cifras viejas.</span>` +
+      `<button class="b-nar" type="button" id="btnActualizarInforme">Actualizar el informe</button>`;
+    const btn = $('btnActualizarInforme');
+    if (btn && onActualizar) btn.onclick = () => onActualizar();
+  }
+  const imprimir = $('btnImprimirInforme');
+  if (imprimir) imprimir.disabled = true;
+  return true;
+}
+
 /**
  * Construye el informe completo dentro de `#informe` y abre la impresión.
  * Devuelve el HTML generado, para poder comprobarlo en las pruebas.
  */
 export function generar({ filas, relaciones, porId, noEvaluables, archivos, resumen, filtros,
-  config, versionReglas, diaRecorrido, totalCargado }) {
+  config, versionReglas, diaRecorrido, totalCargado, sello = null }) {
   const rango = rangoTemporal(filas);
   const contratos = [...new Set(filas.map((x) => x.contrato).filter(Boolean))].sort();
   const municipios = [...new Set(filas.map((x) => x.municipio).filter(Boolean))].sort();
@@ -400,7 +491,22 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
   </table>`;
 
   $('informe').innerHTML = html;
+
+  // El informe recién pintado corresponde al estado de ahora.
+  selloDelInforme = sello;
+  marcarAlDia();
   return html;
+}
+
+/** Quita la marca de caducado y vuelve a permitir la impresión. */
+function marcarAlDia() {
+  caducado = false;
+  const cuerpo = $('informe');
+  if (cuerpo) cuerpo.classList.remove('caducado');
+  const aviso = $('avisoInforme');
+  if (aviso) { aviso.classList.add('oculto'); aviso.innerHTML = ''; }
+  const botonImprimir = $('btnImprimirInforme');
+  if (botonImprimir) botonImprimir.disabled = false;
 }
 
 /**
@@ -410,6 +516,8 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
  * nadie habia pedido.
  */
 export function imprimir() {
+  // Un informe caducado no se imprime: seria un PDF con cifras que ya no son.
+  if (caducado) return false;
   const cuerpo = document.body;
   cuerpo.classList.add('imprimiendo-informe');
   const limpiar = () => cuerpo.classList.remove('imprimiendo-informe');
@@ -417,4 +525,5 @@ export function imprimir() {
     window.addEventListener('afterprint', limpiar, { once: true });
   }
   try { window.print(); } finally { setTimeout(limpiar, 1500); }
+  return true;
 }

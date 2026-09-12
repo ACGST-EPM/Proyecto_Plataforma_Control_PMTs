@@ -36,8 +36,30 @@
  *    sobreingeniería para una tolerancia de metros. Descartada.
  */
 
-import { aEcef, gradARad } from './elipsoide.js';
+import { aEcef, gradARad, radAGrad, A, B, E2, radioNormal } from './elipsoide.js';
 import { unir } from './cajas.js';
+
+/**
+ * ECEF -> geodesicas WGS84 (metodo de Bowring). Devuelve [lon, lat, altura].
+ *
+ * Se necesita para poder DESHACER la proyeccion local, es decir, para saber a
+ * que punto del terreno corresponde una coordenada del plano metrico. No
+ * interviene en ninguna medida: `medir()` no lo usa.
+ */
+function deEcef(x, y, z) {
+  const lon = Math.atan2(y, x);
+  const p = Math.hypot(x, y);
+  const ep2 = (A * A - B * B) / (B * B);
+  const theta = Math.atan2(z * A, p * B);
+  const st = Math.sin(theta), ct = Math.cos(theta);
+  const lat = Math.atan2(z + ep2 * B * st * st * st, p - E2 * A * ct * ct * ct);
+  const N = radioNormal(lat);
+  const sl = Math.sin(lat), cl = Math.cos(lat);
+  // Cerca de los polos `p` tiende a 0 y dividir por el coseno pierde precision:
+  // ahi se usa la componente Z, que es la que domina.
+  const h = Math.abs(cl) > 1e-10 ? p / cl - N : z / sl - N * (1 - E2);
+  return [radAGrad(lon), radAGrad(lat), h];
+}
 
 /**
  * Crea un plano tangente local centrado en (lonG, latG).
@@ -64,7 +86,48 @@ export function planoLocal(lonG, latG) {
     ];
   }
 
-  return { origen: [lonG, latG], proyectar };
+  /**
+   * DESHACE la proyeccion: de [este, norte] en metros a [lon, lat] en grados.
+   *
+   * ══ PARA QUE SIRVE ═══════════════════════════════════════════════════════
+   *
+   * El motor mide sobre este plano: un tramo entre dos vertices es, para el
+   * calculo, la RECTA del plano que los une. Cuando hace falta saber en que
+   * punto del terreno cae el minimo, interpolar en grados sobre el tramo
+   * original no vale: la recta en grados y la recta del plano no son la misma
+   * linea. En un tramo de 66 km a lo largo de un paralelo se separan 9,4 m, y
+   * ese fue justamente el caso que dejaba el conector del mapa con los dos
+   * extremos en el mismo sitio mientras el motor declaraba 9,39 m de distancia.
+   *
+   * ══ POR QUE HAY QUE ITERAR ═══════════════════════════════════════════════
+   *
+   * La proyeccion tira la componente vertical, asi que la vuelta necesita una
+   * condicion que la fije. Se impone la natural: el punto esta SOBRE el
+   * elipsoide (altura 0). Se parte de altura 0 en el plano tangente, se mira la
+   * altura que sale y se corrige. Converge en dos o tres pasos porque la
+   * vertical local y la del punto casi coinciden a distancias de decenas de km.
+   *
+   * No participa en ninguna medida: se usa solo para situar un dibujo.
+   */
+  function desproyectar([este, norte]) {
+    // Vectores unitarios ENU en el origen, expresados en ECEF.
+    const ex = -sinLon, ey = cosLon, ez = 0;
+    const nx = -sinLat * cosLon, ny = -sinLat * sinLon, nz = cosLat;
+    const ux = cosLat * cosLon, uy = cosLat * sinLon, uz = sinLat;
+
+    let arriba = 0, salida = null;
+    for (let i = 0; i < 8; i++) {
+      const x = x0 + este * ex + norte * nx + arriba * ux;
+      const y = y0 + este * ey + norte * ny + arriba * uy;
+      const z = z0 + este * ez + norte * nz + arriba * uz;
+      salida = deEcef(x, y, z);
+      if (Math.abs(salida[2]) < 1e-6) break;
+      arriba -= salida[2];
+    }
+    return [salida[0], salida[1]];
+  }
+
+  return { origen: [lonG, latG], proyectar, desproyectar };
 }
 
 /**

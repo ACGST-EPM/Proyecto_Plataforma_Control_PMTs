@@ -16,6 +16,7 @@ import * as Export from './nucleo/exportar.js';
 import * as Proyecto from './nucleo/proyecto.js';
 import * as Base from './nucleo/mapas-base.js';
 import { resumir, frasePrincipal } from './nucleo/resumen.js';
+import { diaDe } from './nucleo/tiempo.js';
 import { LECTURA, TIPOS_CIERRE, simbologiaDe } from './nucleo/modelo.js';
 import { calcularRelaciones, VERSION_REGLAS } from '../motor/src/nucleo/index.js';
 import { caja as cajaDeGeometria } from '../motor/src/geo/geometria.js';
@@ -112,6 +113,9 @@ function reiniciar() {
   Controles.reiniciarEstado();
   Mapa.olvidarAcercamientos();
   Tablas.reiniciarPaginas();
+  // Empezar de nuevo tambien borra el informe: si no, al cargar otros archivos
+  // seguiria ahi el de los anteriores.
+  Informe.olvidar();
   Object.assign(estado, {
     fuentes: [], filas: [], relaciones: [], noEvaluables: [], porId: new Map(),
     archivos: [], analisis: null, visibles: [], relVisibles: [],
@@ -205,6 +209,9 @@ async function quitarArchivo(nombre) {
 async function reanalizar(fuentes, opciones = {}) {
   estado.fuentes = fuentes;
   pintarListaFuentes();
+  // Cambiar las fuentes caduca cualquier informe que hubiera en pantalla, antes
+  // incluso de saber que va a salir: lo que ya se pinto hablaba de otro conjunto.
+  revisarInforme('Han cambiado las fuentes del análisis (se añadió, se quitó o se reemplazó alguna).');
   avisar(`Analizando ${num(fuentes.length)} fuente(s): trazados, distancias y fechas…`);
   await new Promise((r) => setTimeout(r, 30));
 
@@ -213,12 +220,11 @@ async function reanalizar(fuentes, opciones = {}) {
     const archivos = fuentes.filter((f) => f.clase === 'archivo');
     const proyectos = fuentes.filter((f) => f.clase === 'proyecto');
 
-    let filas = [], diagnostico = [], analisis = null;
+    let filas = [], diagnostico = [];
     if (archivos.length) {
       const r = await Ingesta.procesar(archivos.map((f) => ({ nombre: f.nombre, datos: f.datos, rechazado: f.rechazado })), CONFIG);
       filas = r.filas;
       diagnostico = r.archivos ?? [];
-      analisis = r.analisis;
     }
     for (const p of proyectos) {
       filas = filas.concat(p.trazados);
@@ -258,7 +264,7 @@ async function reanalizar(fuentes, opciones = {}) {
       porId: new Map(filas.map((x) => [x.id, x])),
       archivos: diagnostico,
       analisis: {
-        calidad: calidadDe(filas, diagnostico, analisis),
+        calidad: calidadDe(filas, diagnostico),
         estadisticas: derivados.estadisticas,
       },
     });
@@ -297,7 +303,7 @@ function recalcular(filas) {
 }
 
 /** Contadores de calidad del conjunto combinado. */
-function calidadDe(filas, diagnostico, analisisArchivos) {
+function calidadDe(filas, diagnostico) {
   const cuenta = (f) => filas.filter(f).length;
   const estadoDe = (a) => a.estadoLectura ?? (a.ok === false ? 'fallida' : 'completa');
   return {
@@ -308,7 +314,14 @@ function calidadDe(filas, diagnostico, analisisArchivos) {
     sinContrato: cuenta((x) => !x.contrato),
     sinMunicipio: cuenta((x) => !x.municipio),
     conAvisos: cuenta((x) => (x.avisos ?? []).length),
-    duplicadosExactos: analisisArchivos?.calidad?.duplicadosExactos ?? 0,
+    // DUPLICADOS: se cuentan sobre los TRAZADOS, no sobre el analisis de los
+    // archivos. Antes salian de `analisisArchivos.calidad`, que no existe
+    // cuando las fuentes son un proyecto guardado: el contador desaparecia al
+    // abrirlo aunque las tres copias siguieran ahi, en la tabla, con su sufijo
+    // `~N`. Contando las filas, el numero tiene siempre el mismo respaldo
+    // visible y no depende de por donde entraron los datos.
+    duplicadosExactos: cuenta((x) => x.duplicadoExacto === true),
+    idsRepetidosEnOrigen: cuenta((x) => x.idRepetidoEnOrigen === true),
     archivosCompletos: diagnostico.filter((a) => estadoDe(a) === 'completa').length,
     archivosParciales: diagnostico.filter((a) => estadoDe(a) === 'parcial').length,
     archivosFallidos: diagnostico.filter((a) => estadoDe(a) === 'fallida').length,
@@ -453,36 +466,110 @@ function pintarTodo(ms, extra = null) {
     aplicarFiltros();
   });
 
-  aplicarFiltros();
+  aplicarFiltros();        // pinta ya las tarjetas con el alcance visible
   Mapa.encuadrar();
 
-  const res = resumir(estado.analisis, estado.filas, estado.relaciones, estado.noEvaluables);
-  pintarResumen(res, ms, extra);
+  // CALIDAD DE LA ENTRADA: habla de TODO lo cargado, nunca de lo filtrado, y
+  // por eso se pinta aqui una sola vez y con el resumen TOTAL.
+  const total = resumenTotal();
+  pintarContexto(total, ms, extra);
   Tablas.pintarCalidad(
-    Ingesta.diagnosticoArchivos(estado.archivos), res,
+    Ingesta.diagnosticoArchivos(estado.archivos), total,
     estado.filas.filter((x) => (x.avisos ?? []).length));
 
   $('panelResumen').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function pintarResumen(res, ms, extra) {
+/* ═════════════════════ RESUMEN: UN MODELO, DOS ALCANCES ═════════════════════
+ *
+ * Toda cifra de la pantalla sale de `resumir()`, y cada llamada dice de que
+ * alcance habla. No hay ningun sitio que cuente por su cuenta.
+ *
+ *   VISIBLE  lo que se esta viendo con los filtros y el dia puestos ahora.
+ *            Es lo que enseñan las tarjetas, las pestañas, el informe y las
+ *            exportaciones: los cuatro, siempre, el mismo conjunto.
+ *   TOTAL    todo lo cargado. Es lo que enseña "Calidad de los datos" y lo que
+ *            se coteja con la instantanea del proyecto guardado, porque esa
+ *            instantanea se tomo sobre el analisis entero.
+ */
+
+/** Resumen de lo que se esta viendo ahora mismo. */
+function resumenVisible() {
+  return resumir(estado.analisis, estado.visibles, estado.relVisibles,
+    estado.noEvalVisibles ?? estado.noEvaluables, { total: estado.filas.length });
+}
+
+/** Resumen de todo lo cargado, sin filtros. */
+function resumenTotal() {
+  return resumir(estado.analisis, estado.filas, estado.relaciones, estado.noEvaluables);
+}
+
+/**
+ * TARJETAS DEL TABLERO — hablan SIEMPRE del alcance visible.
+ *
+ * Antes se pintaban una sola vez, al terminar el analisis, y con el conjunto
+ * COMPLETO. Con un filtro puesto la pantalla decia 2 PMT y 2 contratos arriba
+ * mientras la tabla y el informe decian 1 y 1: dos cifras ciertas que parecian
+ * un error porque nada explicaba que hablaban de conjuntos distintos.
+ *
+ * Ahora se repintan con cada cambio de filtro o de dia, salen del MISMO
+ * `resumir()` que usan las tablas y el informe, y encima de ellas va una linea
+ * que dice cuantos PMT hay cargados en total y cuantos se estan viendo.
+ */
+function pintarTarjetas() {
+  const res = resumenVisible();
   const dudas = res.espacialNoEval || res.temporalNoEval || res.archivosParciales || res.archivosFallidos;
   const caja = $('fraseResumen');
   caja.className = 'frase ' + (res.archivosFallidos ? 'error' : dudas ? 'atencion' : '');
   caja.textContent = frasePrincipal(res);
 
+  // ── Linea de alcance: ninguna cifra viaja sin decir de donde sale ──
+  const alcance = $('alcanceResumen');
+  if (alcance) {
+    alcance.className = 'alcance' + (res.filtrado ? ' filtrado' : '');
+    const dia = estado.instanteRecorrido !== null
+      ? ` · dia <b>${esc(diaDe(estado.instanteRecorrido))}</b>` : '';
+    alcance.innerHTML = res.filtrado || dia
+      ? `<span class="etq-alcance">Resultado visible</span>` +
+        `<span><b>${num(res.pmtsCargados)}</b> PMT cargados · ` +
+        `<b>${num(res.pmts)}</b> visibles con los filtros puestos${dia}</span>` +
+        `<button type="button" class="enlace" id="btnQuitarFiltros">Quitar los filtros</button>`
+      : `<span class="etq-alcance">Todo lo cargado</span>` +
+        `<span><b>${num(res.pmtsCargados)}</b> PMT · sin filtros puestos: las tarjetas ` +
+        `y las tablas cuentan lo mismo.</span>`;
+    const btn = $('btnQuitarFiltros');
+    if (btn) btn.onclick = () => { Controles.reiniciarEstado(); aplicarFiltros(); };
+  }
+
   const t = (n, txt, clase = '') => `<div class="tarjeta ${clase}"><div class="n">${num(n)}</div><div class="t">${txt}</div></div>`;
   $('tarjetas').innerHTML =
-    t(res.pmts, 'PMT encontrados', 'verde') +
+    t(res.pmts, res.filtrado ? 'PMT visibles' : 'PMT encontrados', 'verde') +
     t(res.contratos, 'contratos') +
     t(res.relaciones, 'relaciones entre contratos', res.relaciones ? 'azul' : '') +
     t(res.contacto, 'llegan a tocarse', res.contacto ? 'nar' : '') +
     t(res.aLaVez, 'coinciden en el tiempo', res.aLaVez ? 'nar' : '') +
-    t(res.espacialNoEval + res.temporalNoEval, 'no se pudieron analizar', (res.espacialNoEval + res.temporalNoEval) ? 'rojo' : 'gris') +
-    t(res.archivosCompletos, 'archivos completos', 'verde') +
-    (res.archivosParciales ? t(res.archivosParciales, 'archivos leídos a medias', 'nar') : '') +
-    (res.archivosFallidos ? t(res.archivosFallidos, 'archivos que fallaron', 'rojo') : '');
+    t(res.espacialNoEval + res.temporalNoEval, 'no se pudieron analizar', (res.espacialNoEval + res.temporalNoEval) ? 'rojo' : 'gris');
 
+  // Segunda fila: los ARCHIVOS. No se mueven con los filtros y se dice.
+  const ta = $('tarjetasArchivos');
+  if (ta) {
+    ta.innerHTML =
+      t(res.archivosCompletos, 'archivos completos', 'verde') +
+      (res.archivosParciales ? t(res.archivosParciales, 'archivos leídos a medias', 'nar') : '') +
+      (res.archivosFallidos ? t(res.archivosFallidos, 'archivos que fallaron', 'rojo') : '') +
+      t(res.pmtsCargados, 'PMT cargados en total');
+  }
+  return res;
+}
+
+/**
+ * Contexto del analisis: qué hacer ahora, de dónde salieron los datos y si el
+ * recálculo cuadra con lo que guardaba el proyecto. Se pinta una sola vez por
+ * analisis y habla SIEMPRE del TOTAL cargado, que es el alcance de la
+ * instantanea guardada.
+ */
+function pintarContexto(res, ms, extra) {
+  const dudas = res.espacialNoEval || res.temporalNoEval || res.archivosParciales || res.archivosFallidos;
   const pasos = ['Use el <b>mapa</b> y los <b>filtros</b> para mirar lo que le interese.'];
   if (res.relaciones) pasos.push('Abra la pestaña <b>Relaciones</b> para ver pareja por pareja.');
   if (dudas) pasos.push('Revise <b>Calidad de los datos</b>: hay cosas que no se pudieron comprobar.');
@@ -492,7 +579,8 @@ function pintarResumen(res, ms, extra) {
       `Las relaciones se han recalculado con el motor ${esc(VERSION_REGLAS)}.</small>`
     : `<small>(análisis completado en ${num(ms)} ms)</small>`;
 
-  // Cotejo con la instantanea guardada: si no cuadra, se dice.
+  // Cotejo con la instantanea guardada: si no cuadra, se dice. Va sobre el
+  // TOTAL: la instantanea se tomo del analisis entero, no de una vista filtrada.
   let cotejo = '';
   if (extra?.proyecto?.instantanea) {
     const c = Proyecto.cotejarInstantanea(extra.proyecto.instantanea, {
@@ -574,6 +662,11 @@ function aplicarFiltros() {
   Tablas.pintarRelaciones(relVisibles, { onFila: (r) => Mapa.irARelacion(r) });
   Tablas.pintarNoEvaluables(noEvalVisibles, estado.porId);
 
+  // LAS TARJETAS SIGUEN AL ALCANCE VISIBLE: se repintan con cada filtro.
+  pintarTarjetas();
+  // Y si hay un informe en pantalla, deja de corresponder: se marca.
+  revisarInforme('Ha cambiado lo que se está viendo (filtros o día del recorrido).');
+
   $('cuentaPmt').textContent = num(visibles.length);
   $('cuentaRel').textContent = num(relVisibles.length);
   $('cuentaNoEval').textContent = num(noEvalVisibles.length);
@@ -607,18 +700,51 @@ function conectarExportaciones() {
   $('btnCerrarInforme').onclick = () => { mostrar('panelInforme', false); mostrar('panelExportar', true); };
 }
 
+/**
+ * SELLO DEL ESTADO — huella de aquello sobre lo que se genera un informe.
+ *
+ * Lleva lo que puede cambiar sus cifras: qué fuentes componen el análisis, qué
+ * filtros hay puestos, qué día del recorrido se está viendo y cuántos PMT,
+ * relaciones y pares no evaluables quedan a la vista. Si cualquiera de esas
+ * cosas cambia, el sello cambia y el informe que había queda marcado como
+ * caducado.
+ */
+function selloEstado() {
+  return JSON.stringify({
+    fuentes: estado.fuentes.map((f) => `${f.clase}:${f.nombre}:${f.huella ?? ''}`),
+    filtros: Controles.actuales(),
+    dia: estado.instanteRecorrido,
+    pmts: estado.visibles.length,
+    relaciones: estado.relVisibles.length,
+    noEval: (estado.noEvalVisibles ?? estado.noEvaluables).length,
+    cargados: estado.filas.length,
+  });
+}
+
+/**
+ * Comprueba si el informe que hay en pantalla sigue correspondiendo al estado
+ * actual. Se llama tras cada filtro y tras cada cambio de fuentes.
+ */
+function revisarInforme(motivo) {
+  Informe.revisarVigencia(selloEstado(), motivo, () => verInforme());
+}
+
 export function verInforme() {
+  // MISMO alcance para las tarjetas del tablero, las tablas, el informe y las
+  // exportaciones: el visible. `totalCargado` lo acompaña para que el informe
+  // pueda decir de cuántos PMT sale lo que enseña.
+  const resumen = resumenVisible();
   Informe.generar({
     filas: estado.visibles, relaciones: estado.relVisibles, porId: estado.porId,
     noEvaluables: estado.noEvalVisibles ?? estado.noEvaluables,
     archivos: Ingesta.diagnosticoArchivos(estado.archivos),
-    // MISMO alcance para las tarjetas y para las tablas del informe.
-    resumen: resumir(estado.analisis, estado.visibles, estado.relVisibles, estado.noEvalVisibles ?? estado.noEvaluables),
+    resumen,
     filtros: Controles.actuales(), config: CONFIG,
     versionReglas: VERSION_REGLAS,
     // Si el recorrido esta activo, el informe cubre SOLO ese dia y debe decirlo.
     diaRecorrido: estado.instanteRecorrido,
     totalCargado: estado.filas.length,
+    sello: selloEstado(),
   });
   mostrar('panelInforme', true);
   $('panelInforme').scrollIntoView({ behavior: 'smooth', block: 'start' });

@@ -931,3 +931,195 @@ test('2.3 · INFORME: la tarjeta de no evaluables coincide con su tabla', saltar
   assert.equal(tarjeta, filasTabla, 'tarjeta y tabla tienen que coincidir');
   await p.close();
 });
+
+/* ═══════════════════ ETAPA 2.4 ═══════════════════ */
+
+test('2.4 · las TARJETAS siguen al alcance visible, y lo dicen', saltar, async () => {
+  // ANTES: con un filtro puesto las tarjetas decían 2 PMT y 2 contratos
+  // mientras la tabla y el informe decían 1 y 1, sin explicar por qué.
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+
+  const tarjeta = (etq) => p.$$eval('#tarjetas .tarjeta', (n, e) => {
+    const t = n.find((x) => new RegExp(e, 'i').test(x.querySelector('.t').textContent));
+    return t ? t.querySelector('.n').textContent.trim() : null;
+  }, etq);
+
+  assert.equal(await tarjeta('PMT'), '4', 'sin filtros, las tarjetas cuentan todo');
+  assert.equal(await txt(p, '#cuentaPmt'), '4');
+  assert.ok(/Todo lo cargado/i.test(await txt(p, '#alcanceResumen')), await txt(p, '#alcanceResumen'));
+
+  await p.selectOption('#f_contrato', ['CW1']);
+  await p.waitForTimeout(400);
+
+  assert.equal(await txt(p, '#cuentaPmt'), '2', 'la tabla se filtra');
+  assert.equal(await tarjeta('PMT'), '2', 'y la tarjeta va con ella');
+  assert.equal(await tarjeta('contratos'), '1');
+
+  const alcance = await txt(p, '#alcanceResumen');
+  assert.ok(/Resultado visible/i.test(alcance), alcance);
+  assert.ok(/4 PMT cargados/.test(alcance), alcance);
+  assert.ok(/2 visibles/.test(alcance), alcance);
+
+  // Y la fila de archivos NO se mueve con los filtros: habla de otra cosa.
+  const cargadosTotal = await p.$$eval('#tarjetasArchivos .tarjeta', (n) => {
+    const t = n.find((x) => /PMT cargados en total/i.test(x.querySelector('.t').textContent));
+    return t ? t.querySelector('.n').textContent.trim() : null;
+  });
+  assert.equal(cargadosTotal, '4', 'el total sigue a la vista, claramente etiquetado');
+
+  await p.click('#btnQuitarFiltros');
+  await p.waitForTimeout(400);
+  assert.equal(await tarjeta('PMT'), '4', 'quitar los filtros devuelve el alcance completo');
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('2.4 · INVARIANTE: tarjetas, pestañas e informe cuentan el MISMO alcance', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  await p.selectOption('#f_contrato', ['CW1']);
+  await p.waitForTimeout(400);
+
+  const tarjetaPmt = await p.$$eval('#tarjetas .tarjeta', (n) =>
+    +n.find((x) => /PMT/i.test(x.querySelector('.t').textContent)).querySelector('.n').textContent.trim());
+  const pestanaPmt = +(await txt(p, '#cuentaPmt'));
+
+  await p.click('#expInforme');
+  await p.waitForSelector('#panelInforme:not(.oculto)', { timeout: 20000 });
+  await p.waitForTimeout(400);
+  const informePmt = await p.$$eval('#informe .inf-kpi', (n) => {
+    const t = n.find((x) => /PMT/i.test(x.textContent));
+    return t ? +t.querySelector('.inf-kpi-n').textContent.trim() : null;
+  });
+
+  assert.equal(tarjetaPmt, pestanaPmt, `tarjeta ${tarjetaPmt} vs pestaña ${pestanaPmt}`);
+  assert.equal(informePmt, pestanaPmt, `informe ${informePmt} vs pestaña ${pestanaPmt}`);
+  await p.close();
+});
+
+test('2.4 · INFORME CADUCADO: quitar una fuente lo marca y bloquea la impresión', saltar, async () => {
+  // ANTES: el informe seguía en pantalla, con el archivo retirado dentro, y se
+  // podía imprimir como si fuera el de ahora.
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  await p.click('#expInforme');
+  await p.waitForSelector('#panelInforme:not(.oculto)', { timeout: 20000 });
+  assert.ok(await p.isHidden('#avisoInforme'), 'recién generado no está caducado');
+  assert.equal(await p.$eval('#btnImprimirInforme', (b) => b.disabled), false);
+  assert.ok((await txt(p, '#informe')).includes('beta.kmz'), 'el informe nombra la fuente');
+
+  // Se quita una fuente: la aplicación recalcula.
+  await p.click('#btnDetalleFuentes').catch(() => {});
+  await p.waitForTimeout(200);
+  await p.$$eval('#listaFuentes button', (bs) => {
+    const b = bs.find((x) => /quitar/i.test(x.textContent) && x.closest('.fuente').textContent.includes('beta.kmz'));
+    if (b) b.click();
+  });
+  await p.waitForTimeout(1200);
+
+  assert.ok(await p.isVisible('#avisoInforme'), 'el informe queda marcado como caducado');
+  assert.ok(/ya no corresponde/i.test(await txt(p, '#avisoInforme')), await txt(p, '#avisoInforme'));
+  assert.equal(await p.$eval('#btnImprimirInforme', (b) => b.disabled), true,
+    'y no se puede imprimir un PDF con cifras viejas');
+  assert.equal(await p.$eval('#informe', (e) => e.classList.contains('caducado')), true);
+
+  // Actualizarlo lo deja otra vez al día.
+  await p.click('#btnActualizarInforme');
+  await p.waitForTimeout(800);
+  assert.ok(await p.isHidden('#avisoInforme'), 'tras actualizar deja de estar caducado');
+  assert.equal(await p.$eval('#btnImprimirInforme', (b) => b.disabled), false);
+  assert.ok(!(await txt(p, '#informe')).includes('beta.kmz'), 'y ya no nombra la fuente retirada');
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('2.4 · INFORME CADUCADO: también al cambiar un filtro y al quitarlo', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  await p.click('#expInforme');
+  await p.waitForSelector('#panelInforme:not(.oculto)', { timeout: 20000 });
+  assert.ok(await p.isHidden('#avisoInforme'));
+
+  await p.selectOption('#f_contrato', ['CW1']);
+  await p.waitForTimeout(400);
+  assert.ok(await p.isVisible('#avisoInforme'), 'cambiar el filtro caduca el informe');
+
+  await p.click('#btnActualizarInforme');
+  await p.waitForTimeout(800);
+  assert.ok(await p.isHidden('#avisoInforme'));
+
+  // Y quitar el filtro vuelve a caducarlo: es otro alcance distinto.
+  await p.selectOption('#f_contrato', []);
+  await p.waitForTimeout(400);
+  assert.ok(await p.isVisible('#avisoInforme'), 'quitar el filtro también cambia el alcance');
+
+  // Pero si el estado VUELVE a ser el del informe, deja de estar caducado: no
+  // se avisa de una diferencia que ya no existe.
+  await p.selectOption('#f_contrato', ['CW1']);
+  await p.waitForTimeout(400);
+  assert.ok(await p.isHidden('#avisoInforme'), 'al volver al mismo alcance, el informe vuelve a valer');
+  assert.equal(await p.$eval('#btnImprimirInforme', (b) => b.disabled), false);
+  await p.close();
+});
+
+test('2.4 · INFORME CADUCADO: añadir una fuente lo marca, empezar de nuevo lo borra', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A]);
+  await p.click('#expInforme');
+  await p.waitForSelector('#panelInforme:not(.oculto)', { timeout: 20000 });
+
+  await p.setInputFiles('#entradaAnadir', [KMZ_B]);
+  await p.waitForTimeout(1500);
+  assert.ok(await p.isVisible('#avisoInforme'), 'añadir una fuente también caduca el informe');
+
+  p.on('dialog', (d) => d.accept());
+  await p.click('#btnEmpezarDeNuevo');
+  await p.waitForTimeout(600);
+  assert.ok(await p.isHidden('#panelInforme'), 'empezar de nuevo cierra el informe');
+  assert.equal(await p.$eval('#informe', (e) => e.innerHTML.trim()), '', 'y lo borra: no queda el anterior');
+  await p.close();
+});
+
+test('2.4 · el conteo de DUPLICADOS sobrevive a guardar y abrir el proyecto', saltar, async () => {
+  // ANTES: los duplicados se contaban del análisis de los archivos, que no
+  // existe cuando las fuentes vienen de un proyecto. El contador se iba a 0
+  // aunque las copias siguieran en la tabla con su sufijo `~N`.
+  const conCopias = escribir('copias.kmz', F.kmz([
+    F.placemark('MISMO', desc('CW20'), F.punto([-75.6000, 6.2000])),
+    F.placemark('MISMO', desc('CW20'), F.punto([-75.6000, 6.2000])),
+    F.placemark('MISMO', desc('CW20'), F.punto([-75.6000, 6.2000])),
+    F.placemark('OTRO', desc('CW21'), F.punto([-75.5990, 6.2000])),
+  ]));
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [conCopias]);
+
+  const duplicados = async () => p.$$eval('#pest_cal tr', (fs) => {
+    const f = fs.find((x) => /Duplicados exactos/i.test(x.textContent));
+    return f ? f.querySelector('td:last-child')?.textContent.trim() : null;
+  });
+  await p.click('.pestanas button[data-pest="cal"]');
+  await p.waitForTimeout(300);
+  const antes = await duplicados();
+  assert.equal(antes, '2', `antes de guardar el contador decía ${antes}`);
+
+  p.on('dialog', (d) => d.accept('Con copias'));
+  const [d] = await Promise.all([p.waitForEvent('download', { timeout: 20000 }), p.click('#btnGuardarProyecto')]);
+  const ruta = path.join(TMP, 'copias.pmt.json');
+  await d.saveAs(ruta);
+
+  const q = await abrir({ sinRed: true });
+  await q.setInputFiles('#entradaProyecto', [ruta]);
+  await q.waitForSelector('#panelResumen:not(.oculto)', { timeout: 30000 });
+  await q.waitForTimeout(700);
+  await q.click('.pestanas button[data-pest="cal"]');
+  await q.waitForTimeout(300);
+  const despues = await q.$$eval('#pest_cal tr', (fs) => {
+    const f = fs.find((x) => /Duplicados exactos/i.test(x.textContent));
+    return f ? f.querySelector('td:last-child')?.textContent.trim() : null;
+  });
+  assert.equal(despues, '2', `tras abrir el proyecto el contador decía ${despues} (ANTES: 0)`);
+  assert.deepEqual(q.erroresJs, []);
+  await p.close();
+  await q.close();
+});

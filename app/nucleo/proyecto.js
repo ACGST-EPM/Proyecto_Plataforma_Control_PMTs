@@ -142,6 +142,12 @@ export function crearProyecto({ filas, relaciones, noEvaluables, archivos, confi
       inicio: x.inicio, fin: x.fin,
       tipoGeometria: x.tipoGeometria, tieneGeometria: x.tieneGeometria,
       analizable: x.analizable, origenArchivo: x.origenArchivo, carpeta: x.carpeta,
+      // PROCEDENCIA de la entrada, igual que los avisos: dice que este trazado
+      // llego repetido. No es un resultado del analisis y no dicta nada; sirve
+      // para que el recuento de duplicados siga teniendo respaldo despues de
+      // guardar y volver a abrir.
+      duplicadoExacto: x.duplicadoExacto === true,
+      idRepetidoEnOrigen: x.idRepetidoEnOrigen === true,
       avisos: x.avisos ?? [], geometria: x.geometria,
     })),
     /**
@@ -229,7 +235,8 @@ export function leerProyecto(texto) {
 
   const trazados = [];
   const vistos = new Set();
-  let descartados = 0, geometriasInvalidas = 0, duplicados = 0, fechasDescartadas = 0;
+  let descartados = 0, geometriasInvalidas = 0, duplicados = 0;
+  let fechasDescartadas = 0, fechasParciales = 0, marcasSinRespaldo = 0;
 
   for (const t of d.trazados) {
     if (!esObjeto(t) || typeof t.id !== 'string' || !t.id.trim()) { descartados++; continue; }
@@ -247,11 +254,33 @@ export function leerProyecto(texto) {
     }
 
     // VIGENCIA: el texto manda y los milisegundos se derivan de él. Si el
-    // archivo trae unos que no cuadran, la vigencia se descarta entera: no se
-    // elige en silencio entre dos fechas que se contradicen.
+    // archivo trae unos que no cuadran, ese extremo no se usa para calcular.
+    //
+    // CADA EXTREMO POR SEPARADO: un fin ilegible ya no se lleva por delante un
+    // inicio que sí se podía leer. La vigencia sigue sin poder compararse en el
+    // tiempo (`valida:false`, que es lo que mira el motor), pero la fecha
+    // conocida se conserva para verla, filtrarla por texto y exportarla.
     const vig = normalizarVigencia({ inicio: t.inicio, fin: t.fin, inicioMs: t.inicioMs, finMs: t.finMs });
     for (const a of vig.avisos) avisosTrazado.push(a);
-    if (!vig.valida && (t.inicio || t.fin)) fechasDescartadas++;
+    if (!vig.valida && (t.inicio || t.fin)) {
+      if (vig.inicioValido || vig.finValido) fechasParciales++;
+      else fechasDescartadas++;
+    }
+
+    // MARCAS DE PROCEDENCIA: se aceptan solo si el propio trazado las respalda.
+    //
+    // Un contador sin evidencia no vale: quien edite el archivo podria poner
+    // `duplicadoExacto: true` en todas las filas e inflar el recuento. La
+    // evidencia es el sufijo `~N` que el motor anade al identificador de una
+    // copia, que esta a la vista en la tabla. Sin sufijo, la marca se ignora.
+    const tieneSufijoCopia = /~\d+$/.test(t.id);
+    const marcaDuplicado = t.duplicadoExacto === true && tieneSufijoCopia;
+    const marcaIdRepetido = t.idRepetidoEnOrigen === true && tieneSufijoCopia;
+    if ((t.duplicadoExacto === true || t.idRepetidoEnOrigen === true) && !tieneSufijoCopia) {
+      marcasSinRespaldo++;
+      avisosTrazado.push('el archivo marcaba este trazado como copia repetida, pero su ' +
+        'identificador no lo respalda; la marca se ignora.');
+    }
 
     vistos.add(t.id);
     trazados.push({
@@ -261,6 +290,8 @@ export function leerProyecto(texto) {
       tipoCierre: t.tipoCierre ?? null,
       inicio: vig.inicio, fin: vig.fin,
       inicioMs: vig.inicioMs, finMs: vig.finMs, vigenciaValida: vig.valida,
+      vigenciaEstado: vig.estado, inicioValido: vig.inicioValido, finValido: vig.finValido,
+      duplicadoExacto: marcaDuplicado, idRepetidoEnOrigen: marcaIdRepetido,
       geometria,
       tipoGeometria: geometria?.type ?? null,
       tieneGeometria: !!geometria,
@@ -274,6 +305,8 @@ export function leerProyecto(texto) {
   if (duplicados) avisos.push(`Se descartaron ${duplicados} trazado(s) con un identificador repetido.`);
   if (geometriasInvalidas) avisos.push(`${geometriasInvalidas} trazado(s) traían una geometría inválida; se conservan sin geometría y quedan fuera del análisis espacial.`);
   if (fechasDescartadas) avisos.push(`${fechasDescartadas} trazado(s) traían fechas ilegibles o contradictorias; se conservan sin vigencia y no entran en la comparación temporal.`);
+  if (fechasParciales) avisos.push(`${fechasParciales} trazado(s) traían solo una de las dos fechas utilizable; se conserva la que sí se pudo leer, pero no entran en la comparación temporal porque falta el otro extremo.`);
+  if (marcasSinRespaldo) avisos.push(`${marcasSinRespaldo} trazado(s) venían marcados como copia repetida sin que su identificador lo respalde; esas marcas se han ignorado.`);
   if (!trazados.length) return { ok: false, motivo: 'El proyecto no contiene ningún trazado utilizable.' };
 
   // ── Relaciones: SI VIENEN, SE IGNORAN ──

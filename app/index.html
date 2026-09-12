@@ -69,7 +69,16 @@
     <div class="cuerpo">
       <div id="fraseResumen" class="frase"></div>
 
+      <!-- ALCANCE: dice SIEMPRE de que conjunto hablan las tarjetas de abajo.
+           Sin esta linea, un 2 arriba y un 1 en la tabla parecen un error. -->
+      <div id="alcanceResumen" class="alcance"></div>
       <div class="tarjetas" id="tarjetas"></div>
+
+      <!-- Segunda fila: habla de los ARCHIVOS, no de los PMT visibles, y por
+           eso no se mueve con los filtros. Va aparte para que no se confunda. -->
+      <h3 class="titulo-grupo" id="tituloArchivos">Archivos cargados <small>(no cambia con los filtros)</small></h3>
+      <div class="tarjetas" id="tarjetasArchivos"></div>
+
       <div id="siguientePaso" class="frase" style="margin-top:16px;background:var(--azul-suave);border-left-color:var(--azul)"></div>
     </div>
   </section>
@@ -167,6 +176,10 @@
         <button class="b-suave" id="btnCerrarInforme">Cerrar informe</button>
         <span class="pista-campo">En el diálogo de impresión elija «Guardar como PDF» como destino.</span>
       </div>
+      <!-- AVISO DE INFORME CADUCADO: aparece en cuanto cambia aquello sobre lo
+           que se genero (fuentes, filtros o dia). Mientras esta visible, el
+           informe queda atenuado y NO se puede imprimir. -->
+      <div id="avisoInforme" class="aviso-caducado no-imprimir oculto" role="alert"></div>
       <div id="informe" class="informe"></div>
     </div>
   </section>

@@ -132,6 +132,13 @@ export function aFilaPmt(reg) {
     analizable: reg.analizable,
     origenArchivo: reg.origenArchivo,
     carpeta: reg.carpeta,
+    // PROCEDENCIA, no resultado: el motor marca aqui si este trazado es una
+    // copia identica de otro del mismo origen, o si su identificador venia
+    // repetido en el KMZ. Si no se arrastra hasta la fila, el contador de
+    // "duplicados exactos" se queda sin respaldo en cuanto el analisis deja de
+    // venir de archivos (por ejemplo, al abrir un proyecto guardado).
+    duplicadoExacto: reg.duplicadoExacto === true,
+    idRepetidoEnOrigen: reg.idRepetidoEnOrigen === true,
     avisos: reg.avisos ?? [],
     geometria: reg.geometria,
   };

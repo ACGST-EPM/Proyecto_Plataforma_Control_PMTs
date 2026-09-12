@@ -62,25 +62,57 @@ export function normalizarInstante(texto, opciones = {}) {
 /**
  * Normaliza la vigencia de un trazado a partir del TEXTO, que es lo canónico.
  *
- * Si el archivo trae milisegundos y NO cuadran con el texto, se rechaza la
- * vigencia entera en vez de elegir uno de los dos en silencio: son datos que se
- * contradicen y no hay forma de saber cuál quiso decir quien los escribió.
+ * ══ POR QUÉ CADA EXTREMO SE TRATA POR SEPARADO ═════════════════════════════
  *
- * @returns {{valida:boolean, inicio:string|null, fin:string|null,
- *            inicioMs:number|null, finMs:number|null, avisos:string[]}}
+ * Antes, si uno de los dos extremos no se podía leer, se devolvía la vigencia
+ * ENTERA en blanco. Medido sobre datos reales: un trazado con inicio
+ * «2026-02-04 09:00:00» y un fin ilegible perdía TAMBIÉN el inicio al guardar y
+ * volver a abrir el proyecto. El dato válido no estaba mal: simplemente venía
+ * acompañado de uno malo, y se tiraban los dos.
+ *
+ * La clase de error es «un fallo parcial destruye la información válida que lo
+ * acompaña». Se elimina modelando los DOS extremos por separado:
+ *
+ *   · cada extremo tiene su propio estado (`inicioValido` / `finValido`);
+ *   · el extremo que se pueda leer se conserva, con su texto y sus milisegundos;
+ *   · `valida` sigue significando UNA SOLA COSA: «esta vigencia se puede usar
+ *     para comparar en el tiempo», y para eso hacen falta los dos extremos.
+ *
+ * Así, el motor sigue dejando fuera del traslape lo que no puede comparar —no
+ * cambia ninguna cifra— pero la tabla, la calidad, las exportaciones y el
+ * proyecto guardan y muestran la fecha que sí se conocía. Es exactamente lo que
+ * ya hacía el motor al leer un KMZ (`motor/src/tiempo/intervalo.js` conserva
+ * `inicioMs` aunque `finMs` sea nulo); lo que faltaba era hacer lo mismo al
+ * abrir un proyecto, para que guardar y abrir no cambiara la semántica.
+ *
+ * ══ LOS CINCO ESTADOS ══════════════════════════════════════════════════════
+ *
+ *   'completa'    los dos extremos se leen y el intervalo tiene sentido.
+ *   'incompleta'  se lee uno de los dos. Se conserva el que se lee.
+ *   'ilegible'    venian las dos fechas y no se pudo leer ninguna.
+ *   'incoherente' el archivo trae milisegundos que contradicen a su propio
+ *                 texto. Se conserva el texto y NO se calcula con nada.
+ *   'invertida'   los dos se leen, pero el fin es anterior al inicio: como
+ *                 intervalo no existe, así que no se le dan milisegundos.
+ *   'ausente'     no venía ninguna de las dos fechas.
+ *
+ * @returns {{valida:boolean, estado:string,
+ *            inicio:string|null, fin:string|null,
+ *            inicioMs:number|null, finMs:number|null,
+ *            inicioValido:boolean, finValido:boolean,
+ *            inicioOriginal:*, finOriginal:*, avisos:string[]}}
  */
 export function normalizarVigencia({ inicio, fin, inicioMs, finMs }) {
   const avisos = [];
   const ini = normalizarInstante(inicio, { horaPorDefecto: '00:00:00' });
   const f = normalizarInstante(fin, { horaPorDefecto: '23:59:59' });
 
-  if (!ini.ok || !f.ok) {
-    if (!ini.ok) avisos.push(`fecha de inicio inservible: ${ini.motivo}`);
-    if (!f.ok) avisos.push(`fecha de fin inservible: ${f.motivo}`);
-    return { valida: false, inicio: null, fin: null, inicioMs: null, finMs: null, avisos };
-  }
+  if (!ini.ok) avisos.push(`fecha de inicio inservible: ${ini.motivo}`);
+  if (!f.ok) avisos.push(`fecha de fin inservible: ${f.motivo}`);
 
   // CONTRADICCIÓN entre el texto y los milisegundos guardados: no se elige.
+  // El texto es canónico, así que se conserva; lo que se descarta es el número,
+  // porque no hay forma de saber cuál de los dos quiso decir quien lo escribió.
   const contradice = (nombre, msGuardado, msReal, textoReal) => {
     if (msGuardado === null || msGuardado === undefined) return false;
     if (typeof msGuardado !== 'number' || !Number.isFinite(msGuardado)) {
@@ -89,25 +121,46 @@ export function normalizarVigencia({ inicio, fin, inicioMs, finMs }) {
     }
     if (msGuardado === msReal) return false;
     avisos.push(`${nombre}: el texto dice «${textoReal}» pero los milisegundos guardados apuntan a ` +
-      `«${formatear(msGuardado)}». El archivo se contradice y la vigencia se descarta.`);
+      `«${formatear(msGuardado)}». El archivo se contradice y ese extremo no se usa para calcular.`);
     return true;
   };
 
-  const malIni = contradice('fecha de inicio', inicioMs, ini.ms, ini.texto);
-  const malFin = contradice('fecha de fin', finMs, f.ms, f.texto);
-  if (malIni || malFin) {
-    return { valida: false, inicio: ini.texto, fin: f.texto, inicioMs: null, finMs: null, avisos };
-  }
+  const malIni = ini.ok && contradice('fecha de inicio', inicioMs, ini.ms, ini.texto);
+  const malFin = f.ok && contradice('fecha de fin', finMs, f.ms, f.texto);
 
+  // Estado POR EXTREMO: se lee, y además su número es de fiar.
+  const inicioValido = ini.ok && !malIni;
+  const finValido = f.ok && !malFin;
+
+  const base = {
+    inicio: ini.ok ? ini.texto : null,
+    fin: f.ok ? f.texto : null,
+    inicioMs: inicioValido ? ini.ms : null,
+    finMs: finValido ? f.ms : null,
+    inicioValido, finValido,
+    inicioOriginal: inicio ?? null, finOriginal: fin ?? null,
+  };
+
+  const ausente = (inicio === null || inicio === undefined || inicio === '') &&
+                  (fin === null || fin === undefined || fin === '');
+
+  if (malIni || malFin) {
+    return { valida: false, estado: 'incoherente', ...base, avisos };
+  }
+  if (!inicioValido || !finValido) {
+    const estado = ausente ? 'ausente'
+      : (inicioValido || finValido) ? 'incompleta' : 'ilegible';
+    return { valida: false, estado, ...base, avisos };
+  }
   if (f.ms < ini.ms) {
     avisos.push('la fecha de fin es anterior a la de inicio');
-    return { valida: false, inicio: ini.texto, fin: f.texto, inicioMs: null, finMs: null, avisos };
+    // Como INTERVALO no existe: no se le dan milisegundos, porque cualquier
+    // duración calculada con ellos saldría negativa.
+    return { valida: false, estado: 'invertida', ...base, inicioMs: null, finMs: null, avisos };
   }
 
   return {
-    valida: true,
-    inicio: ini.texto, fin: f.texto,
-    inicioMs: ini.ms, finMs: f.ms,
+    valida: true, estado: 'completa', ...base,
     avisos: [...avisos, ...ini.avisos.map((a) => `inicio: ${a}`), ...f.avisos.map((a) => `fin: ${a}`)],
   };
 }

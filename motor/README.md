@@ -137,6 +137,19 @@ desplazaba una distancia de 120,010 m a 119,992 m —18,26 mm— y podía cruzar
 sentido equivocado. Con el origen por par de partes, la medida del par cercano sale **idéntica bit a
 bit** con y sin el vértice lejano, y hay una prueba que exige esa igualdad exacta.
 
+**Volver del plano al terreno (Etapa 2.4).** El plano también se sabe deshacer: `desproyectar()`
+toma `[este, norte]` en metros y devuelve `[lon, lat]`, imponiendo que el punto esté sobre el
+elipsoide (itera sobre la altura; converge en dos o tres pasos, con un error de ida y vuelta del
+orden del nanómetro). **No interviene en ninguna medida**: existe solo para situar dibujos.
+
+Hace falta porque, para el motor, un tramo entre dos vértices es la RECTA DEL PLANO que los une, y
+esa no es la misma línea que la recta en grados. Interpolar en grados sobre el tramo original —que
+es lo que se hacía— coloca el punto en otro sitio: en un tramo de 66 km a lo largo de un paralelo,
+9,4 m. Ese fue el defecto que dejaba el conector del mapa con los dos extremos en la misma
+coordenada mientras el motor declaraba 9,387513 m. Ahora `puntosMasCercanos()` comprueba la
+separación **geodésica de los puntos que va a dibujar** contra la distancia canónica; si no cuadra,
+la recupera deshaciendo la proyección, y si aun así no cuadra devuelve `ubicado: false` y no dibuja.
+
 **Dominio declarado: `RADIO_DOMINIO_METROS = 50 000`.** Un plano tangente deja de ser fiable cuando
 el par abarca demasiado. Si el par de partes ocupa un radio mayor de 50 km, el motor **no lo mide**:
 devuelve `metros: null`, `dominioValido: false` y un error que dice cuántos kilómetros abarcaba y
