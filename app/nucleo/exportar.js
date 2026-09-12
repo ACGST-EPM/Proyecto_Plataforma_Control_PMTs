@@ -10,8 +10,23 @@
  *  · KML       para volver a Google Earth, que es donde trabajan en campo.
  *
  * No se anaden formatos sin uso demostrable.
+ *
+ * ══ PROCEDENCIA: DONDE VA Y POR QUE NO VA EN TODAS PARTES ══════════════════
+ *
+ * Dentro de seis meses habra que poder responder «que version produjo esto».
+ * Cada formato admite el sello donde NO rompe a quien lo lee:
+ *
+ *   GeoJSON  una propiedad de nivel superior. El estandar lo permite y ningun
+ *            visor se atraganta.
+ *   KML      la `<description>` del `<Document>`. Google Earth la ensena.
+ *   CSV      NO se incrusta. Un CSV no tiene sitio para metadatos: una linea de
+ *            cabecera extra desplaza la fila de titulos y rompe a cualquiera
+ *            que lea la primera linea, y en el CSV legado las 11 columnas son
+ *            un invariante del proyecto. La procedencia va en el NOMBRE DEL
+ *            ARCHIVO, que viaja con el fichero aunque se envie por correo.
  */
 import { estadoEspacial, estadoTemporal, ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL } from './modelo.js';
+import { selloProcedencia, selloEnUnaLinea, VERSION_APP, VERSION_REGLAS } from './version.js';
 
 const csvCampo = (v) => {
   const s = v === null || v === undefined ? '' : String(v);
@@ -94,9 +109,11 @@ export function csvCompatibleLegado(filas, relaciones) {
 }
 
 /** GeoJSON estandar: cada PMT es una Feature con todas sus propiedades. */
-export function aGeoJson(filas) {
+export function aGeoJson(filas, config = null, extra = {}) {
   return {
     type: 'FeatureCollection',
+    // PROCEDENCIA: el estandar admite miembros propios de nivel superior.
+    procedencia: selloProcedencia(config, extra),
     features: filas.filter((x) => x.geometria).map((x) => ({
       type: 'Feature',
       geometry: x.geometria,
@@ -138,7 +155,7 @@ function geomKml(g) {
  * proyecto, asi que el archivo exportado se puede volver a cargar tanto en esta
  * aplicacion como en el generador sin perder un solo campo.
  */
-export function aKml(filas, nombreDoc = 'PMT exportados') {
+export function aKml(filas, nombreDoc = 'PMT exportados', config = null, extra = {}) {
   const pm = filas.filter((x) => x.geometria).map((x) => {
     const desc = ['fecha_inicio: ' + (x.inicio ?? ''), 'fecha_fin: ' + (x.fin ?? ''),
       'tipo_cierre: ' + (x.tipoCierre ?? ''), 'direccion: ' + (x.direccion ?? ''),
@@ -151,5 +168,21 @@ export function aKml(filas, nombreDoc = 'PMT exportados') {
       geomKml(x.geometria) + '</Placemark>';
   }).join('');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">` +
-    `<Document><name>${xmlEsc(nombreDoc)}</name>${pm}</Document></kml>`;
+    `<Document><name>${xmlEsc(nombreDoc)}</name>` +
+    `<description>${xmlEsc(selloEnUnaLinea(config, extra))}</description>${pm}</Document></kml>`;
+}
+
+/**
+ * NOMBRE DE ARCHIVO CON PROCEDENCIA.
+ *
+ * Es el unico sitio donde un CSV puede llevar su version sin romper a quien lo
+ * lee, y tiene una ventaja: sobrevive al correo, a la carpeta compartida y a
+ * que alguien lo renombre a medias. Sin caracteres que molesten en Windows.
+ *
+ * @param {string} base   por ejemplo 'PMT' o 'Relaciones_PMT'
+ * @param {string} ext    extension sin punto
+ */
+export function nombreConProcedencia(base, ext, { fecha = new Date() } = {}) {
+  const dia = fecha.toISOString().slice(0, 10);
+  return `${base}_${dia}_app-${VERSION_APP}_reglas-${VERSION_REGLAS}.${ext}`;
 }

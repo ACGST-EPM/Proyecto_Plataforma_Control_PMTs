@@ -307,7 +307,7 @@ export function revisarVigencia(sello, motivo, onActualizar) {
  * Devuelve el HTML generado, para poder comprobarlo en las pruebas.
  */
 export function generar({ filas, relaciones, porId, noEvaluables, archivos, resumen, filtros,
-  config, versionReglas, diaRecorrido, totalCargado, sello = null }) {
+  config, versionReglas, diaRecorrido, totalCargado, sello = null, procedencia = null }) {
   const rango = rangoTemporal(filas);
   const contratos = [...new Set(filas.map((x) => x.contrato).filter(Boolean))].sort();
   const municipios = [...new Set(filas.map((x) => x.municipio).filter(Boolean))].sort();
@@ -415,8 +415,17 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
     <tr><th>Regla invariante</th><td>dos frentes del <b>mismo contrato</b> nunca se consideran interferencia entre contratos</td></tr>
     <tr><th>Filtros aplicados</th><td>${esc(textoFiltros(filtros, diaRecorrido))}</td></tr>
     <tr><th>Alcance del informe</th><td>${alcance}</td></tr>
-    <tr><th>Reglas del motor</th><td>${esc(versionReglas ?? 'no declarada')}</td></tr>
     <tr><th>Contratistas</th><td>${esc(contratistas.join(', ')) || '—'}</td></tr>
+    <!-- PROCEDENCIA: para poder responder, dentro de seis meses, «que version
+         produjo este PDF y con que reglas». Las tres versiones van juntas
+         porque cambian por motivos distintos. -->
+    <tr><th>Versiones</th><td>
+      aplicación <b>${esc(procedencia?.aplicacion ?? '—')}</b> ·
+      motor <b>${esc(procedencia?.motor ?? '—')}</b> ·
+      reglas <b>${esc(procedencia?.reglas ?? versionReglas ?? 'no declarada')}</b> ·
+      formato de proyecto ${esc(procedencia?.esquemaProyecto ?? '—')}
+    </td></tr>
+    <tr><th>Generado</th><td>${esc((procedencia?.generadoEn ?? new Date().toISOString()).slice(0, 19).replace('T', ' '))} UTC</td></tr>
   </table>
 
   <div class="inf-nota">

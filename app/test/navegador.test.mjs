@@ -1123,3 +1123,18 @@ test('2.4 · el conteo de DUPLICADOS sobrevive a guardar y abrir el proyecto', s
   await p.close();
   await q.close();
 });
+
+test('2.4 · un error inesperado NUNCA deja un botón muerto y en silencio', saltar, async () => {
+  // Se descubrió de verdad: una función que el empaquetador no incluyó hacía
+  // que «Ver informe» no hiciera absolutamente nada, sin un solo mensaje.
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A]);
+  await p.evaluate(() => { setTimeout(() => { throw new Error('fallo de laboratorio'); }, 0); });
+  await p.waitForTimeout(600);
+  assert.ok(await p.isVisible('#avisoGlobal'), 'el error tiene que llegar a la pantalla');
+  const t = await txt(p, '#avisoGlobal');
+  assert.ok(/Algo ha fallado dentro de la aplicación/i.test(t), t);
+  assert.ok(/fallo de laboratorio/.test(t), t);
+  assert.ok(/datos no se han modificado/i.test(t), 'y tiene que decir que no se perdió nada');
+  await p.close();
+});

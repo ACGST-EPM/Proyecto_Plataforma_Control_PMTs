@@ -17,6 +17,7 @@ import * as Proyecto from './nucleo/proyecto.js';
 import * as Base from './nucleo/mapas-base.js';
 import { resumir, frasePrincipal } from './nucleo/resumen.js';
 import { diaDe } from './nucleo/tiempo.js';
+import { VERSION_APP, VERSION_MOTOR, selloProcedencia } from './nucleo/version.js';
 import { LECTURA, TIPOS_CIERRE, simbologiaDe } from './nucleo/modelo.js';
 import { calcularRelaciones, VERSION_REGLAS } from '../motor/src/nucleo/index.js';
 import { caja as cajaDeGeometria } from '../motor/src/geo/geometria.js';
@@ -146,6 +147,37 @@ function avisar(texto, clase = '') {
 }
 
 const ocultarAviso = () => mostrar('avisoGlobal', false);
+
+/**
+ * NINGUN ERROR QUEDA INVISIBLE — TAMPOCO LOS QUE NO ESPERABAMOS.
+ *
+ * El invariante decia «todos los errores van a #avisoGlobal», pero solo lo
+ * cumplian los que estaban dentro de un `try`. Un fallo en el manejador de un
+ * boton —por ejemplo, una funcion que el empaquetador no incluyo— no llegaba a
+ * ninguna parte: el boton simplemente no hacia nada y la pantalla se quedaba
+ * igual. Se descubrio asi, de verdad, al anadir el sello de procedencia.
+ *
+ * Esto es la red de seguridad de ultimo recurso. No sustituye a tratar los
+ * errores donde ocurren: sirve para que un fallo NO PREVISTO se vea, se pueda
+ * contar y no deje a la usuaria pulsando un boton muerto.
+ */
+function contarErrorInesperado(origen, detalle) {
+  avisar(`<b>Algo ha fallado dentro de la aplicación.</b> Sus datos no se han modificado. ` +
+    `Puede seguir usando el resto de la pantalla; si vuelve a pasar, avise indicando qué estaba haciendo.` +
+    `<br><small class="mono">${esc(origen)}: ${esc(detalle)}</small>`, 'error');
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (e) => {
+    // Los recursos que no cargan (teselas del mapa sin internet) no son esto:
+    // tienen su propio camino y su propio mensaje.
+    if (e?.target && e.target !== window) return;
+    contarErrorInesperado('error', e?.message ?? String(e?.error ?? 'desconocido'));
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    contarErrorInesperado('promesa sin atender', e?.reason?.message ?? String(e?.reason ?? 'desconocido'));
+  });
+}
 
 /**
  * IDENTIDAD DE UNA FUENTE: el NOMBRE del archivo, y su CONTENIDO para saber si
@@ -377,6 +409,7 @@ function guardarProyecto() {
     filas: estado.filas, relaciones: estado.relaciones, noEvaluables: estado.noEvaluables,
     archivos: estado.archivos, config: CONFIG, filtros: Controles.actuales(),
     nombre, versionReglas: VERSION_REGLAS,
+    versionApp: VERSION_APP, versionMotor: VERSION_MOTOR,
   });
   descargar(Proyecto.nombreArchivo(nombre), Proyecto.serializar(p), 'application/json;charset=utf-8');
   const filtrado = estado.visibles.length !== estado.filas.length;
@@ -818,6 +851,12 @@ export function verInforme() {
     resumen,
     filtros: Controles.actuales(), config: CONFIG,
     versionReglas: VERSION_REGLAS,
+    // PROCEDENCIA: lo que hay que saber para reproducir este informe.
+    procedencia: selloProcedencia(CONFIG, {
+      alcance: estado.visibles.length === estado.filas.length
+        ? `${estado.filas.length} PMT (todo lo cargado)`
+        : `${estado.visibles.length} de ${estado.filas.length} PMT (filtrado)`,
+    }),
     // Si el recorrido esta activo, el informe cubre SOLO ese dia y debe decirlo.
     diaRecorrido: estado.instanteRecorrido,
     totalCargado: estado.filas.length,

@@ -110,7 +110,8 @@ export function validarConfig(c) {
  * Construye el proyecto. Las relaciones NO se incluyen: solo sus recuentos,
  * y marcados como informativos.
  */
-export function crearProyecto({ filas, relaciones, noEvaluables, archivos, config, filtros, nombre, versionReglas }) {
+export function crearProyecto({ filas, relaciones, noEvaluables, archivos, config, filtros, nombre,
+  versionReglas, versionApp = null, versionMotor = null }) {
   const cuerpo = {
     marca: MARCA,
     esquema: ESQUEMA,
@@ -118,7 +119,14 @@ export function crearProyecto({ filas, relaciones, noEvaluables, archivos, confi
     creado: new Date().toISOString(),
     aplicacion: 'Plataforma de Control y Articulacion de PMTs',
     motor: {
+      // TRES VERSIONES, PORQUE CAMBIAN POR MOTIVOS DISTINTOS:
+      //   versionApp     lo que ve la persona (puede subir sin mover cifras);
+      //   versionMotor   como se calcula (puede subir sin mover cifras);
+      //   versionReglas  QUE se considera interferencia. Si esta cambia, las
+      //                  cifras pueden cambiar, y por eso se compara al abrir.
       versionReglas: versionReglas ?? 'desconocida',
+      versionMotor: versionMotor ?? null,
+      versionApp: versionApp ?? null,
       nota: 'Las reglas con las que se generó este proyecto. Si al abrirlo el motor ' +
         'instalado tiene otras, la aplicación lo avisa y recalcula con las suyas.',
     },
@@ -339,6 +347,8 @@ export function leerProyecto(texto) {
       creado: typeof d.creado === 'string' ? d.creado : null,
       esquema: d.esquema,
       versionReglas: esObjeto(d.motor) && typeof d.motor.versionReglas === 'string' ? d.motor.versionReglas : null,
+      versionMotor: esObjeto(d.motor) && typeof d.motor.versionMotor === 'string' ? d.motor.versionMotor : null,
+      versionApp: esObjeto(d.motor) && typeof d.motor.versionApp === 'string' ? d.motor.versionApp : null,
       config: cfg.config,
       fuentes,
       filtros: esObjeto(d.filtros) ? d.filtros : null,
