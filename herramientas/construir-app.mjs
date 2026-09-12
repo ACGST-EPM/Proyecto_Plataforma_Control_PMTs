@@ -28,8 +28,22 @@ import { fileURLToPath } from 'node:url';
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const RAIZ = resolve(AQUI, '..');
 const APP = join(RAIZ, 'app');
-const ENTRADA = 'app.js';
-const SALIDA = join(RAIZ, 'dist', 'Plataforma_PMTs.html');
+
+/**
+ * QUE SE CONSTRUYE.
+ *
+ * Por defecto, la aplicacion. Con `--prototipo` se construye la VISTA PREVIA de
+ * datos, que vive en `app/prototipo/` y comparte los modulos de `app/fuentes/`.
+ *
+ * Van en archivos distintos a proposito: la vista previa habla con un origen
+ * SIMULADO y no debe poder confundirse nunca con la aplicacion de verdad.
+ */
+const ES_PROTOTIPO = process.argv.includes('--prototipo');
+const ENTRADA = ES_PROTOTIPO ? 'prototipo/vista-datos.js' : 'app.js';
+const PAGINA = ES_PROTOTIPO ? join('prototipo', 'index.html') : 'index.html';
+const SALIDA = ES_PROTOTIPO
+  ? join(RAIZ, 'dist', 'Vista_previa_Datos.html')
+  : join(RAIZ, 'dist', 'Plataforma_PMTs.html');
 
 const RE_IMPORT = /(?:^|\n)\s*(?:import|export)[\s\S]*?from\s*['"]([^'"]+)['"]/g;
 
@@ -104,7 +118,7 @@ for (const nombre of iconos) {
   } catch { /* si falta un icono, Leaflet dibuja igual las geometrias */ }
 }
 
-let html = await readFile(join(APP, 'index.html'), 'utf8');
+let html = await readFile(join(APP, PAGINA), 'utf8');
 
 const cargador = `<script type="module">
 /* Cargador autocontenido generado por herramientas/construir-app.mjs
@@ -157,20 +171,30 @@ function incrustar(texto, marca, contenido) {
   return texto.replace(marca, () => contenido);
 }
 
-html = incrustar(html, '<link rel="stylesheet" href="vendor/leaflet/leaflet.css">', `<style>\n${leafletCss}\n</style>`);
-html = incrustar(html, '<link rel="stylesheet" href="estilos.css">', `<style>\n${css}\n</style>`);
-html = incrustar(html, '<script src="vendor/leaflet/leaflet.js"></script>', `<script>\n${leafletJs}\n</script>`);
-html = incrustar(html, '<script type="module" src="app.js"></script>', cargador);
+if (ES_PROTOTIPO) {
+  // La vista previa no dibuja mapas: no necesita Leaflet, y cargarlo la haria
+  // pesada sin motivo.
+  html = incrustar(html, '<link rel="stylesheet" href="../estilos.css">', `<style>\n${css}\n</style>`);
+  html = incrustar(html, '<script type="module" src="vista-datos.js"></script>', cargador);
+  for (const resto of ['../estilos.css', 'src="vista-datos.js"']) {
+    if (html.includes(resto)) throw new Error(`quedo una referencia externa sin incrustar: ${resto}`);
+  }
+} else {
+  html = incrustar(html, '<link rel="stylesheet" href="vendor/leaflet/leaflet.css">', `<style>\n${leafletCss}\n</style>`);
+  html = incrustar(html, '<link rel="stylesheet" href="estilos.css">', `<style>\n${css}\n</style>`);
+  html = incrustar(html, '<script src="vendor/leaflet/leaflet.js"></script>', `<script>\n${leafletJs}\n</script>`);
+  html = incrustar(html, '<script type="module" src="app.js"></script>', cargador);
 
-for (const resto of ['vendor/leaflet/leaflet.css', 'estilos.css', 'vendor/leaflet/leaflet.js', 'src="app.js"']) {
-  if (html.includes(resto)) throw new Error(`quedo una referencia externa sin incrustar: ${resto}`);
+  for (const resto of ['vendor/leaflet/leaflet.css', 'estilos.css', 'vendor/leaflet/leaflet.js', 'src="app.js"']) {
+    if (html.includes(resto)) throw new Error(`quedo una referencia externa sin incrustar: ${resto}`);
+  }
 }
 
 await mkdir(dirname(SALIDA), { recursive: true });
 await writeFile(SALIDA, html, 'utf8');
 
 const kb = (n) => (n / 1024).toFixed(1) + ' KB';
-console.log(`Aplicacion construida: ${relative(RAIZ, SALIDA)}`);
+console.log(`${ES_PROTOTIPO ? 'Vista previa construida' : 'Aplicacion construida'}: ${relative(RAIZ, SALIDA)}`);
 console.log(`  modulos incluidos    : ${orden.length}`);
 console.log(`  tamano final         : ${kb(Buffer.byteLength(html))}`);
 console.log(`  peticiones de red    : ninguna para funcionar (solo teselas opcionales del mapa)`);

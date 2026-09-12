@@ -273,3 +273,58 @@ test('la bitácora se guarda y se vuelve a leer, y una corrupta empieza vacía',
   assert.equal(A.leerBitacora('{{{').anotaciones.length, 0);
   assert.equal(A.leerBitacora('{"esquema":9}').anotaciones.length, 0);
 });
+
+/* ═══════════════ COPIAR NO ES MOVER (lo encontró la maqueta) ═══════════════ */
+
+test('COPIAR no es MOVER: si el original sigue ahí, es una copia', async () => {
+  const v1 = [await obs('PMT/a.kmz', 'MISMO'), await obs('PMT/b.kmz', 'OTRO')];
+  const inv = I.crearInventario(v1, new Map([[v1[0].id, ['p1', 'p2']], [v1[1].id, ['p3']]]));
+
+  // El original SIGUE, y aparece una copia con otro nombre.
+  const c = I.compararInventarios(inv, [
+    await obs('PMT/a.kmz', 'MISMO'),
+    await obs('PMT/a - copia.kmz', 'MISMO'),
+    await obs('PMT/b.kmz', 'OTRO'),
+  ]);
+  assert.equal(c.resumen.duplicada, 1, 'es una copia');
+  assert.equal(c.resumen.movida, 0, 'el original no se ha ido a ninguna parte');
+  assert.equal(I.planDeActualizacion(c).aLeer, 0, 'y no se procesa dos veces');
+  assert.equal(c.resumen.eliminada, 0);
+});
+
+test('MOVER sigue siendo MOVER cuando el original ya no está', async () => {
+  const v1 = [await obs('PMT/a.kmz', 'MISMO')];
+  const inv = I.crearInventario(v1, new Map([[v1[0].id, ['p1', 'p2']]]));
+  const c = I.compararInventarios(inv, [await obs('HIST/a.kmz', 'MISMO')]);
+  assert.equal(c.resumen.movida, 1);
+  assert.equal(c.resumen.duplicada, 0);
+  const movida = c.cambios.find((x) => x.tipo === I.CAMBIO.MOVIDA);
+  assert.deepEqual(movida.registrosPrevios, ['p1', 'p2'], 'sus PMT siguen siendo los suyos');
+});
+
+test('una copia NO hace que dos fuentes se repartan los mismos PMT', async () => {
+  const prov = P.proveedorSimulado();
+  prov.poner('a.kmz', 'A').poner('b.kmz', 'B');
+  let inv = (await S.aplicar(prov, await S.revisar(prov, null), procesarFalso, null)).inventario;
+  const antes = inv.fuentes.flatMap((f) => f.registros).length;
+
+  prov.poner('a - copia.kmz', 'A');
+  const rev = await S.revisar(prov, inv);
+  const res = await S.aplicar(prov, rev, procesarFalso, inv);
+  assert.equal(res.inventario.fuentes.flatMap((f) => f.registros).length, antes,
+    'la copia no puede duplicar los PMT del original');
+  assert.equal(res.difRegistros.hayCambios, false);
+});
+
+test('al REVISAR no se afirma nada sobre los PMT: todavía no se ha leído nada', async () => {
+  const prov = P.proveedorSimulado();
+  prov.poner('a.kmz', 'A');
+  const rev = await S.revisar(prov, null);
+  const frase = S.explicarSincronizacion(rev, null);
+  assert.ok(/Todavía no se sabe/.test(frase), frase);
+  assert.ok(!/Ningún PMT cambió/.test(frase),
+    'con un archivo nuevo por leer, afirmar que ningún PMT cambia es falso');
+
+  const res = await S.aplicar(prov, rev, procesarFalso, null);
+  assert.match(S.explicarSincronizacion(rev, res), /2 alta\(s\)/);
+});

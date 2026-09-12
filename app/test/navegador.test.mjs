@@ -1138,3 +1138,62 @@ test('2.4 · un error inesperado NUNCA deja un botón muerto y en silencio', sal
   assert.ok(/datos no se han modificado/i.test(t), 'y tiene que decir que no se perdió nada');
   await p.close();
 });
+
+/* ═══════════════════ VISTA PREVIA · DATOS (maqueta) ═══════════════════ */
+
+const VISTA = path.join(RAIZ, 'dist', 'Vista_previa_Datos.html');
+const saltarVista = { skip: !hayNavegador ? saltar.skip : (fs.existsSync(VISTA) ? false : 'falta dist/Vista_previa_Datos.html') };
+
+test('VISTA PREVIA: el ciclo completo de sincronización funciona en un navegador real', saltarVista, async () => {
+  navegador ??= await chromium.launch({ executablePath: ejecutable });
+  const ctx = await navegador.newContext({ viewport: { width: 1400, height: 1100 } });
+  await ctx.route('**://*/**', (r) => (r.request().url().startsWith('file://') ? r.continue() : r.abort()));
+  const p = await ctx.newPage();
+  const errores = [];
+  p.on('pageerror', (e) => errores.push(e.message));
+  await p.goto('file://' + VISTA);
+  await p.waitForTimeout(500);
+
+  const t = (sel) => p.textContent(sel).then((x) => (x ?? '').replace(/\s+/g, ' ').trim());
+
+  // Tiene que decir, sin margen de duda, que no es la aplicación.
+  const cabecera = await t('.frase.atencion');
+  assert.ok(/maqueta/i.test(cabecera) && /simulado/i.test(cabecera), cabecera);
+  assert.ok(/No hay ningún servicio de EPM conectado/i.test(cabecera),
+    'no puede parecer que hay algo corporativo conectado');
+
+  // Primera incorporación.
+  await p.click('#btnRevisar'); await p.waitForTimeout(300);
+  assert.ok(/Todavía no se sabe/.test(await t('#avisoSim')),
+    'al revisar no se puede afirmar nada sobre los PMT: todavía no se ha leído nada');
+  await p.click('#btnSincronizar'); await p.waitForTimeout(400);
+  assert.match(await t('#tarjetasDatos'), /6fuentes activas/);
+
+  // Segunda revisión sin cambios: no hay nada que hacer, y se dice.
+  await p.click('#btnRevisar'); await p.waitForTimeout(300);
+  assert.match(await t('#avisoSim'), /Todo está al día/);
+  assert.equal(await p.$eval('#btnSincronizar', (b) => b.disabled), true);
+
+  // Mover NO es dar de baja y de alta.
+  await p.click('#simMover'); await p.click('#btnRevisar'); await p.waitForTimeout(300);
+  const nov = await t('#novedades');
+  assert.ok(/Cambió de sitio/.test(nov), nov.slice(0, 200));
+  assert.ok(!/Ya no está/.test(nov), 'mover no puede verse como una baja');
+
+  // Copiar NO es mover.
+  await p.click('#simCopiar'); await p.click('#btnRevisar'); await p.waitForTimeout(300);
+  assert.ok(/Copia repetida/.test(await t('#novedades')), 'una copia con el original presente es una copia');
+
+  // Un archivo ilegible no tumba el lote ni se da por vigente.
+  await p.click('#btnSincronizar'); await p.waitForTimeout(400);
+  await p.click('#simRomper'); await p.click('#btnRevisar'); await p.waitForTimeout(300);
+  await p.click('#btnSincronizar'); await p.waitForTimeout(400);
+  assert.match(await t('#avisoSim'), /no se pudieron leer/);
+  assert.match(await t('#tablaBitacora'), /fuente_rechazada/);
+
+  // La bitácora no inventa quién hizo qué.
+  assert.match(await t('#tablaBitacora'), /equipo-local/);
+  assert.deepEqual(errores, []);
+  await p.close();
+  await ctx.close();
+});

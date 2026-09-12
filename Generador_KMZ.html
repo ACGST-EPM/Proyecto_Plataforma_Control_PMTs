@@ -64,7 +64,8 @@
         <div class="card-body2">
           <p class="mini mb-2">Aquí se registran una sola vez los valores que <b>deben repetirse idénticos</b>: contrato → contratista y proyecto.
           Un contrato puede tener <b>varios municipios</b> (sepáralos con <code>;</code>): al crear cada trazado se elige el municipio de un menú. El usuario nunca los escribe: los selecciona.
-          <b>🔒 La edición está protegida con clave de administrador EPM</b> para mantener uniformidad (p. ej. un mismo contratista en varios contratos debe escribirse igual). Guarda el JSON exportado como <code>contratos_db.json</code> en el repositorio para conservarlo.</p>
+          <b>🔒 La edición pide una clave</b> para que nadie modifique esta base <b>sin querer</b> y se mantenga la uniformidad (p. ej. un mismo contratista en varios contratos debe escribirse igual).
+          <b>No es una medida de seguridad</b>: esta página es pública y la clave viaja dentro de ella, así que protege de un despiste, no de alguien decidido. Guarda el JSON exportado como <code>contratos_db.json</code> en el repositorio para conservarlo.</p>
           <div class="table-responsive" style="max-height:200px; overflow:auto">
             <table class="table table-sm table-striped mb-2">
               <thead class="table-dark"><tr><th>Contrato</th><th>Contratista</th><th>Proyecto</th><th>Municipio</th><th></th></tr></thead>
@@ -188,9 +189,28 @@ let trazados = [];           // {id, nombre, geomType, coords:[[lat,lng],...], c
 let editandoId = null;
 let idSeq = 1;
 
-/* ---------- Control de acceso a la Base maestra (solo personal EPM) ---------- */
+/* ---------- Seguro contra ediciones accidentales de la Base maestra ----------
+   ESTO NO ES AUTENTICACION, Y NO DEBE PRESENTARSE COMO TAL.
+
+   El hash esta dentro de este archivo, que es publico. Cualquiera que abra la
+   pagina puede leerlo, probar claves contra el sin limite, o sencillamente
+   escribir `dbUnlocked = true` en la consola del navegador. Una pagina estatica
+   NO PUEDE guardar un secreto: todo lo que necesita para funcionar lo tiene que
+   entregar al navegador de quien la abre.
+
+   Para que sirve de verdad: para que nadie edite la base maestra SIN QUERER.
+   Ese es un objetivo legitimo y este mecanismo lo cumple.
+   Para que NO sirve: para impedir que alguien la edite a proposito.
+
+   Si alguna vez hace falta control de acceso de verdad, tiene que venir de
+   fuera de la pagina (identidad corporativa delante del sitio). Ver la seccion
+   SEGURIDAD del documento maestro y SEGURIDAD_MODELO_AMENAZAS.md.
+
+   La clave por defecto ESTABA ESCRITA EN CLARO en este comentario, lo que
+   convertia el seguro en decorativo incluso frente a un despiste. Se ha
+   retirado: quien administre la base la recibe por otro canal y puede
+   cambiarla sustituyendo el hash de abajo (SHA-256 del texto elegido). */
 let dbUnlocked = false;
-// SHA-256 de la clave. Clave por defecto: EPM-PMT-2026  (ver instrucciones para cambiarla)
 const CLAVE_HASH = "144887dea6c6f4df6d7341dd219576dce28dd3a0adb5398fd1a1c2bc577cd200";
 async function sha256(txt){
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
@@ -198,7 +218,7 @@ async function sha256(txt){
 }
 async function toggleLock(){
   if(dbUnlocked){ dbUnlocked=false; aplicarLock(); return; }
-  const k = prompt('Clave de administrador EPM para editar la base de datos:');
+  const k = prompt('Clave para editar la base de contratos.\n\n(Es un seguro contra cambios accidentales, no una medida de seguridad.)');
   if(k===null) return;
   try{
     const h = await sha256(k);

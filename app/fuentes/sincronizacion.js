@@ -110,10 +110,16 @@ export function explicarSincronizacion(revision, resultado) {
   if (r.duplicada) partes.push(`${r.duplicada} repetido(s), que no se procesan dos veces`);
   if (!partes.length) return 'No ha cambiado nada desde la última vez. No hizo falta volver a analizar.';
 
+  // OJO CON AFIRMAR ANTES DE SABER. Al REVISAR todavía no se ha leído nada, así
+  // que no se puede decir si algún PMT cambió. Decir «ningún PMT cambió» ahí era
+  // falso: en la primera revisión, con seis archivos nuevos por leer, afirmaba
+  // que no cambiaba ningún PMT. Lo encontró la maqueta de la vista de datos.
   const dif = resultado?.difRegistros;
-  const pmt = dif?.hayCambios
-    ? ` En PMT: ${dif.altas.length} alta(s) y ${dif.bajas.length} baja(s).`
-    : ' Ningún PMT cambió.';
+  const pmt = !resultado
+    ? ' Todavía no se sabe qué PMT cambian: hay que incorporar los cambios para verlo.'
+    : dif?.hayCambios
+      ? ` En PMT: ${dif.altas.length} alta(s) y ${dif.bajas.length} baja(s).`
+      : ' Ningún PMT cambió.';
   const ahorro = resultado && resultado.ahorradas
     ? ` Se reaprovecharon ${resultado.ahorradas} archivo(s) sin volver a leerlos.` : '';
   return `Cambios: ${partes.join(', ')}.${pmt}${ahorro}`;

@@ -12,8 +12,9 @@
     "test": "npm run test:motor && npm run test:app",
     "test:motor": "cd motor && npm test",
     "test:app": "node --test app/test/app.test.mjs app/test/auditoria-22.test.mjs app/test/invariantes-23.test.mjs app/test/defectos-24.test.mjs app/test/propiedades.test.mjs app/test/baseline.test.mjs app/test/fuentes.test.mjs",
-    "construir": "node herramientas/construir-app.mjs && cd motor && npm run construir",
+    "construir": "node herramientas/construir-app.mjs && node herramientas/construir-app.mjs --prototipo && cd motor && npm run construir",
     "construir:app": "node herramientas/construir-app.mjs",
+    "construir:prototipo": "node herramientas/construir-app.mjs --prototipo",
     "comparar": "cd motor && npm run comparar",
     "test:navegador": "npm run construir:app && node --test app/test/navegador.test.mjs",
     "test:todo": "npm run test && npm run test:navegador"

@@ -1,0 +1,74 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vista previa · Datos — Plataforma de PMTs</title>
+<link rel="stylesheet" href="../estilos.css">
+
+<header class="cabecera">
+  <div class="crece">
+    <h1>Vista previa · Datos</h1>
+    <p class="sub">Cómo se vería la plataforma cuando los KMZ lleguen solos, en vez de buscarlos uno por uno</p>
+  </div>
+</header>
+
+<main class="envoltorio">
+
+  <div class="frase atencion" style="margin-bottom:18px">
+    <b>Esto es una maqueta que funciona, no la aplicación.</b>
+    El origen de datos es <b>simulado</b>: vive en la memoria de esta página y lo puede manipular usted
+    con los botones de abajo. <b>No hay ningún servicio de EPM conectado</b>, no se envía nada a
+    ninguna parte y no hace falta internet. Sirve para ver si este es el camino
+    <b>antes</b> de pedirle nada a TI.
+  </div>
+
+  <section class="panel">
+    <h2><span class="paso">1</span> Origen de datos</h2>
+    <div class="cuerpo">
+      <div id="estadoOrigen" class="alcance"></div>
+      <div class="barra-acciones">
+        <button class="b-verde" id="btnRevisar">🔄 Revisar si hay novedades</button>
+        <button class="b-nar" id="btnSincronizar" disabled>⬇ Incorporar los cambios</button>
+      </div>
+      <div id="novedades"></div>
+    </div>
+  </section>
+
+  <section class="panel" style="margin-top:20px">
+    <h2><span class="paso">2</span> Lo que hay ahora mismo</h2>
+    <div class="cuerpo">
+      <div class="tarjetas" id="tarjetasDatos"></div>
+      <h3 class="titulo-grupo">Fuentes activas</h3>
+      <div class="tabla-caja"><table class="datos" id="tablaFuentes"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <section class="panel" style="margin-top:20px">
+    <h2><span class="paso">3</span> Qué ha pasado (bitácora)</h2>
+    <div class="cuerpo">
+      <p class="pista-campo" style="margin-top:0">
+        Responde «¿por qué hoy salen otras cifras que ayer?». <b>No dice quién lo hizo</b>:
+        hoy no hay identidad, y inventarla sería peor que no tenerla.
+      </p>
+      <div class="tabla-caja" style="max-height:340px"><table class="datos" id="tablaBitacora"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <section class="panel" style="margin-top:20px">
+    <h2>Banco de pruebas</h2>
+    <div class="cuerpo">
+      <p class="pista-campo" style="margin-top:0">
+        Simule lo que pasa de verdad en una carpeta compartida y vea cómo responde la plataforma.
+      </p>
+      <div class="barra-acciones" style="flex-wrap:wrap">
+        <button class="b-suave" id="simAnadir">Llega un archivo nuevo</button>
+        <button class="b-suave" id="simModificar">Alguien corrige un archivo</button>
+        <button class="b-suave" id="simMover">Mueven un archivo de carpeta</button>
+        <button class="b-suave" id="simCopiar">Alguien deja una copia con otro nombre</button>
+        <button class="b-suave" id="simBorrar">Retiran un archivo</button>
+        <button class="b-suave" id="simRomper">Un archivo deja de poder leerse</button>
+      </div>
+      <div id="avisoSim" class="frase oculto" style="margin-top:14px"></div>
+    </div>
+  </section>
+
+</main>
+<script type="module" src="vista-datos.js"></script>

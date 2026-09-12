@@ -1,0 +1,638 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vista previa · Datos — Plataforma de PMTs</title>
+<style>
+/* ==========================================================================
+   Plataforma de Control y Articulacion de PMTs — Grupo EPM
+   Sistema visual. Sin framework: ~600 lineas propias pesan menos que Bootstrap
+   y no dependen de ninguna CDN, que es requisito para un entorno corporativo.
+   ========================================================================== */
+
+:root {
+  /* Marca EPM */
+  --epm-verde:   #009300;
+  --epm-lima:    #b7c200;
+  --epm-naranja: #d56b00;
+
+  /* Derivados con contraste suficiente sobre blanco (AA) */
+  --verde-oscuro:   #006b00;
+  --verde-suave:    #e8f5e8;
+  --naranja-oscuro: #a35200;
+  --naranja-suave:  #fdf0e3;
+  --lima-suave:     #f6f8e0;
+
+  /* Estados. El rojo es para "fallo", nunca para "criticidad" de un PMT:
+     en esta etapa todavia no existe ninguna regla de criticidad. */
+  --rojo:        #c62828;
+  --rojo-suave:  #fdecea;
+  --azul:        #1565c0;
+  --azul-suave:  #e8f1fb;
+  --gris:        #5f6368;
+  --gris-suave:  #f1f3f4;
+
+  /* Neutros */
+  --tinta:    #1c1e21;
+  --tinta-2:  #44474b;
+  --tenue:    #6b7075;
+  --borde:    #dcdfe3;
+  --fondo:    #f5f6f7;
+  --papel:    #ffffff;
+
+  --radio: 8px;
+  --sombra: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+  --sombra-alta: 0 4px 16px rgba(0,0,0,.12);
+  --fuente: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--fuente);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--tinta);
+  background: var(--fondo);
+}
+
+/* ───────────────────────── Cabecera ───────────────────────── */
+
+.cabecera {
+  background: var(--epm-verde);
+  color: #fff;
+  padding: 14px 24px;
+  border-bottom: 4px solid var(--epm-lima);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.cabecera h1 { margin: 0; font-size: 1.15rem; font-weight: 600; letter-spacing: .01em; }
+.cabecera .sub { font-size: .8rem; opacity: .9; margin: 0; }
+.cabecera .crece { flex: 1; }
+
+.marca-epm {
+  font-weight: 700; font-size: 1.4rem; letter-spacing: .06em;
+  background: #fff; color: var(--epm-verde);
+  padding: 2px 10px; border-radius: 4px;
+}
+
+/* ───────────────────────── Estructura ───────────────────────── */
+
+.envoltorio { max-width: 1680px; margin: 0 auto; padding: 20px 24px 64px; }
+
+.panel {
+  background: var(--papel);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.panel > h2 {
+  margin: 0; padding: 12px 18px;
+  font-size: .82rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--verde-oscuro); background: var(--verde-suave);
+  border-bottom: 1px solid var(--borde);
+  display: flex; align-items: center; gap: 10px;
+}
+.panel > h2 .paso {
+  background: var(--epm-verde); color: #fff;
+  width: 22px; height: 22px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: .78rem; flex: 0 0 auto;
+}
+.cuerpo { padding: 18px; }
+
+.oculto { display: none !important; }
+
+/* ───────────────────────── Zona de carga ───────────────────────── */
+
+.zona-soltar {
+  border: 2px dashed var(--epm-verde);
+  border-radius: var(--radio);
+  background: var(--verde-suave);
+  padding: 32px 24px;
+  text-align: center;
+  transition: background .15s, border-color .15s;
+}
+.zona-soltar.encima { background: var(--lima-suave); border-color: var(--epm-lima); }
+.zona-soltar p { margin: 6px 0; color: var(--tinta-2); }
+.zona-soltar .grande { font-size: 1.05rem; font-weight: 600; color: var(--verde-oscuro); }
+.zona-soltar .pista { font-size: .85rem; color: var(--tenue); }
+
+/* ───────────────────────── Botones ───────────────────────── */
+
+button, .boton {
+  font-family: inherit; font-size: .88rem; font-weight: 600;
+  padding: 9px 18px; border-radius: 6px; border: 1px solid transparent;
+  cursor: pointer; transition: filter .12s, background .12s;
+  display: inline-flex; align-items: center; gap: 7px;
+}
+button:hover:not(:disabled) { filter: brightness(.93); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible {
+  outline: 3px solid var(--epm-lima); outline-offset: 2px;
+}
+
+.b-verde  { background: var(--epm-verde); color: #fff; }
+.b-lima   { background: var(--epm-lima); color: #23270a; }
+.b-nar    { background: var(--epm-naranja); color: #fff; }
+.b-suave  { background: var(--papel); color: var(--tinta-2); border-color: var(--borde); }
+.b-suave:hover:not(:disabled) { background: var(--gris-suave); }
+.b-mini   { padding: 5px 11px; font-size: .8rem; }
+
+/* ───────────────────────── Tarjetas de cifras ───────────────────────── */
+
+.tarjetas { display: flex; flex-wrap: wrap; gap: 12px; }
+
+.titulo-grupo {
+  font-size: .82rem; font-weight: 700; color: var(--tinta-2);
+  text-transform: uppercase; letter-spacing: .04em;
+  margin: 18px 0 8px; padding-top: 14px; border-top: 1px solid var(--borde);
+}
+.titulo-grupo small { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--tenue); }
+
+.tarjeta {
+  flex: 1 1 150px; min-width: 140px;
+  background: var(--papel); border: 1px solid var(--borde);
+  border-left: 4px solid var(--gris);
+  border-radius: 6px; padding: 12px 14px;
+}
+.tarjeta .n { font-size: 1.7rem; font-weight: 700; line-height: 1.1; color: var(--tinta); }
+.tarjeta .t { font-size: .78rem; color: var(--tenue); margin-top: 2px; }
+
+.tarjeta.verde  { border-left-color: var(--epm-verde); }
+.tarjeta.verde .n { color: var(--verde-oscuro); }
+.tarjeta.nar    { border-left-color: var(--epm-naranja); background: var(--naranja-suave); }
+.tarjeta.nar .n { color: var(--naranja-oscuro); }
+.tarjeta.rojo   { border-left-color: var(--rojo); background: var(--rojo-suave); }
+.tarjeta.rojo .n { color: var(--rojo); }
+.tarjeta.azul   { border-left-color: var(--azul); }
+.tarjeta.azul .n { color: var(--azul); }
+.tarjeta.gris   { border-left-color: var(--gris); background: var(--gris-suave); }
+
+/* ───────────────────────── Aviso destacado ───────────────────────── */
+
+.frase {
+  font-size: .98rem; line-height: 1.6; color: var(--tinta);
+  background: var(--gris-suave); border-left: 4px solid var(--epm-verde);
+  padding: 14px 16px; border-radius: 0 6px 6px 0; margin-bottom: 16px;
+}
+.frase.atencion { background: var(--naranja-suave); border-left-color: var(--epm-naranja); }
+.frase.error    { background: var(--rojo-suave); border-left-color: var(--rojo); }
+.frase b { font-weight: 700; }
+
+/* ── Alcance de las cifras ──
+   Las tarjetas hablan de lo que se esta viendo AHORA. Esta linea dice de que
+   conjunto salen y cuanto se ha cargado en total, para que nunca haya un
+   numero grande arriba y otro pequeno en la tabla sin explicacion. */
+.alcance {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  font-size: .88rem; color: var(--tinta-2);
+  margin: -4px 0 12px; padding: 8px 12px;
+  background: var(--gris-suave); border-radius: 6px;
+}
+.alcance b { color: var(--tinta); font-weight: 700; }
+.alcance .etq-alcance {
+  font-size: .74rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 9px; border-radius: 999px; background: var(--epm-verde); color: #fff;
+}
+.alcance.filtrado .etq-alcance { background: var(--azul); }
+.alcance button.enlace {
+  background: none; border: 0; padding: 0; color: var(--azul);
+  text-decoration: underline; cursor: pointer; font: inherit;
+}
+
+/* ───────────────────────── Pastillas de estado ───────────────────────── */
+
+.pastilla {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: .74rem; font-weight: 700; white-space: nowrap;
+  border: 1px solid transparent;
+}
+.p-contacto { background: var(--naranja-suave); color: var(--naranja-oscuro); border-color: #eec9a0; }
+.p-cerca    { background: var(--azul-suave); color: var(--azul); border-color: #bcd6f2; }
+.p-lejos    { background: var(--gris-suave); color: var(--gris); border-color: var(--borde); }
+.p-avez     { background: var(--lima-suave); color: #5a6100; border-color: #d7de7a; }
+.p-otro     { background: var(--gris-suave); color: var(--gris); border-color: var(--borde); }
+.p-nosabe   { background: #ede7f6; color: #5e35b1; border-color: #cfc2e8; }
+.p-ok       { background: var(--verde-suave); color: var(--verde-oscuro); border-color: #b5ddb5; }
+.p-parcial  { background: var(--naranja-suave); color: var(--naranja-oscuro); border-color: #eec9a0; }
+.p-fallo    { background: var(--rojo-suave); color: var(--rojo); border-color: #f3c2bd; }
+
+/* ───────────────────────── Rejilla principal ───────────────────────── */
+
+.rejilla { display: grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: start; }
+@media (max-width: 1100px) { .rejilla { grid-template-columns: 1fr; } }
+
+/* ───────────────────────── Filtros ───────────────────────── */
+
+.campo { margin-bottom: 13px; }
+.campo > label {
+  display: block; font-size: .76rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--tinta-2); margin-bottom: 4px;
+}
+select, input[type="text"], input[type="date"], input[type="number"] {
+  width: 100%; font-family: inherit; font-size: .86rem;
+  padding: 7px 9px; border: 1px solid var(--borde); border-radius: 5px;
+  background: var(--papel); color: var(--tinta);
+}
+select[multiple] { padding: 3px; min-height: 92px; }
+select[multiple] option { padding: 3px 6px; border-radius: 3px; }
+select[multiple] option:checked { background: var(--epm-verde) linear-gradient(0deg, var(--epm-verde), var(--epm-verde)); color: #fff; }
+
+.dos { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+
+.casillas { display: flex; flex-direction: column; gap: 5px; }
+.casillas label {
+  display: flex; align-items: flex-start; gap: 7px;
+  font-size: .83rem; color: var(--tinta-2); cursor: pointer;
+  padding: 3px 5px; border-radius: 4px;
+}
+.casillas label:hover { background: var(--gris-suave); }
+.casillas input { margin-top: 2px; accent-color: var(--epm-verde); flex: 0 0 auto; }
+
+/* ───────────────────────── Mapa ───────────────────────── */
+
+#mapa {
+  height: 520px; width: 100%;
+  border-radius: var(--radio);
+  border: 1px solid var(--borde);
+  background: #e9edf0;
+}
+.leaflet-container { font-family: var(--fuente); font-size: 13px; }
+
+.leyenda {
+  display: flex; flex-wrap: wrap; gap: 14px;
+  padding: 10px 14px; background: var(--gris-suave);
+  border: 1px solid var(--borde); border-top: none;
+  border-radius: 0 0 var(--radio) var(--radio);
+  font-size: .8rem; color: var(--tinta-2);
+}
+.leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+.muestra { width: 22px; height: 4px; border-radius: 2px; display: inline-block; }
+.muestra.pt { width: 11px; height: 11px; border-radius: 50%; }
+
+.barra-mapa {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin-bottom: 10px;
+}
+.barra-mapa .sep { flex: 1; }
+
+/* ───────────────────────── Recorrido temporal ───────────────────────── */
+
+.recorrido { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.recorrido input[type="range"] { flex: 1; min-width: 200px; accent-color: var(--epm-verde); }
+.fecha-viva {
+  font-family: var(--mono); font-size: .95rem; font-weight: 700;
+  color: var(--naranja-oscuro); background: var(--naranja-suave);
+  border: 1px solid #eec9a0; padding: 4px 12px; border-radius: 5px;
+  min-width: 112px; text-align: center;
+}
+
+/* ───────────────────────── Pestanas ───────────────────────── */
+
+.pestanas { display: flex; gap: 2px; border-bottom: 2px solid var(--borde); padding: 0 18px; background: var(--papel); }
+.pestanas button {
+  background: none; border: none; border-bottom: 3px solid transparent;
+  border-radius: 0; padding: 11px 16px; margin-bottom: -2px;
+  color: var(--tenue); font-weight: 600; font-size: .87rem;
+}
+.pestanas button:hover { color: var(--tinta); background: var(--gris-suave); }
+.pestanas button[aria-selected="true"] { color: var(--verde-oscuro); border-bottom-color: var(--epm-verde); }
+.pestanas .cuenta {
+  background: var(--gris-suave); color: var(--tenue);
+  border-radius: 999px; padding: 1px 8px; font-size: .74rem; margin-left: 6px;
+}
+.pestanas button[aria-selected="true"] .cuenta { background: var(--verde-suave); color: var(--verde-oscuro); }
+
+/* ───────────────────────── Tablas ───────────────────────── */
+
+.tabla-caja { overflow-x: auto; max-height: 560px; overflow-y: auto; border: 1px solid var(--borde); border-radius: 6px; }
+table.datos { width: 100%; border-collapse: collapse; font-size: .84rem; }
+table.datos th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--verde-suave); color: var(--verde-oscuro);
+  text-align: left; padding: 9px 11px; font-size: .76rem;
+  text-transform: uppercase; letter-spacing: .03em;
+  border-bottom: 2px solid var(--epm-verde); white-space: nowrap; cursor: pointer;
+  user-select: none;
+}
+table.datos th:hover { background: #dcefdc; }
+table.datos th .orden { opacity: .45; font-size: .8em; }
+table.datos td { padding: 8px 11px; border-bottom: 1px solid var(--borde); vertical-align: top; }
+table.datos tbody tr:hover { background: var(--lima-suave); }
+table.datos tbody tr.sel { background: var(--verde-suave); box-shadow: inset 3px 0 0 var(--epm-verde); }
+table.datos .num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+table.datos .mono { font-family: var(--mono); font-size: .92em; }
+.vacio { text-align: center; color: var(--tenue); padding: 34px 18px; }
+
+/* ───────────────────────── Diagnosticos ───────────────────────── */
+
+.archivo {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 10px 12px; border: 1px solid var(--borde); border-radius: 6px;
+  margin-bottom: 8px; background: var(--papel);
+}
+.archivo.parcial { border-left: 4px solid var(--epm-naranja); background: var(--naranja-suave); }
+.archivo.fallida { border-left: 4px solid var(--rojo); background: var(--rojo-suave); }
+.archivo.completa { border-left: 4px solid var(--epm-verde); }
+.archivo .nom { font-weight: 600; word-break: break-all; }
+.archivo .crece { flex: 1; min-width: 0; }
+.archivo ul { margin: 6px 0 0; padding-left: 18px; font-size: .83rem; color: var(--tinta-2); }
+.archivo li { margin-bottom: 3px; }
+
+details.tecnico { margin-top: 10px; }
+details.tecnico summary {
+  cursor: pointer; font-size: .82rem; color: var(--azul); font-weight: 600;
+  padding: 5px 0;
+}
+details.tecnico pre {
+  background: #20242a; color: #e3e6ea; padding: 12px; border-radius: 6px;
+  font-size: .78rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+}
+
+/* ───────────────────────── Informe imprimible ───────────────────────── */
+
+@media print {
+  .no-imprimir, .cabecera, .pestanas, .zona-soltar, .leyenda, .barra-mapa { display: none !important; }
+  body { background: #fff; font-size: 11px; }
+  .envoltorio { max-width: none; padding: 0; }
+  .panel { box-shadow: none; border: 1px solid #999; break-inside: avoid; }
+  .tabla-caja { max-height: none; overflow: visible; }
+  table.datos th { position: static; }
+  #mapa { height: 340px; }
+  .imprimir-solo { display: block !important; }
+}
+.imprimir-solo { display: none; }
+
+/* ───────────────────────── Accesibilidad ───────────────────────── */
+
+.solo-lectores {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ══════════════════════ Etapa 2.1 ══════════════════════ */
+
+/* Pistas y campos compactos */
+.pista-campo { font-size: .79rem; color: var(--tenue); }
+.mini-campo {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: .83rem; color: var(--tinta-2); white-space: nowrap;
+}
+.mini-campo select { width: auto; padding: 4px 7px; font-size: .82rem; }
+.mini-campo input[type="checkbox"] { accent-color: var(--epm-verde); }
+.campo > label.activo { color: var(--verde-oscuro); }
+.titulillo {
+  font-size: .76rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--tinta-2); margin-bottom: 6px;
+}
+
+.barra-acciones {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px;
+}
+
+/* Lista de archivos del análisis, con opción de quitar */
+.fuente {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border: 1px solid var(--borde); border-radius: 6px;
+  margin-bottom: 6px; background: var(--papel); font-size: .86rem;
+}
+.fuente .crece { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* Paginador */
+.paginador {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 10px 2px 0; font-size: .83rem;
+}
+.paginador .sep { flex: 1; }
+
+/* Punto de color del tipo de cierre en la tabla */
+.punto-cierre {
+  display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+  margin-right: 6px; vertical-align: baseline;
+}
+
+/* ─────────────── Informe ejecutivo ─────────────── */
+
+.informe {
+  background: #fff; color: var(--tinta);
+  padding: 26px 30px; border: 1px solid var(--borde); border-radius: 6px;
+  max-width: 1100px; margin: 0 auto;
+}
+.informe h1 { font-size: 1.35rem; margin: 0; }
+.informe h2 {
+  font-size: 1rem; color: var(--verde-oscuro); margin: 26px 0 10px;
+  border-bottom: 2px solid var(--verde-suave); padding-bottom: 5px;
+}
+.inf-p { font-size: .88rem; color: var(--tinta-2); }
+
+.inf-portada {
+  display: flex; align-items: center; gap: 16px;
+  border-bottom: 4px solid var(--epm-lima); padding-bottom: 14px; margin-bottom: 18px;
+}
+.inf-portada > div:nth-child(2) { flex: 1; }
+.inf-marca {
+  background: var(--epm-verde); color: #fff; font-weight: 700; font-size: 1.5rem;
+  letter-spacing: .06em; padding: 8px 14px; border-radius: 5px;
+}
+.inf-sub { margin: 3px 0 0; font-size: .85rem; color: var(--tenue); }
+.inf-fecha { font-size: .8rem; color: var(--tenue); text-align: right; }
+
+.inf-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+.inf-kpi { border: 1px solid var(--borde); border-left: 4px solid var(--gris); border-radius: 5px; padding: 9px 11px; }
+.inf-kpi-n { font-size: 1.45rem; font-weight: 700; line-height: 1.1; }
+.inf-kpi-t { font-size: .73rem; color: var(--tenue); }
+.inf-kpi.verde { border-left-color: var(--epm-verde); } .inf-kpi.verde .inf-kpi-n { color: var(--verde-oscuro); }
+.inf-kpi.nar   { border-left-color: var(--epm-naranja); background: var(--naranja-suave); } .inf-kpi.nar .inf-kpi-n { color: var(--naranja-oscuro); }
+.inf-kpi.rojo  { border-left-color: var(--rojo); background: var(--rojo-suave); } .inf-kpi.rojo .inf-kpi-n { color: var(--rojo); }
+.inf-kpi.azul  { border-left-color: var(--azul); } .inf-kpi.azul .inf-kpi-n { color: var(--azul); }
+.inf-kpi.gris  { border-left-color: var(--gris); background: var(--gris-suave); }
+
+.inf-tabla { width: 100%; border-collapse: collapse; font-size: .8rem; margin-bottom: 6px; }
+.inf-tabla th, .inf-tabla td { border: 1px solid var(--borde); padding: 5px 8px; text-align: left; vertical-align: top; }
+.inf-tabla thead th { background: var(--verde-suave); color: var(--verde-oscuro); font-size: .74rem; text-transform: uppercase; }
+.inf-tabla .num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+.inf-datos th { background: var(--gris-suave); width: 190px; font-weight: 600; }
+
+.inf-nota {
+  font-size: .82rem; background: var(--gris-suave); border-left: 3px solid var(--epm-verde);
+  padding: 9px 12px; margin: 12px 0; border-radius: 0 4px 4px 0;
+}
+.inf-nota-aviso { background: var(--naranja-suave); border-left-color: var(--epm-naranja); }
+
+.mapa-informe { width: 100%; height: auto; border: 1px solid var(--borde); border-radius: 5px; display: block; }
+.sin-mapa { padding: 30px; text-align: center; color: var(--tenue); background: var(--gris-suave); border-radius: 5px; }
+.inf-leyenda { display: flex; flex-wrap: wrap; gap: 13px; font-size: .78rem; color: var(--tinta-2); margin-top: 8px; }
+.inf-leyenda span { display: inline-flex; align-items: center; gap: 5px; }
+.inf-leyenda i { width: 18px; height: 4px; border-radius: 2px; display: inline-block; }
+
+/* ── Detalles cartográficos del informe ── */
+.inf-detalles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.inf-detalle { border: 1px solid var(--borde); border-radius: 5px; padding: 8px; break-inside: avoid; }
+.inf-detalle-tit { font-size: .76rem; margin-bottom: 5px; color: var(--tinta-2); }
+.inf-vs { color: var(--tenue); font-style: italic; }
+.inf-detalle-svg { width: 100%; height: auto; border-radius: 4px; display: block; }
+.inf-detalle-pie { display: flex; flex-wrap: wrap; gap: 10px; font-size: .72rem; color: var(--tinta-2); margin-top: 5px; }
+.inf-detalle-pie i { width: 12px; height: 3px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: middle; }
+@media (max-width: 800px) { .inf-detalles { grid-template-columns: 1fr; } }
+
+.aviso-cotejo {
+  margin-top: 8px; padding: 8px 11px; border-radius: 4px;
+  background: var(--rojo-suave); border-left: 3px solid var(--rojo); font-size: .85rem;
+}
+.notas-fuente { margin-top: 8px; font-size: .83rem; color: var(--tinta-2); }
+
+/**
+ * IMPRESIÓN DEL INFORME.
+ *
+ * Cuando el informe está abierto, imprimir tiene que dar SOLO el informe. Antes
+ * salían primero el tablero, los filtros y las tablas como páginas no pedidas.
+ * La regla es explícita: con `body.imprimiendo-informe`, todo lo que no sea el
+ * informe se oculta.
+ */
+@media print {
+  body.imprimiendo-informe > .envoltorio > *:not(#panelInforme) { display: none !important; }
+  body.imprimiendo-informe .cabecera { display: none !important; }
+  body.imprimiendo-informe #panelInforme { display: block !important; margin: 0 !important; }
+  body.imprimiendo-informe #panelInforme > h2 { display: none !important; }
+  .informe { border: none; padding: 0; max-width: none; }
+  .informe h2 { break-after: avoid; }
+  .inf-tabla { break-inside: auto; }
+  .inf-tabla tr { break-inside: avoid; }
+  .inf-portada, .inf-kpis, .mapa-informe { break-inside: avoid; }
+  #panelInforme { box-shadow: none; border: none; }
+  #panelInforme > .cuerpo { padding: 0; }
+}
+@media (max-width: 700px) { .inf-kpis { grid-template-columns: repeat(2, 1fr); } }
+
+/* ───────────── Informe caducado ─────────────
+   Un informe generado con otro alcance NO puede parecer el de ahora. Se avisa
+   arriba, se atenua el contenido y se bloquea la impresion hasta regenerarlo. */
+.aviso-caducado {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  background: var(--naranja-suave); border-left: 4px solid var(--epm-naranja);
+  color: var(--tinta); padding: 12px 16px; border-radius: 0 6px 6px 0; margin-bottom: 14px;
+  font-size: .92rem;
+}
+.aviso-caducado b { font-weight: 700; }
+.informe.caducado { opacity: .45; filter: grayscale(.6); }
+
+/* ── Alcance de cada pestana de detalle ── */
+.alcance-pestana {
+  font-size: .82rem; color: var(--tinta-2); margin: 0 0 12px;
+  padding: 7px 11px; background: var(--gris-suave); border-radius: 6px;
+}
+.alcance-pestana b { color: var(--tinta); }
+
+</style>
+
+<header class="cabecera">
+  <div class="crece">
+    <h1>Vista previa · Datos</h1>
+    <p class="sub">Cómo se vería la plataforma cuando los KMZ lleguen solos, en vez de buscarlos uno por uno</p>
+  </div>
+</header>
+
+<main class="envoltorio">
+
+  <div class="frase atencion" style="margin-bottom:18px">
+    <b>Esto es una maqueta que funciona, no la aplicación.</b>
+    El origen de datos es <b>simulado</b>: vive en la memoria de esta página y lo puede manipular usted
+    con los botones de abajo. <b>No hay ningún servicio de EPM conectado</b>, no se envía nada a
+    ninguna parte y no hace falta internet. Sirve para ver si este es el camino
+    <b>antes</b> de pedirle nada a TI.
+  </div>
+
+  <section class="panel">
+    <h2><span class="paso">1</span> Origen de datos</h2>
+    <div class="cuerpo">
+      <div id="estadoOrigen" class="alcance"></div>
+      <div class="barra-acciones">
+        <button class="b-verde" id="btnRevisar">🔄 Revisar si hay novedades</button>
+        <button class="b-nar" id="btnSincronizar" disabled>⬇ Incorporar los cambios</button>
+      </div>
+      <div id="novedades"></div>
+    </div>
+  </section>
+
+  <section class="panel" style="margin-top:20px">
+    <h2><span class="paso">2</span> Lo que hay ahora mismo</h2>
+    <div class="cuerpo">
+      <div class="tarjetas" id="tarjetasDatos"></div>
+      <h3 class="titulo-grupo">Fuentes activas</h3>
+      <div class="tabla-caja"><table class="datos" id="tablaFuentes"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <section class="panel" style="margin-top:20px">
+    <h2><span class="paso">3</span> Qué ha pasado (bitácora)</h2>
+    <div class="cuerpo">
+      <p class="pista-campo" style="margin-top:0">
+        Responde «¿por qué hoy salen otras cifras que ayer?». <b>No dice quién lo hizo</b>:
+        hoy no hay identidad, y inventarla sería peor que no tenerla.
+      </p>
+      <div class="tabla-caja" style="max-height:340px"><table class="datos" id="tablaBitacora"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <section class="panel" style="margin-top:20px">
+    <h2>Banco de pruebas</h2>
+    <div class="cuerpo">
+      <p class="pista-campo" style="margin-top:0">
+        Simule lo que pasa de verdad en una carpeta compartida y vea cómo responde la plataforma.
+      </p>
+      <div class="barra-acciones" style="flex-wrap:wrap">
+        <button class="b-suave" id="simAnadir">Llega un archivo nuevo</button>
+        <button class="b-suave" id="simModificar">Alguien corrige un archivo</button>
+        <button class="b-suave" id="simMover">Mueven un archivo de carpeta</button>
+        <button class="b-suave" id="simCopiar">Alguien deja una copia con otro nombre</button>
+        <button class="b-suave" id="simBorrar">Retiran un archivo</button>
+        <button class="b-suave" id="simRomper">Un archivo deja de poder leerse</button>
+      </div>
+      <div id="avisoSim" class="frase oculto" style="margin-top:14px"></div>
+    </div>
+  </section>
+
+</main>
+<script type="module">
+/* Cargador autocontenido generado por herramientas/construir-app.mjs
+   No editar a mano: se regenera con  npm run construir-app  */
+(function () {
+  const FUENTES = {"ui/dom.js":"/** Utilidades minimas de DOM. Deliberadamente pequenas: no hay framework. */\n\n/**\n * Busca un elemento por su identificador.\n *\n * Tolera que NO haya documento: asi los modulos de interfaz se pueden importar\n * desde Node para probar su logica sin arrastrar un navegador entero. En el\n * navegador el comportamiento es exactamente el de `getElementById`.\n */\nexport const $ = (id) => (typeof document === 'undefined' ? null : document.getElementById(id));\nexport const $$ = (sel, raiz = null) => {\n  if (typeof document === 'undefined') return [];\n  return [...(raiz ?? document).querySelectorAll(sel)];\n};\n\n/** Escapa texto antes de inyectarlo como HTML. Todo dato de archivo pasa por aqui. */\nexport function esc(s) {\n  return String(s ?? '').replace(/[&<>\"']/g,\n    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\n}\n\nexport function crear(tag, props = {}, hijos = []) {\n  const n = document.createElement(tag);\n  for (const [k, v] of Object.entries(props)) {\n    if (k === 'clase') n.className = v;\n    else if (k === 'html') n.innerHTML = v;\n    else if (k === 'texto') n.textContent = v;\n    else if (k.startsWith('on')) n.addEventListener(k.slice(2).toLowerCase(), v);\n    else if (v !== null && v !== undefined) n.setAttribute(k, v);\n  }\n  for (const h of [].concat(hijos)) if (h) n.appendChild(typeof h === 'string' ? document.createTextNode(h) : h);\n  return n;\n}\n\nexport const mostrar = (id, si = true) => { const n = $(id); if (n) n.classList.toggle('oculto', !si); };\n\n/** Formatea un numero con separador de miles en castellano. */\nexport const num = (n) => (n ?? 0).toLocaleString('es-CO');\n\n/** Fecha legible: '2026-03-01 06:00:00' -> '01/03/2026 06:00'. */\nexport function fechaLegible(s) {\n  if (!s) return '—';\n  const m = /^(\\d{4})-(\\d{2})-(\\d{2})[ T](\\d{2}):(\\d{2})/.exec(String(s));\n  if (!m) return String(s).slice(0, 16);\n  return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}`;\n}\n\nexport const soloDia = (ms) => new Date(ms).toISOString().slice(0, 10);\n\n/**\n * Entrega un archivo al usuario. En un HTML abierto con doble clic no hay\n * servidor, asi que se construye un Blob y se dispara la descarga desde ahi.\n */\nexport function descargar(nombre, contenido, tipo = 'text/plain;charset=utf-8') {\n  const blob = contenido instanceof Blob ? contenido : new Blob([contenido], { type: tipo });\n  const url = URL.createObjectURL(blob);\n  const a = crear('a', { href: url, download: nombre });\n  document.body.appendChild(a);\n  a.click();\n  a.remove();\n  setTimeout(() => URL.revokeObjectURL(url), 4000);\n}\n","fuentes/huella.js":"/**\n * HUELLAS DE CONTENIDO — para saber si algo cambió, no para demostrar quién lo cambió.\n *\n * ══ LA DISTINCIÓN QUE HAY QUE TENER CLARA ═════════════════════════════════\n *\n * Una huella de contenido sirve para responder «¿esto es lo mismo que tenía\n * ayer?». No sirve para responder «¿alguien lo manipuló a propósito?»: quien\n * edita un archivo puede recalcular la huella. En este proyecto eso ya está\n * dicho del `.pmt.json` y se repite aquí porque es fácil de olvidar.\n *\n * ══ DOS IMPLEMENTACIONES, Y POR QUÉ ═══════════════════════════════════════\n *\n * SHA-256 mediante `crypto.subtle`, que está en el navegador y en Node sin\n * instalar nada. Es el estándar, no colisiona en la práctica y no añade\n * dependencias al producto, que tiene que seguir siendo un archivo portable.\n *\n * Si `crypto.subtle` no está disponible —un navegador antiguo, un contexto que\n * el navegador no considera de confianza—, se usa un respaldo propio de 128\n * bits. NO es criptográfico y se declara como tal en el resultado, para que\n * nada lo presente como algo que no es.\n *\n * @module\n */\n\n/** Algoritmo que se pudo usar realmente. Viaja con la huella, siempre. */\nexport const ALGORITMO = Object.freeze({\n  SHA256: 'sha-256',\n  RESPALDO: 'respaldo-128-no-criptografico',\n});\n\nconst hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');\n\n/**\n * Respaldo de 128 bits: cuatro acumuladores FNV-1a con semillas distintas.\n *\n * Un solo acumulador de 32 bits colisiona a las pocas decenas de miles de\n * entradas (paradoja del cumpleaños); con cuatro y semillas distintas el\n * espacio es de 128 bits, más que suficiente para distinguir versiones de unos\n * cuantos miles de archivos. Sigue sin ser criptográfico: se puede construir\n * una colisión a propósito, y por eso se etiqueta.\n */\nfunction respaldo128(bytes) {\n  const semillas = [0x811c9dc5, 0x01000193, 0x85ebca6b, 0xc2b2ae35];\n  const h = [...semillas];\n  for (let i = 0; i < bytes.length; i++) {\n    const b = bytes[i];\n    h[0] = Math.imul(h[0] ^ b, 0x01000193) >>> 0;\n    h[1] = Math.imul(h[1] + b + i, 0x85ebca6b) >>> 0;\n    h[2] = Math.imul(h[2] ^ (b + (i & 0xff)), 0xc2b2ae35) >>> 0;\n    h[3] = (Math.imul(h[3] ^ b, 0x27220a95) + (i * 2654435761 >>> 0)) >>> 0;\n  }\n  // La longitud entra en la huella: sin ella, dos contenidos que solo difieren\n  // en ceros al final podrían coincidir.\n  h[3] = Math.imul(h[3] ^ bytes.length, 0x01000193) >>> 0;\n  return h.map((x) => x.toString(16).padStart(8, '0')).join('');\n}\n\nconst aBytes = (datos) =>\n  datos instanceof Uint8Array ? datos\n  : datos instanceof ArrayBuffer ? new Uint8Array(datos)\n  : new TextEncoder().encode(String(datos));\n\n/**\n * Huella del contenido.\n *\n * @param {Uint8Array|ArrayBuffer|string} datos\n * @returns {Promise<{valor:string, algoritmo:string, bytes:number, criptografica:boolean}>}\n */\nexport async function huellaDe(datos) {\n  const bytes = aBytes(datos);\n  const subtle = globalThis.crypto?.subtle;\n  if (subtle?.digest) {\n    try {\n      // `slice()` fuerza un ArrayBuffer propio: algunas vistas comparten buffer\n      // con otras y `digest` mediría de más.\n      const d = await subtle.digest('SHA-256', bytes.slice().buffer);\n      return { valor: hex(d), algoritmo: ALGORITMO.SHA256, bytes: bytes.length, criptografica: true };\n    } catch { /* sin subtle utilizable: se usa el respaldo, declarándolo */ }\n  }\n  return { valor: respaldo128(bytes), algoritmo: ALGORITMO.RESPALDO, bytes: bytes.length, criptografica: false };\n}\n\n/**\n * ¿Son la misma cosa?\n *\n * Dos huellas calculadas con algoritmos distintos NO se pueden comparar: decir\n * «son distintas» sería tan falso como decir «son iguales». Se devuelve\n * `null`, que significa «no se puede saber», y quien llame decide qué hacer.\n *\n * @returns {boolean|null}\n */\nexport function mismaHuella(a, b) {\n  if (!a || !b) return null;\n  if (a.algoritmo !== b.algoritmo) return null;\n  return a.valor === b.valor && a.bytes === b.bytes;\n}\n\n/** Forma corta para enseñar en pantalla, sin prometer más de lo que es. */\nexport const huellaCorta = (h) => (h ? `${h.valor.slice(0, 12)}…` : '—');\n","fuentes/inventario.js":"/**\n * MODELO EXPLÍCITO: FUENTE → VERSIÓN → REGISTROS DERIVADOS.\n *\n * ══ POR QUÉ HACE FALTA SEPARAR TRES COSAS QUE SE CONFUNDEN ════════════════\n *\n * Hoy la aplicación trabaja con «archivos que la usuaria elige». Eso funciona\n * con ocho KMZ y deja de funcionar en cuanto los archivos llegan solos, cambian\n * de versión o alguien los renombra. Antes de automatizar nada hay que decidir\n * qué significa «el mismo». Y son TRES preguntas distintas, no una:\n *\n *   1. DEDUPLICACIÓN TÉCNICA  ¿son los mismos BYTES?\n *      Responde la huella del contenido. Dos archivos con nombres distintos y\n *      el mismo contenido son la misma versión copiada dos veces.\n *\n *   2. VERSIONADO             ¿es el mismo ARCHIVO, más nuevo?\n *      Responde la identidad de la FUENTE (su ruta o su nombre dentro de una\n *      carpeta). Mismo sitio, otro contenido = versión nueva de lo mismo.\n *\n *   3. IDENTIDAD DE NEGOCIO   ¿es el mismo PMT?\n *      Responde el identificador estable del trazado, que el motor deriva de su\n *      contenido (`pmt:id` o huella del contenido). Un mismo PMT puede aparecer\n *      en varias versiones de una fuente, y hay que saber que es el mismo.\n *\n * Mezclarlas produce errores concretos y predecibles: renombrar un archivo\n * parecería un alta y una baja; corregir una fecha en un KMZ parecería que\n * desaparecen todos sus PMT y aparecen otros nuevos; copiar un archivo a otra\n * carpeta duplicaría 60 trazados.\n *\n * ══ QUÉ ES CADA COSA AQUÍ ═════════════════════════════════════════════════\n *\n *   Fuente    de dónde sale la información. Tiene identidad estable: el\n *             proveedor y la ruta dentro de él. No cambia al cambiar el\n *             contenido.\n *   Versión   el contenido concreto de una fuente en un momento dado,\n *             identificado por su huella. Una fuente tiene 1..n versiones.\n *   Registros los PMT que produjo esa versión, por su identificador de\n *             negocio. Son DERIVADOS: se recalculan, nunca mandan.\n *\n * Esto NO es una base de datos ni un sistema de versiones. Es el mínimo\n * necesario para poder responder «qué cambió desde la última vez» sin\n * reprocesarlo todo y sin inventarse nada.\n *\n * @module\n */\nimport { huellaDe, mismaHuella } from './huella.js';\n\n/** Versión del formato del inventario. Se guarda con él. */\nexport const ESQUEMA_INVENTARIO = 1;\n\n/**\n * Identidad estable de una fuente: proveedor + ruta.\n *\n * NO incluye el contenido. Ese es justo el punto: la fuente es «ese sitio», y\n * lo que hay en ese sitio puede cambiar.\n */\nexport const idFuente = (proveedor, ruta) => `${proveedor}:${ruta}`;\n\n/**\n * Crea el registro de una fuente vista ahora mismo.\n *\n * @param {{proveedor:string, ruta:string, nombre?:string, datos:Uint8Array,\n *          modificado?:string|null, etiquetaRemota?:string|null}} entrada\n */\nexport async function observarFuente(entrada) {\n  const huella = await huellaDe(entrada.datos);\n  return {\n    id: idFuente(entrada.proveedor, entrada.ruta),\n    proveedor: entrada.proveedor,\n    ruta: entrada.ruta,\n    nombre: entrada.nombre ?? entrada.ruta.split('/').pop(),\n    huella,\n    bytes: huella.bytes,\n    // Lo que diga el origen sobre cuándo cambió. Es INFORMATIVO: no se usa para\n    // decidir si algo cambió, porque un reloj ajeno no es una prueba. Decide la\n    // huella del contenido, que sí lo es.\n    modificadoDeclarado: entrada.modificado ?? null,\n    etiquetaRemota: entrada.etiquetaRemota ?? null,\n    observadoEn: new Date().toISOString(),\n  };\n}\n\n/**\n * Inventario: lo que se sabe de un conjunto de fuentes en un momento dado.\n * Es lo que se guarda para poder comparar la próxima vez.\n */\nexport function crearInventario(fuentes = [], registrosPorFuente = new Map()) {\n  return {\n    esquema: ESQUEMA_INVENTARIO,\n    creado: new Date().toISOString(),\n    fuentes: fuentes.map((f) => ({\n      ...f,\n      // Registros DERIVADOS de esta versión: solo los identificadores. El\n      // contenido de cada PMT no se guarda aquí; para eso está el proyecto.\n      registros: [...(registrosPorFuente.get(f.id) ?? [])].sort(),\n    })),\n  };\n}\n\n/** Serializa el inventario para guardarlo. Sin nada que no venga de los datos. */\nexport const serializarInventario = (inv) => JSON.stringify(inv, null, 1);\n\n/**\n * Lee un inventario guardado, validándolo. Nunca lanza.\n * Un inventario corrupto NO es un error fatal: significa «no sé qué había\n * antes», y entonces todo se trata como nuevo, que es lo seguro.\n */\nexport function leerInventario(texto) {\n  let d;\n  try { d = typeof texto === 'string' ? JSON.parse(texto) : texto; }\n  catch { return { ok: false, motivo: 'el inventario no se pudo leer' }; }\n  if (!d || typeof d !== 'object') return { ok: false, motivo: 'el inventario no es un objeto' };\n  if (d.esquema !== ESQUEMA_INVENTARIO) {\n    return { ok: false, motivo: `inventario en formato ${d.esquema}; esta versión entiende el ${ESQUEMA_INVENTARIO}` };\n  }\n  if (!Array.isArray(d.fuentes)) return { ok: false, motivo: 'el inventario no trae fuentes' };\n  const fuentes = d.fuentes.filter((f) =>\n    f && typeof f.id === 'string' && f.huella && typeof f.huella.valor === 'string');\n  return { ok: true, inventario: { ...d, fuentes } };\n}\n\n/* ═══════════════════ COMPARACIÓN INCREMENTAL ═══════════════════ */\n\n/** Estados posibles de una fuente entre dos inventarios. */\nexport const CAMBIO = Object.freeze({\n  NUEVA: 'nueva',\n  MODIFICADA: 'modificada',\n  SIN_CAMBIO: 'sin_cambio',\n  ELIMINADA: 'eliminada',\n  MOVIDA: 'movida',           // mismo contenido, otra ruta\n  DUPLICADA: 'duplicada',     // mismo contenido que otra fuente del mismo lote\n  INDETERMINADA: 'indeterminada', // huellas no comparables (algoritmos distintos)\n});\n\n/**\n * Compara lo que hay ahora con lo que había antes.\n *\n * ══ EL ORDEN DE LAS PREGUNTAS IMPORTA ═════════════════════════════════════\n *\n * 1. ¿Existía ya esta RUTA?  → misma fuente: sin cambio o versión nueva.\n * 2. Si no existía, ¿conozco ya este CONTENIDO en otra ruta? → se movió o se\n *    copió. NO es un alta: sus PMT ya estaban.\n * 3. Si no, es nueva de verdad.\n * 4. Lo que había antes y ya no está: eliminada.\n *\n * Hacer la pregunta 2 después de la 1 es lo que evita que renombrar un archivo\n * se vea como un alta y una baja a la vez.\n *\n * @param {object|null} anterior inventario previo, o null si no hay\n * @param {Array} ahora          fuentes observadas ahora (`observarFuente`)\n * @returns {{cambios:Array, resumen:object, hayCambios:boolean}}\n */\nexport function compararInventarios(anterior, ahora) {\n  const previas = new Map((anterior?.fuentes ?? []).map((f) => [f.id, f]));\n  const previasPorHuella = new Map();\n  for (const f of anterior?.fuentes ?? []) {\n    if (!previasPorHuella.has(f.huella.valor)) previasPorHuella.set(f.huella.valor, f);\n  }\n\n  const cambios = [];\n  const huellasDelLote = new Map();\n  // Rutas que siguen existiendo ahora. Hace falta para distinguir COPIAR de\n  // MOVER: si el sitio de antes sigue ahí, no se movió nada, se copió.\n  const idsAhora = new Set(ahora.map((f) => f.id));\n\n  for (const f of ahora) {\n    const antes = previas.get(f.id);\n\n    // Duplicado DENTRO del mismo lote: dos rutas con el mismo contenido ahora.\n    const gemela = huellasDelLote.get(f.huella.valor);\n    huellasDelLote.set(f.huella.valor, f.id);\n\n    if (antes) {\n      const igual = mismaHuella(antes.huella, f.huella);\n      if (igual === null) {\n        cambios.push({ tipo: CAMBIO.INDETERMINADA, fuente: f, antes,\n          motivo: `la huella anterior se calculó con «${antes.huella.algoritmo}» y esta con ` +\n            `«${f.huella.algoritmo}»: no se pueden comparar, así que se trata como modificada` });\n        continue;\n      }\n      cambios.push({ tipo: igual ? CAMBIO.SIN_CAMBIO : CAMBIO.MODIFICADA, fuente: f, antes,\n        registrosPrevios: antes.registros ?? [] });\n      continue;\n    }\n\n    // MISMO CONTENIDO QUE ALGO QUE YA CONOCÍAMOS, EN OTRA RUTA.\n    //\n    // Aquí hay DOS casos distintos y confundirlos tiene consecuencias:\n    //   · si la ruta de antes YA NO ESTÁ, el archivo se MOVIÓ. Es el mismo, y\n    //     sus PMT siguen siendo los suyos.\n    //   · si la ruta de antes SIGUE AHÍ, esto es una COPIA. El original no se\n    //     ha ido, así que tratarla como un movimiento haría que dos fuentes se\n    //     repartieran los mismos PMT y se contaran dos veces.\n    // Lo encontró la maqueta de la vista de datos, dejando una copia con otro\n    // nombre: salía «cambió de sitio» mientras el original seguía en su sitio.\n    const mismaCosaEnOtroSitio = previasPorHuella.get(f.huella.valor);\n    if (mismaCosaEnOtroSitio) {\n      const elOriginalSigue = idsAhora.has(mismaCosaEnOtroSitio.id);\n      cambios.push(elOriginalSigue\n        ? { tipo: CAMBIO.DUPLICADA, fuente: f, antes: null,\n            motivo: `mismo contenido que «${mismaCosaEnOtroSitio.ruta}», que sigue estando: es una copia, ` +\n              `no información nueva` }\n        : { tipo: CAMBIO.MOVIDA, fuente: f, antes: mismaCosaEnOtroSitio,\n            registrosPrevios: mismaCosaEnOtroSitio.registros ?? [],\n            motivo: `mismo contenido que «${mismaCosaEnOtroSitio.ruta}», que ya no está: es el mismo ` +\n              `archivo en otro sitio, no información nueva` });\n      continue;\n    }\n    if (gemela) {\n      cambios.push({ tipo: CAMBIO.DUPLICADA, fuente: f, antes: null,\n        motivo: `mismo contenido que «${gemela}», que llegó en este mismo lote` });\n      continue;\n    }\n    cambios.push({ tipo: CAMBIO.NUEVA, fuente: f, antes: null });\n  }\n\n  // Una fuente que se movió no está eliminada: se localiza por su contenido.\n  const huellasAhora = new Set(ahora.map((f) => f.huella.valor));\n  for (const [id, f] of previas) {\n    if (idsAhora.has(id)) continue;\n    if (huellasAhora.has(f.huella.valor)) continue;   // se movió, no se fue\n    cambios.push({ tipo: CAMBIO.ELIMINADA, fuente: f, antes: f, registrosPrevios: f.registros ?? [] });\n  }\n\n  const resumen = {};\n  for (const v of Object.values(CAMBIO)) resumen[v] = 0;\n  for (const c of cambios) resumen[c.tipo]++;\n  const hayCambios = cambios.some((c) => c.tipo !== CAMBIO.SIN_CAMBIO);\n  return { cambios, resumen, hayCambios };\n}\n\n/**\n * Qué hay que hacer con el resultado de la comparación.\n *\n * Deliberadamente NO decide por su cuenta: devuelve un PLAN legible que alguien\n * —persona o proceso— aprueba o ejecuta. «Reprocesar solo lo necesario» es una\n * optimización; presentarla como una decisión tomada a espaldas de nadie es un\n * problema de confianza.\n */\nexport function planDeActualizacion(comparacion) {\n  const leer = [], conservar = [], retirar = [], avisos = [];\n  for (const c of comparacion.cambios) {\n    switch (c.tipo) {\n      case CAMBIO.NUEVA:\n      case CAMBIO.MODIFICADA:\n      case CAMBIO.INDETERMINADA:\n        leer.push(c.fuente);\n        if (c.motivo) avisos.push(`${c.fuente.nombre}: ${c.motivo}`);\n        break;\n      case CAMBIO.SIN_CAMBIO:\n        conservar.push(c.fuente);\n        break;\n      case CAMBIO.MOVIDA:\n        // El contenido ya se conoce: no hay que volver a leerlo, pero sí\n        // actualizar dónde vive.\n        conservar.push(c.fuente);\n        avisos.push(`${c.fuente.nombre}: ${c.motivo}`);\n        break;\n      case CAMBIO.DUPLICADA:\n        avisos.push(`${c.fuente.nombre}: ${c.motivo}. No se procesa dos veces.`);\n        break;\n      case CAMBIO.ELIMINADA:\n        retirar.push(c.fuente);\n        break;\n    }\n  }\n  return {\n    leer, conservar, retirar, avisos,\n    // Cuánto trabajo se ahorra. Si es 0, se dice: un «no hay cambios» honesto\n    // vale más que una barra de progreso falsa.\n    aLeer: leer.length,\n    total: leer.length + conservar.length,\n    registrosQueSeRetiran: comparacion.cambios\n      .filter((c) => c.tipo === CAMBIO.ELIMINADA)\n      .flatMap((c) => c.registrosPrevios ?? []),\n  };\n}\n\n/**\n * Diferencias a nivel de PMT entre dos conjuntos de identificadores.\n *\n * Es la pregunta 3 del modelo: identidad de NEGOCIO. Un PMT que aparece en una\n * versión nueva de la misma fuente y tiene el mismo identificador es el MISMO\n * PMT, no uno nuevo, aunque haya cambiado el archivo que lo trajo.\n */\nexport function diferenciasDeRegistros(antes, ahora) {\n  const a = new Set(antes), b = new Set(ahora);\n  const altas = [...b].filter((x) => !a.has(x)).sort();\n  const bajas = [...a].filter((x) => !b.has(x)).sort();\n  const permanecen = [...b].filter((x) => a.has(x)).sort();\n  return { altas, bajas, permanecen,\n    hayCambios: altas.length > 0 || bajas.length > 0 };\n}\n","fuentes/proveedores.js":"/**\n * PROVEEDORES DE FUENTES — la frontera entre «de dónde viene» y «qué hacemos».\n *\n * ══ POR QUÉ EXISTE ESTA FRONTERA ══════════════════════════════════════════\n *\n * Hoy los KMZ los elige la usuaria con un selector de archivos. Mañana podrían\n * llegar de una carpeta corporativa. Si la aplicación y el motor supieran de\n * dónde vienen, cambiar el origen obligaría a tocarlo todo, y cada prueba\n * necesitaría el servicio real levantado.\n *\n * Así que el resto del producto solo conoce ESTE contrato. Nada más:\n *\n *   nombre                 cómo se llama este origen, para enseñarlo.\n *   listar()               qué hay ahí ahora. Sin descargar nada.\n *   leer(ruta)             los bytes de una de esas cosas.\n *   admiteNotificaciones   si puede avisar de un cambio, o hay que preguntar.\n *\n * `listar()` y `leer()` están separados a propósito: listar es barato y leer no.\n * Esa separación es justo lo que permite no reprocesar lo que no ha cambiado.\n *\n * ══ LO QUE ESTE ARCHIVO NO HACE ═══════════════════════════════════════════\n *\n * No habla con ningún servicio corporativo, ni tiene credenciales, ni sabe qué\n * es SharePoint. Cuando exista un adaptador corporativo será OTRO archivo que\n * cumpla este mismo contrato, y ni la interfaz ni el motor se enterarán.\n *\n * @module\n */\nimport { observarFuente } from './inventario.js';\n\n/**\n * Comprueba que algo cumple el contrato. Útil para fallar pronto y con un\n * mensaje claro en vez de con un `undefined is not a function` a media faena.\n */\nexport function validarProveedor(p) {\n  const faltan = ['nombre', 'listar', 'leer'].filter((k) => p?.[k] === undefined);\n  if (faltan.length) return { ok: false, motivo: `al proveedor le falta: ${faltan.join(', ')}` };\n  if (typeof p.listar !== 'function' || typeof p.leer !== 'function') {\n    return { ok: false, motivo: 'listar y leer tienen que ser funciones' };\n  }\n  return { ok: true };\n}\n\n/**\n * PROVEEDOR LOCAL — los archivos que la usuaria elige. Es el de hoy.\n *\n * Recibe los `File` del selector y los expone con el mismo contrato que\n * tendría un origen remoto. Así el resto del código no distingue uno de otro,\n * y el camino de hoy es el mismo que el de mañana.\n */\nexport function proveedorLocal(archivos = []) {\n  let items = archivos.map((f) => ({ nombre: f.name ?? f.nombre, file: f }));\n  return {\n    nombre: 'Archivos de este equipo',\n    id: 'local',\n    admiteNotificaciones: false,\n    // Sin vigilancia de carpetas: el navegador no puede mirar una carpeta por\n    // su cuenta, y prometerlo sería mentir.\n    motivoSinNotificaciones: 'un archivo elegido a mano no avisa cuando cambia; ' +\n      'hay que volver a elegirlo.',\n    definir(nuevos) { items = nuevos.map((f) => ({ nombre: f.name ?? f.nombre, file: f })); },\n    async listar() {\n      return items.map((x) => ({\n        ruta: x.nombre, nombre: x.nombre,\n        bytesDeclarados: x.file?.size ?? null,\n        modificado: x.file?.lastModified ? new Date(x.file.lastModified).toISOString() : null,\n      }));\n    },\n    async leer(ruta) {\n      const x = items.find((i) => i.nombre === ruta);\n      if (!x) throw new Error(`no se encontró «${ruta}» entre los archivos elegidos`);\n      const buf = x.file.arrayBuffer ? await x.file.arrayBuffer() : x.file.datos;\n      return new Uint8Array(buf);\n    },\n  };\n}\n\n/**\n * PROVEEDOR SIMULADO — un origen «remoto» de laboratorio.\n *\n * Existe para poder construir y PROBAR toda la tubería de sincronización\n * —detectar, comparar, decidir, anotar— sin depender de ninguna decisión de TI\n * ni de ningún servicio real. Guarda los contenidos en memoria y deja\n * añadirlos, cambiarlos, moverlos y borrarlos, que es exactamente lo que pasa\n * en una carpeta compartida.\n *\n * NO es un adaptador corporativo disfrazado: no habla con nada. Es el banco de\n * pruebas donde se demuestra que la tubería funciona antes de enchufarla.\n */\nexport function proveedorSimulado(nombre = 'Origen simulado') {\n  const contenidos = new Map();   // ruta -> { datos, modificado, etiqueta }\n  let fallos = new Map();         // ruta -> Error, para probar lo que sale mal\n  return {\n    nombre, id: 'simulado',\n    admiteNotificaciones: true,\n    poner(ruta, datos, { modificado = new Date().toISOString(), etiqueta = null } = {}) {\n      contenidos.set(ruta, {\n        datos: typeof datos === 'string' ? new TextEncoder().encode(datos) : datos,\n        modificado, etiqueta,\n      });\n      return this;\n    },\n    quitar(ruta) { contenidos.delete(ruta); return this; },\n    mover(de, a) {\n      const x = contenidos.get(de);\n      if (x) { contenidos.set(a, x); contenidos.delete(de); }\n      return this;\n    },\n    romper(ruta, mensaje = 'el origen no dejó leer este archivo') {\n      fallos.set(ruta, new Error(mensaje)); return this;\n    },\n    arreglar(ruta) { fallos.delete(ruta); return this; },\n    async listar() {\n      return [...contenidos.entries()].map(([ruta, x]) => ({\n        ruta, nombre: ruta.split('/').pop(),\n        bytesDeclarados: x.datos.length, modificado: x.modificado, etiquetaRemota: x.etiqueta,\n      }));\n    },\n    async leer(ruta) {\n      if (fallos.has(ruta)) throw fallos.get(ruta);\n      const x = contenidos.get(ruta);\n      if (!x) throw new Error(`«${ruta}» ya no está en el origen`);\n      return x.datos;\n    },\n  };\n}\n\n/**\n * Observa TODAS las fuentes de un proveedor: lista y calcula la huella de cada\n * una. Es el paso caro, y por eso se hace una sola vez y se reutiliza.\n *\n * Un archivo que no se deja leer NO tumba la sincronización: se anota como\n * rechazado y el resto sigue. Un lote no puede perderse entero por uno malo.\n */\nexport async function observarTodo(proveedor) {\n  const v = validarProveedor(proveedor);\n  if (!v.ok) throw new Error(v.motivo);\n  const lista = await proveedor.listar();\n  const observadas = [], rechazadas = [];\n  for (const item of lista) {\n    try {\n      const datos = await proveedor.leer(item.ruta);\n      observadas.push(await observarFuente({\n        proveedor: proveedor.id ?? proveedor.nombre,\n        ruta: item.ruta, nombre: item.nombre, datos,\n        modificado: item.modificado ?? null, etiquetaRemota: item.etiquetaRemota ?? null,\n      }));\n    } catch (e) {\n      rechazadas.push({ ruta: item.ruta, nombre: item.nombre ?? item.ruta,\n        motivo: e?.message ?? String(e) });\n    }\n  }\n  return { observadas, rechazadas };\n}\n","fuentes/auditoria.js":"/**\n * BITÁCORA — qué pasó, cuándo, y a partir de qué.\n *\n * ══ QUÉ RESPONDE Y QUÉ NO ═════════════════════════════════════════════════\n *\n * RESPONDE: «¿por qué hoy salen 176 relaciones y ayer 174?».\n * NO RESPONDE: «¿quién lo hizo?». Hoy la plataforma es un archivo que se abre\n * con doble clic: no hay identidad, así que **no se inventa una**. El campo\n * `actor` existe y vale `'equipo-local'` hasta que haya identidad de verdad;\n * cuando la haya, se rellena y la bitácora empieza a responder también eso.\n *\n * Escribir «usuario: Leydi» porque es quien suele usarla sería fabricar una\n * atribución. Una bitácora que miente es peor que no tenerla.\n *\n * ══ FORMA ═════════════════════════════════════════════════════════════════\n *\n * Solo se añade al final. No se corrige ni se borra: si algo salió mal, se\n * anota que salió mal. Cada anotación es un hecho con su momento.\n *\n * @module\n */\n\nexport const ESQUEMA_BITACORA = 1;\n\n/** Hechos que se anotan. Neutros: describen lo que pasó, no lo valoran. */\nexport const HECHO = Object.freeze({\n  SINCRONIZACION: 'sincronizacion',\n  FUENTE_NUEVA: 'fuente_nueva',\n  FUENTE_MODIFICADA: 'fuente_modificada',\n  FUENTE_RETIRADA: 'fuente_retirada',\n  FUENTE_MOVIDA: 'fuente_movida',\n  FUENTE_RECHAZADA: 'fuente_rechazada',\n  ANALISIS: 'analisis',\n  PMT_ALTA: 'pmt_alta',\n  PMT_BAJA: 'pmt_baja',\n  RELACIONES_CAMBIAN: 'relaciones_cambian',\n  PROYECTO_GUARDADO: 'proyecto_guardado',\n  PROYECTO_ABIERTO: 'proyecto_abierto',\n  ERROR: 'error',\n});\n\nexport function crearBitacora(anotaciones = []) {\n  return { esquema: ESQUEMA_BITACORA, anotaciones: [...anotaciones] };\n}\n\n/**\n * Añade una anotación. Devuelve una bitácora NUEVA: no se muta la anterior,\n * que es lo que permite comparar estados sin sorpresas.\n *\n * @param {object} bitacora\n * @param {{hecho:string, detalle?:object, resumen:string, actor?:string}} a\n */\nexport function anotar(bitacora, a) {\n  if (!HECHO[Object.keys(HECHO).find((k) => HECHO[k] === a.hecho)]) {\n    // Un hecho desconocido no se rechaza en silencio: se anota como tal.\n    a = { ...a, hecho: HECHO.ERROR, resumen: `hecho no reconocido «${a.hecho}»: ${a.resumen ?? ''}` };\n  }\n  return {\n    ...bitacora,\n    anotaciones: [...bitacora.anotaciones, {\n      momento: new Date().toISOString(),\n      hecho: a.hecho,\n      resumen: a.resumen,\n      detalle: a.detalle ?? null,\n      // Sin identidad todavía. Ver la cabecera de este archivo.\n      actor: a.actor ?? 'equipo-local',\n    }],\n  };\n}\n\n/** Anota de golpe lo que una sincronización cambió. Una llamada, no veinte. */\nexport function anotarSincronizacion(bitacora, { proveedor, comparacion, plan, difRegistros }) {\n  let b = anotar(bitacora, {\n    hecho: HECHO.SINCRONIZACION,\n    resumen: `Sincronización con «${proveedor}»: ${plan.aLeer} fuente(s) a leer de ${plan.total}.`,\n    detalle: { proveedor, resumen: comparacion.resumen, avisos: plan.avisos },\n  });\n  const porTipo = {\n    nueva: HECHO.FUENTE_NUEVA, modificada: HECHO.FUENTE_MODIFICADA,\n    eliminada: HECHO.FUENTE_RETIRADA, movida: HECHO.FUENTE_MOVIDA,\n    duplicada: HECHO.FUENTE_RECHAZADA, indeterminada: HECHO.FUENTE_MODIFICADA,\n  };\n  for (const c of comparacion.cambios) {\n    if (c.tipo === 'sin_cambio') continue;\n    b = anotar(b, {\n      hecho: porTipo[c.tipo] ?? HECHO.ERROR,\n      resumen: `${c.fuente.nombre}: ${c.tipo}${c.motivo ? ` — ${c.motivo}` : ''}`,\n      detalle: { id: c.fuente.id, huella: c.fuente.huella.valor, bytes: c.fuente.bytes },\n    });\n  }\n  if (difRegistros?.hayCambios) {\n    if (difRegistros.altas.length) {\n      b = anotar(b, { hecho: HECHO.PMT_ALTA,\n        resumen: `${difRegistros.altas.length} PMT nuevo(s).`,\n        detalle: { ids: difRegistros.altas.slice(0, 200) } });\n    }\n    if (difRegistros.bajas.length) {\n      b = anotar(b, { hecho: HECHO.PMT_BAJA,\n        resumen: `${difRegistros.bajas.length} PMT que ya no están.`,\n        detalle: { ids: difRegistros.bajas.slice(0, 200) } });\n    }\n  }\n  return b;\n}\n\n/** Las últimas n anotaciones, de la más reciente a la más antigua. */\nexport const ultimas = (bitacora, n = 50) => [...bitacora.anotaciones].slice(-n).reverse();\n\nexport const serializarBitacora = (b) => JSON.stringify(b, null, 1);\n\nexport function leerBitacora(texto) {\n  try {\n    const d = typeof texto === 'string' ? JSON.parse(texto) : texto;\n    if (d?.esquema !== ESQUEMA_BITACORA || !Array.isArray(d.anotaciones)) return crearBitacora();\n    return { esquema: ESQUEMA_BITACORA, anotaciones: d.anotaciones.filter((x) => x && x.momento && x.hecho) };\n  } catch { return crearBitacora(); }\n}\n","fuentes/sincronizacion.js":"/**\n * LA TUBERÍA: observar → comparar → planificar → aplicar → anotar.\n *\n * ══ QUÉ ES Y QUÉ NO ES ════════════════════════════════════════════════════\n *\n * Es el orquestador que junta las cuatro piezas anteriores. Es puro: no toca el\n * DOM, no descarga nada por su cuenta y no sabe de dónde vienen los datos.\n * Recibe un proveedor —el local de hoy o el simulado de las pruebas— y\n * devuelve QUÉ HABRÍA QUE HACER y QUÉ PASÓ.\n *\n * NO decide sola. Devuelve el plan y el resultado; quien llama decide si lo\n * aplica y cómo se lo cuenta a la persona. Una automatización que actúa sin que\n * se vea lo que hizo es exactamente lo que no queremos.\n *\n * ══ LA PROPIEDAD QUE TIENE QUE CUMPLIR ════════════════════════════════════\n *\n * Sincronizar dos veces seguidas sin que cambie nada en el origen NO puede\n * producir ningún cambio la segunda vez. Si lo produce, hay algo que depende\n * del reloj o del orden, y eso acabaría en reprocesar todo cada mañana.\n *\n * @module\n */\nimport { observarTodo } from './proveedores.js';\nimport { crearInventario, compararInventarios, planDeActualizacion,\n  diferenciasDeRegistros } from './inventario.js';\nimport { anotarSincronizacion, anotar, HECHO } from './auditoria.js';\n\n/**\n * Mira el origen y dice qué cambió, SIN aplicar nada.\n *\n * @param {object} proveedor\n * @param {object|null} inventarioPrevio\n */\nexport async function revisar(proveedor, inventarioPrevio = null) {\n  const { observadas, rechazadas } = await observarTodo(proveedor);\n  const comparacion = compararInventarios(inventarioPrevio, observadas);\n  const plan = planDeActualizacion(comparacion);\n  return { observadas, rechazadas, comparacion, plan };\n}\n\n/**\n * Aplica el plan: lee SOLO lo que hace falta y deja el inventario al día.\n *\n * @param {object} proveedor\n * @param {object} revision           lo que devolvió `revisar`\n * @param {(fuente, datos) => Promise<string[]>} procesar\n *        función que convierte los bytes de una fuente en identificadores de\n *        PMT. La pone quien llama: aquí no se sabe leer un KMZ, y está bien.\n * @param {object|null} inventarioPrevio\n * @param {object|null} bitacora\n */\nexport async function aplicar(proveedor, revision, procesar, inventarioPrevio = null, bitacora = null) {\n  const { comparacion, plan, rechazadas } = revision;\n\n  // Lo que no cambió conserva sus registros: ese es todo el ahorro.\n  const registrosPorFuente = new Map();\n  for (const c of comparacion.cambios) {\n    if (c.tipo === 'sin_cambio' || c.tipo === 'movida') {\n      registrosPorFuente.set(c.fuente.id, c.registrosPrevios ?? []);\n    }\n  }\n\n  const errores = [...rechazadas];\n  let leidas = 0;\n  for (const f of plan.leer) {\n    try {\n      const datos = await proveedor.leer(f.ruta);\n      registrosPorFuente.set(f.id, await procesar(f, datos));\n      leidas++;\n    } catch (e) {\n      // Una fuente que falla no tumba el lote, y NO se da por buena la versión\n      // anterior: eso haría pasar por vigente algo que no se pudo confirmar.\n      errores.push({ ruta: f.ruta, nombre: f.nombre, motivo: e?.message ?? String(e) });\n    }\n  }\n\n  const fuentesFinales = revision.observadas.filter((f) => registrosPorFuente.has(f.id));\n  const inventario = crearInventario(fuentesFinales, registrosPorFuente);\n\n  const antes = (inventarioPrevio?.fuentes ?? []).flatMap((f) => f.registros ?? []);\n  const ahora = fuentesFinales.flatMap((f) => registrosPorFuente.get(f.id) ?? []);\n  const difRegistros = diferenciasDeRegistros(antes, ahora);\n\n  let b = bitacora;\n  if (b) {\n    b = anotarSincronizacion(b, { proveedor: proveedor.nombre, comparacion, plan, difRegistros });\n    for (const e of errores) {\n      b = anotar(b, { hecho: HECHO.FUENTE_RECHAZADA,\n        resumen: `${e.nombre}: no se pudo leer — ${e.motivo}` });\n    }\n  }\n\n  return {\n    inventario, difRegistros, errores, bitacora: b,\n    leidas,\n    ahorradas: plan.conservar.length,\n    // Cifra honesta del ahorro: solo tiene sentido si antes había algo.\n    porcentajeEvitado: plan.total ? Math.round((plan.conservar.length / plan.total) * 100) : 0,\n  };\n}\n\n/** Frase llana de lo que acaba de pasar, para enseñar tal cual. */\nexport function explicarSincronizacion(revision, resultado) {\n  const r = revision.comparacion.resumen;\n  const partes = [];\n  if (r.nueva) partes.push(`${r.nueva} archivo(s) nuevo(s)`);\n  if (r.modificada) partes.push(`${r.modificada} modificado(s)`);\n  if (r.eliminada) partes.push(`${r.eliminada} que ya no está(n)`);\n  if (r.movida) partes.push(`${r.movida} que cambió(aron) de sitio sin cambiar de contenido`);\n  if (r.duplicada) partes.push(`${r.duplicada} repetido(s), que no se procesan dos veces`);\n  if (!partes.length) return 'No ha cambiado nada desde la última vez. No hizo falta volver a analizar.';\n\n  // OJO CON AFIRMAR ANTES DE SABER. Al REVISAR todavía no se ha leído nada, así\n  // que no se puede decir si algún PMT cambió. Decir «ningún PMT cambió» ahí era\n  // falso: en la primera revisión, con seis archivos nuevos por leer, afirmaba\n  // que no cambiaba ningún PMT. Lo encontró la maqueta de la vista de datos.\n  const dif = resultado?.difRegistros;\n  const pmt = !resultado\n    ? ' Todavía no se sabe qué PMT cambian: hay que incorporar los cambios para verlo.'\n    : dif?.hayCambios\n      ? ` En PMT: ${dif.altas.length} alta(s) y ${dif.bajas.length} baja(s).`\n      : ' Ningún PMT cambió.';\n  const ahorro = resultado && resultado.ahorradas\n    ? ` Se reaprovecharon ${resultado.ahorradas} archivo(s) sin volver a leerlos.` : '';\n  return `Cambios: ${partes.join(', ')}.${pmt}${ahorro}`;\n}\n","prototipo/vista-datos.js":"/**\n * VISTA PREVIA · DATOS — la experiencia que se busca, funcionando de verdad.\n *\n * ══ PARA QUÉ SIRVE ESTA PÁGINA ════════════════════════════════════════════\n *\n * Hoy, para usar la plataforma hay que buscar ocho KMZ, descargarlos,\n * seleccionarlos uno por uno y preguntarse cuál es la última versión de cada\n * uno. La pregunta que hay que responder antes de pedirle nada a TI es: **si\n * los archivos llegaran solos, ¿cómo debería verse?**\n *\n * Esta maqueta lo enseña con la tubería REAL (`app/fuentes/`), no con un dibujo:\n * el detector incremental, el inventario, el plan y la bitácora son los mismos\n * que se usarían con un origen corporativo. Lo único simulado es de DÓNDE salen\n * los archivos, que es justamente lo que todavía no está decidido.\n *\n * ══ LO QUE NO HACE, A PROPÓSITO ═══════════════════════════════════════════\n *\n * No habla con ningún servicio. No tiene credenciales. No guarda nada en el\n * equipo. No analiza los KMZ (eso ya lo hace la aplicación): aquí lo que se\n * demuestra es la GESTIÓN DE LAS FUENTES, que es la pieza que falta.\n */\nimport { $, esc, num, mostrar } from '../ui/dom.js';\nimport { proveedorSimulado } from '../fuentes/proveedores.js';\nimport { revisar, aplicar, explicarSincronizacion } from '../fuentes/sincronizacion.js';\nimport { crearBitacora, ultimas } from '../fuentes/auditoria.js';\nimport { huellaCorta } from '../fuentes/huella.js';\nimport { CAMBIO } from '../fuentes/inventario.js';\n\n/* ── Un origen de laboratorio con algo parecido a lo que hay hoy ── */\nconst origen = proveedorSimulado('Carpeta de laboratorio · PMT');\nconst CONTRATOS = ['CW322377', 'CW323402', 'CW323849', 'CW328120', 'CW352217', 'CW353556'];\nfor (const c of CONTRATOS) {\n  origen.poner(`PMT/2026/${c}.kmz`, `contenido inicial de ${c}`);\n}\n\nconst estado = {\n  inventario: null,\n  bitacora: crearBitacora(),\n  revision: null,\n  ultimaSincronizacion: null,\n};\n\n/**\n * «Procesar» aquí solo inventa identificadores estables a partir del contenido.\n * En la aplicación de verdad, esta función es la que lee el KMZ con el motor.\n * Que sea un parámetro y no una dependencia es lo que permite probar la tubería\n * sin arrastrar el motor entero.\n */\nconst procesar = async (fuente) => {\n  const base = fuente.huella.valor.slice(0, 10);\n  return [`pmt_${base}_1`, `pmt_${base}_2`, `pmt_${base}_3`];\n};\n\n/* ───────────────────────── Pintar ───────────────────────── */\n\nconst ETIQUETA = {\n  [CAMBIO.NUEVA]: ['Nuevo', 'p-ok'],\n  [CAMBIO.MODIFICADA]: ['Modificado', 'p-parcial'],\n  [CAMBIO.SIN_CAMBIO]: ['Sin cambios', 'p-gris'],\n  [CAMBIO.ELIMINADA]: ['Ya no está', 'p-fallo'],\n  [CAMBIO.MOVIDA]: ['Cambió de sitio', 'p-avez'],\n  [CAMBIO.DUPLICADA]: ['Copia repetida', 'p-gris'],\n  [CAMBIO.INDETERMINADA]: ['No se pudo comparar', 'p-parcial'],\n};\n\nfunction pintarEstadoOrigen() {\n  const inv = estado.inventario;\n  const cuando = estado.ultimaSincronizacion\n    ? new Date(estado.ultimaSincronizacion).toLocaleString('es-CO')\n    : 'todavía no se ha incorporado nada';\n  $('estadoOrigen').innerHTML =\n    `<span class=\"etq-alcance\">${esc(origen.nombre)}<\/span>` +\n    `<span><b>${num(inv?.fuentes.length ?? 0)}<\/b> fuente(s) incorporada(s) · ` +\n    `última incorporación: <b>${esc(cuando)}<\/b><\/span>` +\n    `<span class=\"pista-campo\">${origen.admiteNotificaciones\n      ? 'Este origen podría avisar de los cambios por sí solo.'\n      : 'Este origen no puede avisar: hay que preguntarle.'}<\/span>`;\n}\n\nfunction pintarNovedades() {\n  const caja = $('novedades');\n  const rev = estado.revision;\n  if (!rev) { caja.innerHTML = ''; return; }\n\n  const filas = rev.comparacion.cambios.map((c) => {\n    const [txt, clase] = ETIQUETA[c.tipo] ?? ['—', 'p-gris'];\n    return `<tr>\n      <td><span class=\"pastilla ${clase}\">${esc(txt)}<\/span><\/td>\n      <td>${esc(c.fuente.nombre)}<\/td>\n      <td class=\"mono\"><small>${esc(c.fuente.ruta)}<\/small><\/td>\n      <td class=\"mono\"><small>${esc(huellaCorta(c.fuente.huella))}<\/small><\/td>\n      <td><small>${esc(c.motivo ?? '')}<\/small><\/td>\n    <\/tr>`;\n  }).join('');\n\n  const rechazadas = rev.rechazadas.map((r) => `<tr>\n    <td><span class=\"pastilla p-fallo\">No se pudo leer<\/span><\/td>\n    <td>${esc(r.nombre)}<\/td><td class=\"mono\"><small>${esc(r.ruta)}<\/small><\/td>\n    <td>—<\/td><td><small>${esc(r.motivo)}<\/small><\/td><\/tr>`).join('');\n\n  const ahorro = rev.plan.total\n    ? `Habría que leer <b>${num(rev.plan.aLeer)}<\/b> de ${num(rev.plan.total)} archivo(s). ` +\n      `El resto ya se conoce y <b>no se vuelve a procesar<\/b>.`\n    : 'No hay nada que leer.';\n\n  caja.innerHTML = `\n    <div class=\"frase\" style=\"margin-top:14px\">${ahorro}<\/div>\n    <div class=\"tabla-caja\"><table class=\"datos\">\n      <thead><tr><th>Estado<\/th><th>Archivo<\/th><th>Dónde está<\/th><th>Huella<\/th><th>Por qué<\/th><\/tr><\/thead>\n      <tbody>${filas}${rechazadas}<\/tbody>\n    <\/table><\/div>`;\n}\n\nfunction pintarDatos() {\n  const inv = estado.inventario;\n  const fuentes = inv?.fuentes ?? [];\n  const registros = fuentes.flatMap((f) => f.registros ?? []);\n  const t = (n, txt, clase = '') =>\n    `<div class=\"tarjeta ${clase}\"><div class=\"n\">${num(n)}<\/div><div class=\"t\">${txt}<\/div><\/div>`;\n  $('tarjetasDatos').innerHTML =\n    t(fuentes.length, 'fuentes activas', 'verde') +\n    t(registros.length, 'PMT incorporados') +\n    t(new Set(registros).size, 'PMT distintos') +\n    t(estado.bitacora.anotaciones.length, 'hechos anotados', 'gris');\n\n  const tb = $('tablaFuentes');\n  tb.querySelector('thead').innerHTML =\n    '<tr><th>Archivo<\/th><th>Dónde está<\/th><th>Tamaño<\/th><th>Huella<\/th><th>PMT<\/th><th>Visto<\/th><\/tr>';\n  tb.querySelector('tbody').innerHTML = fuentes.length\n    ? fuentes.map((f) => `<tr>\n        <td>${esc(f.nombre)}<\/td>\n        <td class=\"mono\"><small>${esc(f.ruta)}<\/small><\/td>\n        <td class=\"num\">${num(f.bytes)} B<\/td>\n        <td class=\"mono\"><small title=\"${esc(f.huella.algoritmo)}\">${esc(huellaCorta(f.huella))}<\/small><\/td>\n        <td class=\"num\">${num(f.registros?.length ?? 0)}<\/td>\n        <td><small>${esc(new Date(f.observadoEn).toLocaleString('es-CO'))}<\/small><\/td>\n      <\/tr>`).join('')\n    : '<tr><td colspan=\"6\" class=\"vacio\">Todavía no se ha incorporado ninguna fuente.<\/td><\/tr>';\n}\n\nfunction pintarBitacora() {\n  const tb = $('tablaBitacora');\n  tb.querySelector('thead').innerHTML = '<tr><th>Cuándo<\/th><th>Qué pasó<\/th><th>Detalle<\/th><th>Quién<\/th><\/tr>';\n  const filas = ultimas(estado.bitacora, 60);\n  tb.querySelector('tbody').innerHTML = filas.length\n    ? filas.map((a) => `<tr>\n        <td class=\"mono\"><small>${esc(new Date(a.momento).toLocaleString('es-CO'))}<\/small><\/td>\n        <td><span class=\"pastilla p-gris\">${esc(a.hecho)}<\/span><\/td>\n        <td>${esc(a.resumen)}<\/td>\n        <td><small>${esc(a.actor)}<\/small><\/td>\n      <\/tr>`).join('')\n    : '<tr><td colspan=\"4\" class=\"vacio\">Nada todavía.<\/td><\/tr>';\n}\n\nconst pintarTodo = () => { pintarEstadoOrigen(); pintarNovedades(); pintarDatos(); pintarBitacora(); };\n\nfunction avisarSim(texto, clase = '') {\n  const n = $('avisoSim');\n  n.className = 'frase ' + clase;\n  n.innerHTML = texto;\n  mostrar('avisoSim', true);\n}\n\n/* ───────────────────────── Acciones ───────────────────────── */\n\n$('btnRevisar').onclick = async () => {\n  estado.revision = await revisar(origen, estado.inventario);\n  const hay = estado.revision.comparacion.hayCambios || estado.revision.rechazadas.length;\n  $('btnSincronizar').disabled = !hay;\n  pintarTodo();\n  avisarSim(hay\n    ? `<b>Hay novedades.<\/b> ${esc(explicarSincronizacion(estado.revision, null))}`\n    : '<b>Todo está al día.<\/b> No hace falta volver a analizar nada.', hay ? 'atencion' : '');\n};\n\n$('btnSincronizar').onclick = async () => {\n  if (!estado.revision) return;\n  const res = await aplicar(origen, estado.revision, procesar, estado.inventario, estado.bitacora);\n  estado.inventario = res.inventario;\n  estado.bitacora = res.bitacora;\n  estado.ultimaSincronizacion = new Date().toISOString();\n  estado.revision = null;\n  $('btnSincronizar').disabled = true;\n  pintarTodo();\n  const errores = res.errores.length\n    ? ` <b>${num(res.errores.length)} archivo(s) no se pudieron leer<\/b> y NO se dan por buenos con su versión anterior.`\n    : '';\n  avisarSim(`<b>Incorporado.<\/b> Se leyeron ${num(res.leidas)} archivo(s) y se reaprovecharon ` +\n    `${num(res.ahorradas)} sin volver a procesarlos (${num(res.porcentajeEvitado)} % evitado).${errores}`,\n    res.errores.length ? 'atencion' : '');\n};\n\n/* ── Banco de pruebas: lo que pasa de verdad en una carpeta compartida ── */\nlet n = 0;\nconst rutas = () => CONTRATOS.map((c) => `PMT/2026/${c}.kmz`);\n\n$('simAnadir').onclick = () => {\n  const c = `CW9000${++n}`;\n  origen.poner(`PMT/2026/${c}.kmz`, `contenido nuevo de ${c} ${Date.now()}`);\n  avisarSim(`Llegó <b>${esc(c)}.kmz<\/b>. Pulse «Revisar si hay novedades».`);\n};\n$('simModificar').onclick = () => {\n  const r = rutas()[0];\n  origen.poner(r, `contenido corregido ${Date.now()}`);\n  avisarSim(`Alguien corrigió <b>${esc(r)}<\/b>. Pulse «Revisar»: debería salir «Modificado», y solo ese archivo se vuelve a leer.`);\n};\n$('simMover').onclick = () => {\n  const r = rutas()[1];\n  origen.mover(r, r.replace('PMT/2026/', 'PMT/historico/'));\n  avisarSim(`Movieron <b>${esc(r)}<\/b> a otra carpeta. Pulse «Revisar»: tiene que salir <b>«Cambió de sitio»<\/b>, ` +\n    `no «nuevo» y «ya no está». Si saliera eso, todos sus PMT desaparecerían y volverían a aparecer.`);\n};\n$('simCopiar').onclick = () => {\n  const r = rutas()[2];\n  origen.poner(r.replace('.kmz', ' - copia.kmz'), `contenido inicial de ${CONTRATOS[2]}`);\n  avisarSim(`Alguien dejó una copia con otro nombre. Pulse «Revisar»: tiene que salir <b>«Copia repetida»<\/b> ` +\n    `y <b>no<\/b> procesarse dos veces.`);\n};\n$('simBorrar').onclick = () => {\n  const r = rutas()[3];\n  origen.quitar(r);\n  avisarSim(`Retiraron <b>${esc(r)}<\/b>. Pulse «Revisar»: se verá qué PMT se van con él.`);\n};\n$('simRomper').onclick = () => {\n  const r = rutas()[4];\n  origen.poner(r, `contenido cambiado ${Date.now()}`).romper(r, 'el origen no dejó leer este archivo');\n  avisarSim(`<b>${esc(r)}<\/b> cambió pero ya no se deja leer. Pulse «Revisar» e «Incorporar»: el resto sigue, ` +\n    `y esa fuente <b>no<\/b> se da por vigente con su versión anterior.`, 'atencion');\n};\n\npintarTodo();\n"};
+  const ORDEN = ["ui/dom.js","fuentes/huella.js","fuentes/inventario.js","fuentes/proveedores.js","fuentes/auditoria.js","fuentes/sincronizacion.js","prototipo/vista-datos.js"];
+  const urls = Object.create(null);
+  function rutaDe(base, spec) {
+    // Misma semantica que posix.normalize en Node, que es lo que usa el
+    // empaquetador para generar las claves: un ".." que no tiene nada que
+    // subir SE CONSERVA. La aplicacion vive en app/ e importa el motor con
+    // "../motor/...", asi que perder ese ".." rompia toda la resolucion.
+    const partes = base.split('/').slice(0, -1).concat(spec.split('/'));
+    const pila = [];
+    for (const p of partes) {
+      if (p === '.' || p === '') continue;
+      if (p === '..' && pila.length && pila[pila.length - 1] !== '..') pila.pop();
+      else pila.push(p);
+    }
+    return pila.join('/');
+  }
+  for (const rel of ORDEN) {
+    const texto = FUENTES[rel].replace(/(from\s*)(['"])(\.[^'"]*)\2/g, function (_, pre, c, spec) {
+      const destino = rutaDe(rel, spec);
+      const u = urls[destino];
+      if (!u) throw new Error('dependencia no resuelta: ' + destino + ' (desde ' + rel + ')');
+      return pre + c + u + c;
+    });
+    urls[rel] = URL.createObjectURL(new Blob([texto], { type: 'text/javascript' }));
+  }
+  import(urls["prototipo/vista-datos.js"]).catch(function (e) {
+    document.body.insertAdjacentHTML('afterbegin',
+      '<div style="margin:20px;padding:16px;border-left:4px solid #c62828;background:#fdecea;font-family:sans-serif">' +
+      '<b>La aplicacion no pudo arrancar.</b><br>' + String(e && e.message || e) + '</div>');
+  });
+})();
+</script>

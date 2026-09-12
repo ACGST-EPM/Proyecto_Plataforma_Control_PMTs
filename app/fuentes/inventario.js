@@ -158,6 +158,9 @@ export function compararInventarios(anterior, ahora) {
 
   const cambios = [];
   const huellasDelLote = new Map();
+  // Rutas que siguen existiendo ahora. Hace falta para distinguir COPIAR de
+  // MOVER: si el sitio de antes sigue ahí, no se movió nada, se copió.
+  const idsAhora = new Set(ahora.map((f) => f.id));
 
   for (const f of ahora) {
     const antes = previas.get(f.id);
@@ -179,12 +182,27 @@ export function compararInventarios(anterior, ahora) {
       continue;
     }
 
+    // MISMO CONTENIDO QUE ALGO QUE YA CONOCÍAMOS, EN OTRA RUTA.
+    //
+    // Aquí hay DOS casos distintos y confundirlos tiene consecuencias:
+    //   · si la ruta de antes YA NO ESTÁ, el archivo se MOVIÓ. Es el mismo, y
+    //     sus PMT siguen siendo los suyos.
+    //   · si la ruta de antes SIGUE AHÍ, esto es una COPIA. El original no se
+    //     ha ido, así que tratarla como un movimiento haría que dos fuentes se
+    //     repartieran los mismos PMT y se contaran dos veces.
+    // Lo encontró la maqueta de la vista de datos, dejando una copia con otro
+    // nombre: salía «cambió de sitio» mientras el original seguía en su sitio.
     const mismaCosaEnOtroSitio = previasPorHuella.get(f.huella.valor);
     if (mismaCosaEnOtroSitio) {
-      cambios.push({ tipo: CAMBIO.MOVIDA, fuente: f, antes: mismaCosaEnOtroSitio,
-        registrosPrevios: mismaCosaEnOtroSitio.registros ?? [],
-        motivo: `mismo contenido que «${mismaCosaEnOtroSitio.ruta}»: es el mismo archivo en otro sitio, ` +
-          `no información nueva` });
+      const elOriginalSigue = idsAhora.has(mismaCosaEnOtroSitio.id);
+      cambios.push(elOriginalSigue
+        ? { tipo: CAMBIO.DUPLICADA, fuente: f, antes: null,
+            motivo: `mismo contenido que «${mismaCosaEnOtroSitio.ruta}», que sigue estando: es una copia, ` +
+              `no información nueva` }
+        : { tipo: CAMBIO.MOVIDA, fuente: f, antes: mismaCosaEnOtroSitio,
+            registrosPrevios: mismaCosaEnOtroSitio.registros ?? [],
+            motivo: `mismo contenido que «${mismaCosaEnOtroSitio.ruta}», que ya no está: es el mismo ` +
+              `archivo en otro sitio, no información nueva` });
       continue;
     }
     if (gemela) {
@@ -195,7 +213,6 @@ export function compararInventarios(anterior, ahora) {
     cambios.push({ tipo: CAMBIO.NUEVA, fuente: f, antes: null });
   }
 
-  const idsAhora = new Set(ahora.map((f) => f.id));
   // Una fuente que se movió no está eliminada: se localiza por su contenido.
   const huellasAhora = new Set(ahora.map((f) => f.huella.valor));
   for (const [id, f] of previas) {
