@@ -1,10 +1,15 @@
 /**
  * Lectura del campo <description> del KMZ.
  *
- * INVARIANTE DEL PROYECTO - no se toca en esta etapa:
+ * INVARIANTE DEL PROYECTO:
  *   fecha_inicio: ... | fecha_fin: ... | tipo_cierre: ... | direccion: ... |
  *   municipio: ... | contrato: ... | contratista: ... | proyecto: ...
- * separador " | ", orden indiferente, `municipio` opcional.
+ *   [ | resolucion_pmt: ... | permiso_rotura: ... | cierre_permiso_rotura: ... ]
+ * separador " | ", orden indiferente. `municipio` y los tres campos de
+ * seguimiento documental son opcionales.
+ *
+ * Los tres ultimos se anadieron en la Etapa 3. El cambio es COMPATIBLE HACIA
+ * ATRAS: un KMZ anterior no los trae y se lee exactamente igual que antes.
  *
  * ── LECTURA ESTRUCTURAL, NO POR BUSQUEDA SUELTA ────────────────────────────
  *
@@ -27,10 +32,25 @@
 export const CAMPOS = [
   'fecha_inicio', 'fecha_fin', 'tipo_cierre', 'direccion',
   'municipio', 'contrato', 'contratista', 'proyecto',
+  // ── Seguimiento documental (Etapa 3) ──
+  //
+  // Se anaden AL FINAL y como OPCIONALES, que es lo que hace el cambio
+  // compatible hacia atras: los KMZ que ya existen no los traen, se leen igual
+  // que siempre y su estado documental sale «pendiente», que es la verdad.
+  //
+  // Van en la descripcion, y no en un archivo aparte, porque tienen que viajar
+  // CON el PMT: quien recibe el KMZ recibe tambien en que punto del tramite
+  // esta. Ver `motor/src/modelo/documental.js` para la regla de que «Pendiente»
+  // no es un codigo.
+  'resolucion_pmt', 'permiso_rotura', 'cierre_permiso_rotura',
 ];
 
 /** Campos que pueden faltar sin que el registro se considere incompleto. */
-export const OPCIONALES = new Set(['municipio']);
+export const OPCIONALES = new Set([
+  'municipio',
+  // Que falten es NORMAL: un PMT recien creado no tiene ninguno de los tres.
+  'resolucion_pmt', 'permiso_rotura', 'cierre_permiso_rotura',
+]);
 
 /** Valores admitidos para tipo_cierre (lista cerrada del proyecto). */
 export const TIPOS_CIERRE = ['total', 'parcial', 'ingreso y salida'];

@@ -13,6 +13,7 @@ import { leerDescripcion } from '../io/descripcion.js';
 import { leerVigencia } from '../tiempo/intervalo.js';
 import { calcularId } from './identidad.js';
 import { caja, descomponer } from '../geo/geometria.js';
+import { normalizarCodigoDocumental, estadoDocumental, DOCUMENTOS } from './documental.js';
 
 /**
  * Convierte un placemark leido del KML en un registro canonico.
@@ -38,6 +39,16 @@ export function aRegistro(pm, opciones = {}) {
   if (!tieneGeometria) avisos.push('el registro no tiene geometria utilizable: queda fuera del analisis espacial');
 
   const tipoCierre = (campos.tipo_cierre ?? '').toLowerCase() || null;
+
+  // SEGUIMIENTO DOCUMENTAL. Los codigos se normalizan aqui, una sola vez: un
+  // «Pendiente» escrito en la casilla NO es un codigo y se convierte en
+  // ausencia, dejando constancia en los avisos. Ver `modelo/documental.js`.
+  const documentos = {};
+  for (const d of DOCUMENTOS) {
+    const r = normalizarCodigoDocumental(campos[d.campo], d.etiqueta);
+    documentos[d.clave] = r.codigo;
+    if (r.aviso) avisos.push(r.aviso);
+  }
   // El identificador se calcula con los VALORES CRUDOS de la descripcion, no
   // con la vigencia ya normalizada. Motivo: si se derivara de la vigencia
   // normalizada, cambiar un parametro del motor (por ejemplo la granularidad
@@ -77,6 +88,10 @@ export function aRegistro(pm, opciones = {}) {
     descripcionEraHtml: eraHtml,
     duplicadoExacto: false,
     idRepetidoEnOrigen: false,
+    // Codigos documentales (valor o null) y su estado DERIVADO. El estado no se
+    // guarda en ninguna parte: se recalcula, como todo lo derivado.
+    ...documentos,
+    documental: estadoDocumental(documentos),
     avisos,
   };
 }
@@ -93,6 +108,8 @@ export function resumenCalidad(registros) {
     sinNombre: 0,
     duplicadosExactos: 0,
     conAvisos: 0,
+    documentacionCompleta: 0,
+    sinNingunDocumento: 0,
     porTipoGeometria: {},
     porTipoCierre: {},
     porContrato: {},
@@ -106,6 +123,8 @@ export function resumenCalidad(registros) {
     if (!x.municipio) r.sinMunicipio++;
     if (!x.frente) r.sinNombre++;
     if (x.duplicadoExacto) r.duplicadosExactos++;
+    if (x.documental?.completo) r.documentacionCompleta++;
+    if (x.documental?.sinNinguno) r.sinNingunDocumento++;
     if (x.avisos.length) r.conAvisos++;
     const tg = x.tipoGeometria ?? '(sin geometria)';
     r.porTipoGeometria[tg] = (r.porTipoGeometria[tg] ?? 0) + 1;

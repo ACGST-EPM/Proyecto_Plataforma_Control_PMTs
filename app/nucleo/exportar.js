@@ -40,9 +40,16 @@ export const BOM = '﻿';
 /** Listado de PMT, con todos los campos del modelo interno. */
 export function pmtsACsv(filas) {
   const cab = ['ID', 'CONTRATO', 'CONTRATISTA', 'PROYECTO', 'MUNICIPIO', 'FRENTE', 'DIRECCION',
-    'TIPO_CIERRE', 'FECHA_INICIO', 'FECHA_FIN', 'GEOMETRIA', 'ARCHIVO_ORIGEN', 'AVISOS'];
+    'TIPO_CIERRE', 'FECHA_INICIO', 'FECHA_FIN', 'GEOMETRIA',
+    // Seguimiento documental. El CODIGO va en su columna; el ESTADO en otra,
+    // separados a proposito: una columna que mezcle «RES-1234» con «Pendiente»
+    // no se puede contar ni filtrar.
+    'RESOLUCION_PMT', 'PERMISO_ROTURA', 'CIERRE_PERMISO_ROTURA', 'ESTADO_DOCUMENTAL',
+    'ARCHIVO_ORIGEN', 'AVISOS'];
   const cuerpo = filas.map((x) => [x.id, x.contrato, x.contratista, x.proyecto, x.municipio,
-    x.frente, x.direccion, x.tipoCierre, x.inicio, x.fin, x.tipoGeometria, x.origenArchivo,
+    x.frente, x.direccion, x.tipoCierre, x.inicio, x.fin, x.tipoGeometria,
+    x.resolucionPmt ?? '', x.permisoRotura ?? '', x.cierrePermisoRotura ?? '',
+    x.documental?.resumen ?? '', x.origenArchivo,
     (x.avisos ?? []).join(' | ')]);
   return BOM + csvFilas([cab, ...cuerpo]);
 }
@@ -121,6 +128,10 @@ export function aGeoJson(filas, config = null, extra = {}) {
         id: x.id, frente: x.frente, contrato: x.contrato, contratista: x.contratista,
         proyecto: x.proyecto, municipio: x.municipio, direccion: x.direccion,
         tipo_cierre: x.tipoCierre, fecha_inicio: x.inicio, fecha_fin: x.fin,
+        resolucion_pmt: x.resolucionPmt ?? null,
+        permiso_rotura: x.permisoRotura ?? null,
+        cierre_permiso_rotura: x.cierrePermisoRotura ?? null,
+        estado_documental: x.documental?.resumen ?? null,
         archivo_origen: x.origenArchivo, avisos: x.avisos ?? [],
       },
     })),
@@ -160,7 +171,11 @@ export function aKml(filas, nombreDoc = 'PMT exportados', config = null, extra =
     const desc = ['fecha_inicio: ' + (x.inicio ?? ''), 'fecha_fin: ' + (x.fin ?? ''),
       'tipo_cierre: ' + (x.tipoCierre ?? ''), 'direccion: ' + (x.direccion ?? ''),
       'municipio: ' + (x.municipio ?? ''), 'contrato: ' + (x.contrato ?? ''),
-      'contratista: ' + (x.contratista ?? ''), 'proyecto: ' + (x.proyecto ?? '')]
+      'contratista: ' + (x.contratista ?? ''), 'proyecto: ' + (x.proyecto ?? ''),
+      // Solo si existen: escribir «Pendiente» seria guardar relleno como codigo.
+      ...(x.resolucionPmt ? ['resolucion_pmt: ' + x.resolucionPmt] : []),
+      ...(x.permisoRotura ? ['permiso_rotura: ' + x.permisoRotura] : []),
+      ...(x.cierrePermisoRotura ? ['cierre_permiso_rotura: ' + x.cierrePermisoRotura] : [])]
       .map((s) => s.replace(/\|/g, '')).join(' | ');
     return `<Placemark><name>${xmlEsc(x.frente ?? '')}</name>` +
       `<description>${xmlEsc(desc)}</description>` +

@@ -88,10 +88,16 @@ function crc32(bytes) {
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /** Descripcion en el formato invariante del proyecto. */
-export function descripcion({ inicio, fin, tipo = 'total', direccion = 'Calle 1', municipio, contrato, contratista = 'CONTRATISTA X', proyecto = 'PROYECTO X' }) {
+export function descripcion({ inicio, fin, tipo = 'total', direccion = 'Calle 1', municipio, contrato,
+  contratista = 'CONTRATISTA X', proyecto = 'PROYECTO X',
+  resolucionPmt, permisoRotura, cierrePermisoRotura }) {
   const p = [`fecha_inicio: ${inicio}`, `fecha_fin: ${fin}`, `tipo_cierre: ${tipo}`, `direccion: ${direccion}`];
   if (municipio) p.push(`municipio: ${municipio}`);
   p.push(`contrato: ${contrato}`, `contratista: ${contratista}`, `proyecto: ${proyecto}`);
+  // Seguimiento documental: solo si existe. Ver `modelo/documental.js`.
+  if (resolucionPmt) p.push(`resolucion_pmt: ${resolucionPmt}`);
+  if (permisoRotura) p.push(`permiso_rotura: ${permisoRotura}`);
+  if (cierrePermisoRotura) p.push(`cierre_permiso_rotura: ${cierrePermisoRotura}`);
   return p.join(' | ');
 }
 

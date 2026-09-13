@@ -21,6 +21,8 @@ export { zonaDeInfluencia, zonasSeSuperponen, solapeMetros, RADIO_INFLUENCIA_MET
 export { calcularRelaciones, hechosDelPar } from './relaciones.js';
 export { combinacionDe, repartir, porBandaDeDistancia, COMBINACIONES } from './provisional.js';
 export { resumenCalidad } from '../modelo/registro.js';
+export { DOCUMENTOS, ESTADO_DOC, estadoDocumental, resumenDocumental,
+  normalizarCodigoDocumental } from '../modelo/documental.js';
 export { medir, descomponer } from '../geo/geometria.js';
 export { distanciaGeodesica } from '../geo/geodesica.js';
 export { cotejarFidelidad, resumirCotejo } from '../legado/cotejo.js';

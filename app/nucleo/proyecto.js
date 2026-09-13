@@ -42,6 +42,8 @@
 
 import { validarGeometria as validarGeo } from './geojson.js';
 import { normalizarVigencia } from './tiempo.js';
+import { DOCUMENTOS, estadoDocumental, normalizarCodigoDocumental }
+  from '../../motor/src/modelo/documental.js';
 
 export const ESQUEMA = 2;
 export const ESQUEMA_MINIMO_LEGIBLE = 1;
@@ -156,6 +158,13 @@ export function crearProyecto({ filas, relaciones, noEvaluables, archivos, confi
       // guardar y volver a abrir.
       duplicadoExacto: x.duplicadoExacto === true,
       idRepetidoEnOrigen: x.idRepetidoEnOrigen === true,
+      // SEGUIMIENTO DOCUMENTAL: se guardan LOS CODIGOS, que son entrada.
+      // El estado («2/3», «pendiente») NO se guarda: es derivado y se recalcula
+      // al abrir, igual que las relaciones. Guardarlo permitiria que un archivo
+      // editado dijera «completo» con las casillas vacias.
+      resolucionPmt: normalizarCodigoDocumental(x.resolucionPmt).codigo,
+      permisoRotura: normalizarCodigoDocumental(x.permisoRotura).codigo,
+      cierrePermisoRotura: normalizarCodigoDocumental(x.cierrePermisoRotura).codigo,
       avisos: x.avisos ?? [], geometria: x.geometria,
     })),
     /**
@@ -250,11 +259,23 @@ export function leerProyecto(texto) {
     if (!esObjeto(t) || typeof t.id !== 'string' || !t.id.trim()) { descartados++; continue; }
     if (vistos.has(t.id)) { duplicados++; continue; }          // identificador repetido: no entra
     if (![t.frente, t.contrato, t.contratista, t.proyecto, t.municipio, t.direccion,
-      t.tipoCierre, t.inicio, t.fin, t.origenArchivo].every(esTextoONulo)) { descartados++; continue; }
+      t.tipoCierre, t.inicio, t.fin, t.origenArchivo,
+      t.resolucionPmt, t.permisoRotura, t.cierrePermisoRotura].every(esTextoONulo)) { descartados++; continue; }
+
 
     const g = validarGeometria(t.geometria);
     let geometria = t.geometria ?? null;
     const avisosTrazado = Array.isArray(t.avisos) ? t.avisos.filter((a) => typeof a === 'string') : [];
+
+    // Los codigos documentales se vuelven a normalizar al abrir: un archivo
+    // editado a mano podria traer «Pendiente» escrito en la casilla, y eso no
+    // es un codigo. La regla es la misma que al leer un KMZ.
+    const documentos = {};
+    for (const d of DOCUMENTOS) {
+      const r = normalizarCodigoDocumental(t[d.clave], d.etiqueta);
+      documentos[d.clave] = r.codigo;
+      if (r.aviso) avisosTrazado.push(r.aviso);
+    }
     if (!g.ok) {
       geometriasInvalidas++;
       geometria = null;
@@ -313,6 +334,8 @@ export function leerProyecto(texto) {
       inicioMs: vig.inicioMs, finMs: vig.finMs, vigenciaValida: vig.valida,
       vigenciaEstado: vig.estado, inicioValido: vig.inicioValido, finValido: vig.finValido,
       duplicadoExacto: marcaDuplicado, idRepetidoEnOrigen: marcaIdRepetido,
+      ...documentos,
+      documental: estadoDocumental(documentos),
       geometria,
       tipoGeometria: geometria?.type ?? null,
       tieneGeometria: !!geometria,

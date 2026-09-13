@@ -241,7 +241,11 @@ test('MAPA BASE: se puede cambiar de proveedor desde la interfaz', saltar, async
   const p = await abrir();
   await cargar(p, [KMZ_A]);
   const ops = await p.$$eval('#selFondo option', (o) => o.map((x) => x.value));
-  assert.ok(ops.includes('osm') && ops.includes('carto-claro') && ops.includes('sin-fondo'), JSON.stringify(ops));
+  // Etapa 3: la lista se redujo a Calles / Satelite / Mapa de EPM / Sin fondo.
+  // CARTO se retiro porque paso a exigir clave y se servia con marca de agua.
+  assert.ok(ops.includes('calles') && ops.includes('satelite') && ops.includes('sin-fondo'), JSON.stringify(ops));
+  assert.ok(!ops.includes('carto-claro'), 'un proveedor que exige clave no puede seguir ofreciendose');
+  assert.ok(ops.length <= 5, `la lista de fondos tiene que ser corta, y tiene ${ops.length}`);
   await p.selectOption('#selFondo', 'sin-fondo');
   await p.waitForTimeout(600);
   assert.ok(/sin fondo/i.test(await txt(p, '#avisoMapa')));

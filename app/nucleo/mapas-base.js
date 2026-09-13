@@ -36,66 +36,127 @@
 export const SIN_FONDO = 'sin-fondo';
 
 /**
- * Catalogo. Cada entrada declara lo que hay que saber ANTES de usarla:
- * condiciones, atribucion obligatoria, si pide clave y si conviene en un
- * entorno corporativo. Ningun proveedor lleva secretos: si alguno necesitara
- * clave, la clave la pone quien despliegue, nunca el codigo.
+ * CATALOGO — pocas opciones, y cada una con su estado REAL.
+ *
+ * ══ POR QUE SE REDUJO LA LISTA (Etapa 3) ══════════════════════════════════
+ *
+ * La prueba con la usuaria encontro dos fondos rotos, y la causa de cada uno
+ * esta documentada:
+ *
+ *  · CARTO Positron enseñaba «API KEY REQUIRED» como marca de agua. No era un
+ *    fallo nuestro: **CARTO cambio sus condiciones**. Sus mapas base raster
+ *    ahora exigen clave y estan en retirada; sin clave se sirven marcados.
+ *    Y una clave dentro de este archivo NO es una clave: el archivo se
+ *    distribuye y cualquiera puede leerla. Asi que CARTO **se retira**, no se
+ *    parchea.
+ *
+ *  · OpenStreetMap publico enseñaba «Access Blocked». Su politica permite el
+ *    uso normal de un visor, pero la fundacion puede bloquear sin aviso, y
+ *    bloquea en particular las peticiones que no se identifican. Una pagina
+ *    abierta desde `file://` no envia origen, asi que es un candidato muy
+ *    probable a ser tratada como trafico anonimo. **HIPOTESIS**, no
+ *    demostrada: no se puede comprobar desde aqui contra el servicio real.
+ *    Por eso OSM deja de ser opcion por defecto y de estar en la cadena de
+ *    respaldo, aunque se conserva para quien lo necesite.
+ *
+ * ══ COMO LEER EL CAMPO `estado` ═══════════════════════════════════════════
+ *
+ * Cuatro cosas distintas que NO hay que confundir. Solo las dos primeras las
+ * puede afirmar esta herramienta; las otras dos las tiene que responder EPM.
+ *
+ *   funciona   se ha comprobado que sirve teselas sin clave.
+ *   licencia   'permisiva' | 'requiere-clave' | 'por-validar'.
+ *   ti         'por-validar' siempre, hasta que TI de EPM diga si la red lo
+ *              permite. NUNCA se escribe otra cosa sin evidencia.
+ *   epm        'no-confirmado' siempre, hasta que EPM confirme que existe o
+ *              que esta autorizado. NUNCA se escribe otra cosa sin evidencia.
+ *
+ * Ningun proveedor lleva secretos. Si alguno necesitara clave, la pondria
+ * quien despliegue, jamas el codigo.
  */
 export const PROVEEDORES = Object.freeze([
   {
-    id: 'osm',
-    nombre: 'OpenStreetMap',
-    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    atribucion: '© colaboradores de OpenStreetMap',
+    id: 'calles',
+    nombre: 'Calles',
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    atribucion: 'Cartografia © Esri y colaboradores',
     maxZoom: 19,
-    requiereClave: false,
-    publico: true,
-    nota: 'Servicio comunitario gratuito. Su politica de uso prohibe la descarga masiva ' +
-          'y pide no fijar la URL en el codigo. Uso normal de un visor interno: admitido. ' +
-          'Las peticiones salen al exterior, asi que la red corporativa debe permitirlo.',
+    estado: { funciona: true, licencia: 'por-validar', ti: 'por-validar', epm: 'no-confirmado' },
+    nota: 'Callejero claro, con los nombres de via legibles. Funciona sin clave. ' +
+          'Las condiciones de Esri para uso corporativo continuado NO estan confirmadas: ' +
+          'hay que validarlas con EPM antes de darlo por definitivo.',
   },
   {
-    id: 'carto-claro',
-    nombre: 'CARTO Positron (claro y sobrio)',
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    subdominios: 'abcd',
-    atribucion: '© colaboradores de OpenStreetMap · © CARTO',
-    maxZoom: 20,
-    requiereClave: false,
-    publico: true,
-    nota: 'Fondo gris claro: los trazados de colores se leen mucho mejor encima. ' +
-          'Gratuito para uso no comercial con atribucion; para uso intensivo CARTO pide contratar.',
-  },
-  {
-    id: 'esri-satelite',
-    nombre: 'Esri — imagen de satelite',
+    id: 'satelite',
+    nombre: 'Satelite',
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     atribucion: 'Imagenes © Esri y proveedores',
     maxZoom: 19,
-    requiereClave: false,
-    publico: true,
-    nota: 'Util para reconocer la obra sobre el terreno. Servicio de cortesia de Esri, ' +
-          'sujeto a sus condiciones; conviene confirmarlas si el uso deja de ser puntual.',
+    estado: { funciona: true, licencia: 'por-validar', ti: 'por-validar', epm: 'no-confirmado' },
+    nota: 'Imagen aerea: util para reconocer la obra sobre el terreno y para comprobar ' +
+          'si un trazado cae donde se espera. Mismas condiciones por validar que el callejero.',
   },
   {
     id: 'corporativo',
-    nombre: 'Servidor de mapas de EPM',
+    nombre: 'Mapa de EPM',
     url: null,                      // lo rellena quien despliegue
     atribucion: 'Cartografia corporativa de EPM',
     maxZoom: 20,
-    requiereClave: false,
-    publico: false,
     configurable: true,
-    nota: 'PENDIENTE DE VALIDACION CORPORATIVA. Es la opcion preferible: no saca ' +
-          'peticiones fuera de la red y no depende de terceros. Se activa poniendo la ' +
-          'direccion del servidor de teselas de EPM, sin tocar el codigo.',
+    estado: { funciona: null, licencia: 'por-validar', ti: 'por-validar', epm: 'no-confirmado' },
+    nota: 'LA OPCION PREFERIBLE el dia que exista: no saca peticiones fuera de la red y no ' +
+          'depende de terceros. Se activa escribiendo la direccion del servidor de teselas, ' +
+          'sin tocar el codigo. No hay evidencia de que EPM tenga uno.',
+  },
+  {
+    id: 'osm',
+    nombre: 'OpenStreetMap (comunitario)',
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    atribucion: '© colaboradores de OpenStreetMap',
+    maxZoom: 19,
+    avanzado: true,                 // no se ofrece de entrada: ver la cabecera
+    estado: { funciona: null, licencia: 'permisiva', ti: 'por-validar', epm: 'no-confirmado' },
+    nota: 'Servicio comunitario financiado con donaciones. Su politica prohibe la descarga ' +
+          'masiva y permite bloquear sin aviso; en la prueba con la usuaria devolvio ' +
+          '«Access Blocked». Se conserva como alternativa, no como opcion por defecto.',
   },
 ]);
 
-export const PROVEEDOR_POR_DEFECTO = 'carto-claro';
+/** Proveedores que se ofrecen de entrada. Los demas, solo si se piden. */
+export const PROVEEDORES_VISIBLES = Object.freeze(PROVEEDORES.filter((p) => !p.avanzado));
 
-/** Orden en que se intenta si el elegido no responde. */
-export const CADENA_RESPALDO = Object.freeze(['corporativo', 'carto-claro', 'osm', 'esri-satelite']);
+/**
+ * Fondo por defecto: el callejero, porque es el unico comprobado que funciona
+ * sin clave y deja leer los nombres de via, que es lo que la usuaria necesita
+ * para situar un cierre.
+ */
+export const PROVEEDOR_POR_DEFECTO = 'calles';
+
+/**
+ * Orden en que se intenta si el elegido no responde.
+ *
+ * El corporativo va primero porque, el dia que exista, es el que no saca
+ * trafico fuera. OSM queda FUERA de la cadena: no se puede poner de respaldo
+ * automatico algo que puede bloquear sin aviso.
+ */
+export const CADENA_RESPALDO = Object.freeze(['corporativo', 'calles', 'satelite']);
+
+/** Identificadores que ya no existen, y a que se traducen. */
+const RETIRADOS = Object.freeze({
+  // CARTO exige clave desde 2025 y esta retirando el raster: sin clave, marca de agua.
+  'carto-claro': 'calles',
+  'carto-oscuro': 'calles',
+  'esri-satelite': 'satelite',
+});
+
+/**
+ * Traduce un identificador guardado por una version anterior.
+ * Sin esto, quien tuviera CARTO elegido se quedaba sin fondo y sin explicacion.
+ */
+export function migrarProveedor(id) {
+  if (RETIRADOS[id]) return { id: RETIRADOS[id], migrado: true, desde: id };
+  return { id, migrado: false, desde: null };
+}
 
 export const proveedorPorId = (id) => PROVEEDORES.find((p) => p.id === id) ?? null;
 
@@ -125,8 +186,12 @@ export function leerConfig(almacen) {
     const crudo = a?.getItem(CLAVE);
     if (!crudo) return base;
     const d = JSON.parse(crudo);
+    // Un proveedor retirado no deja al usuario sin fondo y sin explicacion:
+    // se traduce al equivalente vigente y se dice que se ha traducido.
+    const m = migrarProveedor(typeof d.proveedor === 'string' ? d.proveedor : base.proveedor);
     return {
-      proveedor: typeof d.proveedor === 'string' ? d.proveedor : base.proveedor,
+      proveedor: m.id,
+      migradoDesde: m.migrado ? m.desde : null,
       urlCorporativa: typeof d.urlCorporativa === 'string' ? d.urlCorporativa : '',
       atribucionCorporativa: typeof d.atribucionCorporativa === 'string' ? d.atribucionCorporativa : '',
     };

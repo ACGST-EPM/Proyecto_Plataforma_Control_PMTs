@@ -624,6 +624,20 @@ function construirDescripcion(t){
   partes.push(`contrato: ${t.contrato}`);
   partes.push(`contratista: ${t.contratista}`);
   partes.push(`proyecto: ${t.proyecto}`);
+  /* SEGUIMIENTO DOCUMENTAL (Etapa 3).
+     Se escriben SOLO si existen. Escribir «resolucion_pmt: Pendiente» seria
+     guardar un texto de relleno como si fuera el numero de una resolucion, y
+     luego nadie podria distinguirlo de un codigo de verdad. Si no esta, no se
+     escribe: el motor lo lee como ausente y su estado sale PENDIENTE, que es
+     exactamente lo que significa. Ver motor/src/modelo/documental.js. */
+  for(const [campo, valor] of [
+    ['resolucion_pmt', t.resolucionPmt],
+    ['permiso_rotura', t.permisoRotura],
+    ['cierre_permiso_rotura', t.cierrePermisoRotura],
+  ]){
+    const v = (valor||'').trim();
+    if(v) partes.push(`${campo}: ${v}`);
+  }
   return partes.join(' | ');
 }
 
@@ -631,7 +645,8 @@ function construirDescripcion(t){
    UTILIDADES
    =========================================================== */
 function parseDescripcion(desc){
-  const campos=['fecha_inicio','fecha_fin','tipo_cierre','direccion','municipio','contrato','contratista','proyecto'];
+  const campos=['fecha_inicio','fecha_fin','tipo_cierre','direccion','municipio','contrato','contratista','proyecto',
+    'resolucion_pmt','permiso_rotura','cierre_permiso_rotura'];
   const out={};
   campos.forEach(c=>{ const m=desc.match(new RegExp(c+'\\s*:\\s*([^|]+)','i')); if(m) out[c]=m[1].trim(); });
   return out;

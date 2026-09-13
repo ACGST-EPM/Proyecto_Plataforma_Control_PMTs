@@ -24,6 +24,8 @@ export const CAMPOS_PMT = Object.freeze([
  * vigente del proyecto —el que produce `Generador_KMZ.html` y el que valida
  * `motor/src/io/descripcion.js`— sigue siendo exactamente estos tres.
  */
+import { estadoDocumental } from '../../motor/src/modelo/documental.js';
+
 export const TIPOS_CIERRE = Object.freeze(['total', 'parcial', 'ingreso y salida']);
 
 /**
@@ -139,6 +141,11 @@ export function aFilaPmt(reg) {
     // venir de archivos (por ejemplo, al abrir un proyecto guardado).
     duplicadoExacto: reg.duplicadoExacto === true,
     idRepetidoEnOrigen: reg.idRepetidoEnOrigen === true,
+    // SEGUIMIENTO DOCUMENTAL: el codigo (o null) y su estado derivado.
+    resolucionPmt: reg.resolucionPmt ?? null,
+    permisoRotura: reg.permisoRotura ?? null,
+    cierrePermisoRotura: reg.cierrePermisoRotura ?? null,
+    documental: reg.documental ?? estadoDocumental(reg),
     avisos: reg.avisos ?? [],
     geometria: reg.geometria,
   };

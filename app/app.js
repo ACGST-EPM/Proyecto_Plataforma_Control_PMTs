@@ -642,7 +642,20 @@ function montarControlFondo() {
   if (!caja || caja.dataset.listo) return;
   caja.dataset.listo = '1';
   const cfg = Base.leerConfig();
-  const ops = [...Base.PROVEEDORES.map((p) => [p.id, p.nombre + (p.url ? '' : ' (sin configurar)')]),
+  // Si el fondo que tenia guardado ya no existe, se dice. Quedarse sin mapa sin
+  // explicacion es exactamente lo que le paso a la usuaria con CARTO.
+  if (cfg.migradoDesde) {
+    avisar(`El mapa de fondo que tenia elegido (<b>${esc(cfg.migradoDesde)}</b>) ya no está disponible: ` +
+      `su proveedor pasó a exigir una clave. Se ha cambiado a <b>${esc(Base.proveedorPorId(cfg.proveedor)?.nombre ?? cfg.proveedor)}</b>. ` +
+      `Puede elegir otro en «Mapa de fondo».`, 'atencion');
+    Base.guardarConfig({ ...cfg, migradoDesde: undefined });
+  }
+  // POCAS OPCIONES, Y CLARAS. La lista larga de proveedores se redujo a tres
+  // mas «sin fondo»: ver la cabecera de `app/nucleo/mapas-base.js`. Los
+  // proveedores marcados como avanzados no se ofrecen de entrada.
+  const ops = [...Base.PROVEEDORES_VISIBLES.map((p) =>
+      [p.id, p.nombre + (p.url || p.configurable ? '' : ' (no disponible)') +
+        (p.configurable && !cfg.urlCorporativa ? ' — sin configurar' : '')]),
     [Base.SIN_FONDO, 'Sin mapa de fondo']];
   caja.innerHTML = `<label class="mini-campo">Mapa de fondo
     <select id="selFondo">${ops.map(([v, t]) => `<option value="${esc(v)}"${v === cfg.proveedor ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>
