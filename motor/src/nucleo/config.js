@@ -56,6 +56,27 @@ export const CONFIG_POR_DEFECTO = Object.freeze({
    *           es decir, umbral efectivo del doble. Solo para comparar.
    */
   modoDistancia: 'real',
+
+  /**
+   * MODELO ESPACIAL: que se considera «coincidencia espacial».
+   *
+   *  'minima'            hay coincidencia si la distancia minima entre las
+   *                      geometrias ORIGINALES es <= umbralMetros.
+   *                      Es la regla vigente y la que produjo la baseline.
+   *
+   *  'zonasDeInfluencia' cada PMT tiene una zona de influencia de senalizacion
+   *                      de `radioInfluenciaMetros` a su alrededor, y hay
+   *                      coincidencia si las dos zonas se superponen. Por la
+   *                      identidad demostrada en `geo/zona-influencia.js`, eso
+   *                      equivale EXACTAMENTE a distancia <= radioA + radioB.
+   *
+   * ES UNA HIPOTESIS OPERATIVA EN EVALUACION, no una regla aprobada. El valor
+   * por defecto NO cambia: la baseline tiene que seguir siendo reproducible.
+   */
+  modeloEspacial: 'minima',
+
+  /** Radio de la zona de influencia de senalizacion, en metros. */
+  radioInfluenciaMetros: 120,
 });
 
 /** Perfil que reproduce el comportamiento del motor QGIS legado. */
@@ -79,6 +100,12 @@ export function resolverConfig(parcial = {}) {
   if (c.granularidadTemporal !== 'instante' && c.granularidadTemporal !== 'dia') {
     throw new Error(`granularidadTemporal debe ser 'instante' o 'dia' (llego: ${c.granularidadTemporal})`);
   }
+  if (c.modeloEspacial !== 'minima' && c.modeloEspacial !== 'zonasDeInfluencia') {
+    throw new Error(`modeloEspacial debe ser 'minima' o 'zonasDeInfluencia' (llego: ${c.modeloEspacial})`);
+  }
+  if (!(Number.isFinite(c.radioInfluenciaMetros) && c.radioInfluenciaMetros > 0)) {
+    throw new Error(`radioInfluenciaMetros debe ser un numero > 0 (llego: ${c.radioInfluenciaMetros})`);
+  }
   if (c.modoDistancia !== 'real' && c.modoDistancia !== 'legado') {
     throw new Error(`modoDistancia debe ser 'real' o 'legado' (llego: ${c.modoDistancia})`);
   }
@@ -87,7 +114,23 @@ export function resolverConfig(parcial = {}) {
 
 /** Distancia maxima a la que dos registros pueden generar una relacion. */
 export function alcanceMetros(config) {
+  // MODELO DE ZONAS: el alcance es la suma de los dos radios. Ver la identidad
+  // demostrada en `geo/zona-influencia.js`: dos zonas de radio r se superponen
+  // exactamente cuando la distancia minima no pasa de 2r.
+  if (config.modeloEspacial === 'zonasDeInfluencia') {
+    return 2 * (config.radioInfluenciaMetros ?? 120);
+  }
   return config.modoDistancia === 'legado' ? config.umbralMetros * 2 : config.umbralMetros;
+}
+
+/** Descripcion legible del criterio espacial vigente, para informes y pantallas. */
+export function describirModeloEspacial(config) {
+  if (config.modeloEspacial === 'zonasDeInfluencia') {
+    const r = config.radioInfluenciaMetros ?? 120;
+    return `se superponen las zonas de influencia de senalizacion de ${r} m ` +
+      `(equivale a una distancia minima de hasta ${2 * r} m)`;
+  }
+  return `la distancia minima entre los trazados no pasa de ${config.umbralMetros} m`;
 }
 
 /**

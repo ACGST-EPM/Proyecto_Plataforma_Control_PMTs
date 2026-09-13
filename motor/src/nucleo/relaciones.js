@@ -25,6 +25,7 @@ import { cotaInferiorMetros } from '../geo/cajas.js';
 export { separacionLongitud, cotaInferiorMetros } from '../geo/cajas.js';
 import { traslape } from '../tiempo/intervalo.js';
 import { resolverConfig, alcanceMetros } from './config.js';
+import { zonasSeSuperponen, solapeMetros } from '../geo/zona-influencia.js';
 
 /**
  * Prefiltro por caja envolvente.
@@ -51,6 +52,17 @@ export function hechosDelPar(a, b, configParcial = {}) {
   const umbralEfectivo = alcanceMetros(config);
   const espacialEvaluable = m.metros !== null && m.dominioValido;
   const dentro = espacialEvaluable ? m.metros <= umbralEfectivo : null;
+
+  // ZONAS DE INFLUENCIA — se calculan SIEMPRE, gobierne o no la decision.
+  //
+  // Son hechos, igual que la distancia o el contacto fisico: «estas dos zonas
+  // de senalizacion se superponen» es cierto o falso con independencia de que
+  // regla este vigente. Tenerlos siempre permite comparar los dos modelos sobre
+  // el mismo analisis, sin volver a calcular nada, y ensenar la zona en el mapa
+  // aunque la regla activa sea la de distancia minima.
+  const radio = config.radioInfluenciaMetros ?? 120;
+  const superponen = espacialEvaluable ? zonasSeSuperponen(m.metros, radio, radio) : null;
+  const solape = espacialEvaluable ? solapeMetros(m.metros, radio, radio) : null;
   return {
     idA: a.id, idB: b.id,
     frenteA: a.frente, frenteB: b.frente,
@@ -69,6 +81,14 @@ export function hechosDelPar(a, b, configParcial = {}) {
     intersecanFisicamente: espacialEvaluable ? m.intersecan : null,
     dentroDelUmbral: dentro,
     umbralAplicadoMetros: umbralEfectivo,
+
+    // --- hechos de la zona de influencia de senalizacion ---
+    radioInfluenciaMetros: radio,
+    zonasDeInfluenciaSeSuperponen: superponen,
+    solapeDeZonasMetros: solape === null ? null : Math.round(solape * 1000) / 1000,
+    // Que regla decidio ESTA relacion. Viaja con el hecho para que ninguna
+    // cifra pueda presentarse sin decir con que criterio salio.
+    modeloEspacialAplicado: config.modeloEspacial,
 
     // --- hechos temporales ---
     vigenciaA: { inicio: a.vigencia.inicio, fin: a.vigencia.fin, valida: a.vigencia.valida },
