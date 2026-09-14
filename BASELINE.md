@@ -141,7 +141,7 @@ que «no se pudo comprobar» nunca se convierte en un hecho, que la aplicación 
 que ningún dato operativo está versionado, que toda cifra lleva procedencia, que el oráculo de
 regresión sigue en su sitio y que todo se puede reconstruir desde un clon limpio.
 
-Cada una se rompió a propósito una vez para comprobar que **detecta su infracción**: 12 de 12. Está
+Cada una se rompió a propósito una vez para comprobar que **detecta su infracción**: 15 de 15. Está
 documentado en `AUTOREVISION_ETAPA3.md` §1.1.
 
 | Archivo | Qué garantiza |

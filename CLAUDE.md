@@ -202,8 +202,11 @@ Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada
   revés había ciclo de importaciones y el empaquetador de un solo archivo revienta.
 
 #### Compuertas de entrega
-- `npm run compuertas` ejecuta 12 comprobaciones (A..L) sobre el PRODUCTO, no sobre el código. Cada
-  una se rompió a propósito una vez para comprobar que detecta su infracción: 12 de 12.
+- `npm run compuertas` ejecuta 15 comprobaciones (A..O) sobre el PRODUCTO, no sobre el código. Cada
+  una se rompió a propósito una vez para comprobar que detecta su infracción: 15 de 15.
+  Las tres últimas vigilan lo añadido en el cierre operativo: **M** reactivar reutiliza el trazado
+  exactamente, **N** la clasificación temporal usa una sola fecha de referencia, **O** ocultar
+  históricos nunca borra un hecho.
 - Pruebas: **259 motor + 245 app + 74 de navegador real + 15 compuertas**.
 
 ### Otras reglas de la 2.4
