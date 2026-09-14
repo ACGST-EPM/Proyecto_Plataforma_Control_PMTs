@@ -42,6 +42,8 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
 - `DESCUBRIMIENTO_EPM.md` — las 20 preguntas exactas para TI y para el área que gobierna la contratación, cada una con qué decisión desbloquea.
 - `ESCALABILIDAD.md` — medida real de 460 a 10.000 PMT, a partir de cuándo hay que actuar, y
   (§4 bis) por qué el modelo de zonas **no** es más lento: lo que crece es la salida, no el cálculo.
+- `INFORME_ETAPA3.md` — qué se entregó en la Etapa 3, qué defectos se cerraron, qué NO se hizo y por
+  qué, y un **resumen en lenguaje no técnico** al final.
 - `AUTOREVISION_ETAPA3.md` — el intento deliberado de romper lo construido en la Etapa 3: qué
   ataqué, qué encontré, y **dónde no he mirado**. Es el punto de partida de la auditoría independiente.
 - `SEGURIDAD_MODELO_AMENAZAS.md` — qué se protege, de quién, qué está cerrado y qué no.
@@ -49,7 +51,8 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
 Repo publicado: `ACGST-EPM/Control-y-Articulacion-de-PMTs-EPM` (GitHub Pages).
 Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada`, `02_Proyecto_QGIS`, `Control-y-Articulacion-de-PMTs-EPM`).
 
-## Estado (Etapa 2 CERRADA y congelada en `BASELINE.md`; Etapa 3 en curso)
+## Estado (Etapa 2 CERRADA y congelada en `BASELINE.md`; Etapa 3 ENTREGADA, **no aprobada**:
+## está parada a propósito para auditoría independiente — ver `INFORME_ETAPA3.md`)
 
 ### Invariantes de aplicación — no los rompa
 - **Representación visual = estado interno.** Ningún filtro puede estar activo sin verse en su
