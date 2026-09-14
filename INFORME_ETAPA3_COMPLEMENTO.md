@@ -190,6 +190,43 @@ las tres saltaron. Igual que las doce anteriores.
 
 ---
 
+## 7 bis · Verificado con los 8 KMZ REALES de EPM
+
+No con fixtures: con los archivos de `01_KMZ_Entrada.zip` que ya están en el repositorio. **No se
+copió ningún dato a ninguna parte**; se leyeron donde estaban y se borró el temporal.
+
+```
+PMT leídos ................. 460      ← la baseline histórica, intacta
+Relaciones ................. 174      ← la baseline histórica, intacta
+
+Reparto al 14/09/2026:
+  vigentes ................. 174
+  programados ...............  8
+  históricos ............... 277
+  sin vigencia utilizable ...  1
+  ─────────────────────────────
+  OPERATIVOS ............... 183  de 460
+
+Años presentes ............. 2027 (15) · 2026 (421) · 2025 (90) · 1 sin año
+Bases ...................... 460   (cada KMZ es su propia base)
+Reactivaciones .............   0   (ningún KMZ declara identidad: no se inventa parentesco)
+Relaciones accionables hoy ..  95  de 174
+```
+
+**Lo que esto demuestra, con los datos de verdad:**
+
+1. **Ninguna cifra publicada ha cambiado**: 460 PMT y 174 relaciones, igual que desde el cierre de
+   la Etapa 1.
+2. **La vista operativa hace exactamente lo que tenía que hacer**: de 460 PMT a 183, y de 174
+   relaciones a 95. Los 277 históricos dejan de hacer ruido **sin desaparecer**.
+3. **La pantalla no sale vacía** con estos datos (hay 183 operativos), pero el aviso para cuando sí
+   ocurra está puesto y probado.
+4. **No se inventó ni un solo parentesco**: 460 bases para 460 trazados, 0 reactivaciones, porque
+   ningún KMZ declara identidad de base. Es lo correcto.
+5. El selector de año se pobló con **2025, 2026 y 2027**, que es lo que hay.
+
+---
+
 ## 8 · Qué archivo debe abrir Leydi
 
 ```
