@@ -119,17 +119,30 @@ cd motor && node herramientas/comparar.mjs <carpeta-con-los-8-KMZ>
 ## 5 · Pruebas
 
 ```
-Motor ......................  231   (1 omitida: depende de una referencia externa opcional)
-Aplicación (lógica pura) ...  164
-Navegador real .............   45   (file:// y HTTP)
+Motor ......................  259   (1 omitida: depende de una referencia externa opcional)
+Aplicación (lógica pura) ...  200
+Navegador real .............   66   (file:// y HTTP)
+Compuertas de entrega ......   12   (A..L, ejecutables)
 ```
 
 ```bash
 npm run preparar        # npm ci del motor. NECESARIO: sin el lockfile se pierden pruebas
 npm test                # motor + aplicación
 npm run test:navegador  # construye dist/ y lo conduce con un Chromium real
-npm run test:todo       # las tres cosas
+npm run compuertas      # las 12 compuertas de entrega
+npm run test:todo       # las cuatro cosas
 ```
+
+**Las compuertas no son pruebas.** Las pruebas comprueban que el código hace lo que dice; las
+compuertas comprueban que el **producto** cumple lo que se prometió: que no viaja ningún secreto, que
+no se clasifica criticidad, que los formatos pactados no se han movido, que la marca sigue siendo la
+marca, que el modelo espacial candidato **sigue siendo candidato**, que «Pendiente» nunca es un dato,
+que «no se pudo comprobar» nunca se convierte en un hecho, que la aplicación funciona sin internet,
+que ningún dato operativo está versionado, que toda cifra lleva procedencia, que el oráculo de
+regresión sigue en su sitio y que todo se puede reconstruir desde un clon limpio.
+
+Cada una se rompió a propósito una vez para comprobar que **detecta su infracción**: 12 de 12. Está
+documentado en `AUTOREVISION_ETAPA3.md` §1.1.
 
 | Archivo | Qué garantiza |
 |---|---|
@@ -139,6 +152,9 @@ npm run test:todo       # las tres cosas
 | `app/test/baseline.test.mjs` | los parámetros aprobados y la trazabilidad de versiones |
 | `app/test/navegador.test.mjs` | lo que solo se ve al abrir la aplicación de verdad |
 | `app/test/fuentes.test.mjs` | el modelo de fuentes y versiones, con un origen simulado |
+| `app/test/gobierno.test.mjs` | el catálogo maestro manda, y la captura resiste datos hostiles |
+| `app/test/vocabulario.test.mjs` | la lectura operativa se deriva de los hechos y no cuela criticidad |
+| `herramientas/compuertas.mjs` | las 12 compuertas de entrega, ejecutables |
 
 ---
 
@@ -223,7 +239,10 @@ Cada cosa que sale de la plataforma se puede identificar sin preguntarle a nadie
 | Etapa | Commit | Reglas | Cifras |
 |---|---|---|---|
 | 2.4 + gate de cierre | `fc3042f` | 1.2.0 | sin cambios respecto a la Etapa 1 |
-| Etapa 3 · gestión de fuentes | en curso | 1.2.0 | sin cambios: no toca el cálculo |
+| Etapa 3 · gestión de fuentes | `5fd05d3` | 1.2.0 | sin cambios: no toca el cálculo |
+| Etapa 3 · gobierno y captura | `e2f0234` | 1.2.0 | sin cambios: el catálogo no altera el cálculo |
+| Etapa 3 · vocabulario e informe | `fe46ec1` | 1.2.0 | sin cambios: la lectura operativa es DERIVADA |
+| Etapa 3 · accesibilidad | `baae53d` | 1.2.0 | sin cambios: solo color y contraste |
 | 2.3 | `16c3730` | 1.2.0 | sin cambios |
 | 2.2 | `9f801a0` | 1.2.0 | sin cambios |
 | 2.1 | `5689f6b` | 1.2.0 | sin cambios |

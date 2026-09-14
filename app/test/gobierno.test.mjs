@@ -211,3 +211,72 @@ test('cada aviso dice QUÉ pasa y, cuando ayuda, QUÉ hacer', () => {
     assert.ok(!/undefined|null/.test(a.texto), a.texto);
   }
 });
+
+/* ═══════════ ATAQUE: DATOS HOSTILES EN LA CAPTURA (autorevisión §3.1) ═══════════
+ *
+ * El camino feliz ya estaba probado. Esto es lo contrario: lo que escribiría
+ * alguien con prisa, alguien copiando y pegando, o un catálogo mal mantenido.
+ * La regla que se comprueba es siempre la misma: **nunca se guarda algo que no
+ * se pueda analizar, y nunca se descarta algo en silencio.**
+ */
+
+test('ATAQUE: coordenadas fuera del planeta no se pueden guardar', () => {
+  for (const g of [
+    { type: 'Point', coordinates: [-181, 6.2] },
+    { type: 'Point', coordinates: [-75.6, 91] },
+    { type: 'LineString', coordinates: [[-75.6, 6.2], [200, 6.2]] },
+    { type: 'Point', coordinates: [NaN, 6.2] },
+    { type: 'Point', coordinates: ['-75.6', '6.2'] },
+  ]) {
+    const r = validarPmt({ ...VALIDO, geometria: g }, CATALOGO);
+    assert.equal(r.sePuedeGuardar, false, 'se guardó ' + JSON.stringify(g));
+    assert.ok(r.avisos.some((a) => a.campo === 'geometria' && a.nivel === NIVEL.ERROR),
+      'y el error tiene que señalar el trazado: ' + JSON.stringify(r.avisos));
+  }
+});
+
+test('ATAQUE: una línea de un solo punto no es una línea', () => {
+  const r = validarPmt({
+    ...VALIDO, geometria: { type: 'LineString', coordinates: [[-75.6, 6.2]] },
+  }, CATALOGO);
+  assert.equal(r.sePuedeGuardar, false);
+  assert.ok(r.avisos.some((a) => a.campo === 'geometria'));
+});
+
+test('ATAQUE: un contrato con la lista de municipios vacía no bloquea el alta', () => {
+  // Es un defecto del CATÁLOGO, no del PMT. No se puede castigar a quien
+  // captura por un dato maestro incompleto: se avisa y se deja seguir.
+  const cat = Cat.leerCatalogo([
+    { contrato: 'CW-9', contratista: 'Nueve', proyecto: 'P9', municipios: [] },
+  ]).catalogo;
+  const r = validarPmt({ ...VALIDO, contrato: 'CW-9', municipio: 'Medellín' }, cat);
+  const delMunicipio = r.avisos.filter((a) => a.campo === 'municipio');
+  assert.ok(!delMunicipio.some((a) => a.nivel === NIVEL.ERROR),
+    'un catálogo incompleto no puede impedir capturar: ' + JSON.stringify(delMunicipio));
+});
+
+test('ATAQUE: un catálogo corrupto se rechaza ENTERO, no a medias', () => {
+  for (const malo of [
+    null, 'no soy json', 42, [{ sinContrato: true }],
+    { contratos: 'esto no es una lista' },
+  ]) {
+    const r = Cat.leerCatalogo(malo);
+    assert.equal(r.ok, false, 'aceptó ' + JSON.stringify(malo));
+    assert.ok(r.motivo && r.motivo.length > 5, 'y dice por qué: ' + JSON.stringify(r));
+  }
+});
+
+test('ATAQUE: un contrato que no está en el catálogo no se acepta en silencio', () => {
+  const r = validarPmt({ ...VALIDO, contrato: 'CW-INVENTADO' }, CATALOGO);
+  assert.ok(r.avisos.some((a) => a.campo === 'contrato'),
+    'un contrato desconocido tiene que decirse: ' + JSON.stringify(r.avisos));
+  // Y al aplicar el catálogo no se puede inventar un contratista.
+  const p = aplicarCatalogo({ ...VALIDO, contrato: 'CW-INVENTADO' }, CATALOGO);
+  assert.ok(!p.contratista, 'no hay contratista que derivar, así que no se pone ninguno');
+});
+
+test('ATAQUE: el catálogo MANDA aunque el formulario traiga otra cosa', () => {
+  const p = aplicarCatalogo({ ...VALIDO, contratista: 'LO QUE YO ESCRIBA', proyecto: 'MÍO' }, CATALOGO);
+  assert.equal(p.contratista, 'Consorcio Uno');
+  assert.equal(p.proyecto, 'PROY UNO');
+});

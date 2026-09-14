@@ -16,7 +16,7 @@ import * as Barra from './ui/barra.js';
 import * as Editor from './ui/editor.js';
 import * as Catalogos from './nucleo/catalogos.js';
 import { CATALOGO_EMBEBIDO } from './nucleo/catalogo-embebido.js';
-import { aplicarCatalogo } from './nucleo/validacion-pmt.js';
+import { filaDePmtCreado } from './nucleo/validacion-pmt.js';
 import { estadoDocumental } from '../motor/src/modelo/documental.js';
 import * as Ingesta from './nucleo/ingesta.js';
 import * as Filtro from './nucleo/filtrado.js';
@@ -732,29 +732,12 @@ function abrirEditor(pmtExistente = null) {
  * mismas reglas que uno que viene de un KMZ.
  */
 async function incorporarPmt(pmt, editando) {
-  const completo = aplicarCatalogo(pmt, catalogoActual());
-  const vig = Tiempo.normalizarVigencia({ inicio: completo.inicio, fin: completo.fin });
-  const docs = {
-    resolucionPmt: completo.resolucionPmt || null,
-    permisoRotura: completo.permisoRotura || null,
-    cierrePermisoRotura: completo.cierrePermisoRotura || null,
-  };
-  const fila = {
-    id: completo.id ?? `pmt_local_${Date.now().toString(36)}`,
-    frente: completo.frente, contrato: completo.contrato, contratista: completo.contratista,
-    proyecto: completo.proyecto, municipio: completo.municipio || null, direccion: completo.direccion || null,
-    tipoCierre: completo.tipoCierre,
-    inicio: vig.inicio, fin: vig.fin, inicioMs: vig.inicioMs, finMs: vig.finMs,
-    vigenciaValida: vig.valida, vigenciaEstado: vig.estado,
-    geometria: completo.geometria, tipoGeometria: completo.geometria?.type ?? null,
-    tieneGeometria: !!completo.geometria,
-    analizable: !!completo.geometria && vig.valida && !!completo.contrato,
-    origenArchivo: 'creado en la plataforma', carpeta: null,
-    avisos: vig.avisos ?? [],
-    duplicadoExacto: false, idRepetidoEnOrigen: false,
-    ...docs,
-    documental: estadoDocumental(docs),
-  };
+  // La construccion de la fila vive en `app/nucleo`, sin DOM, para poder
+  // probarla en Node: es la que tiene que sobrevivir a guardar y volver a abrir.
+  const base = filaDePmtCreado(pmt, catalogoActual(), {
+    normalizarVigencia: Tiempo.normalizarVigencia,
+  });
+  const fila = { ...base, documental: estadoDocumental(base) };
 
   // Los PMT creados aqui viven en su propia FUENTE, para que se puedan quitar
   // de golpe y para que el origen de cada dato siga siendo visible.

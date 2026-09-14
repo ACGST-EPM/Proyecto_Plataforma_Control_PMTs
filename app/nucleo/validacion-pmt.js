@@ -176,3 +176,47 @@ export function aplicarCatalogo(pmt, catalogo) {
   if (!d) return { ...pmt };
   return { ...pmt, contratista: d.contratista, proyecto: d.proyecto };
 }
+
+/**
+ * Construye la FILA de un PMT capturado en la plataforma.
+ *
+ * ══ POR QUÉ ESTÁ AQUÍ Y NO EN `app.js` ═════════════════════════════════════
+ *
+ * Estaba dentro de `incorporarPmt()`, pegada al DOM, y por eso no se podía
+ * probar sin abrir un navegador. Justo lo que hace esta función —normalizar la
+ * vigencia, derivar el estado documental, decidir si el PMT es analizable— es
+ * lo que tiene que sobrevivir a guardar el proyecto y volver a abrirlo. Una
+ * lógica que no se puede probar en Node es una lógica que se prueba tarde.
+ *
+ * Un PMT nacido dentro pasa por las MISMAS reglas que uno que llega en un KMZ:
+ * no es un dato privilegiado y no se le perdona nada.
+ *
+ * @param {object} pmt        lo capturado (ya validado)
+ * @param {object} catalogo   datos maestros; el catálogo manda sobre el formulario
+ * @param {{normalizarVigencia:Function, ahora?:number}} servicios
+ */
+export function filaDePmtCreado(pmt, catalogo, { normalizarVigencia, ahora = Date.now() }) {
+  const completo = aplicarCatalogo(pmt, catalogo);
+  const vig = normalizarVigencia({ inicio: completo.inicio, fin: completo.fin });
+  // Los códigos documentales vuelven a normalizarse aquí: si alguien llega por
+  // otro camino que no sea el formulario, «Pendiente» tampoco entra como dato.
+  const docs = {};
+  for (const d of DOCUMENTOS) {
+    docs[d.clave] = normalizarCodigoDocumental(completo[d.clave], d.etiqueta).codigo;
+  }
+  return {
+    id: completo.id ?? `pmt_local_${ahora.toString(36)}`,
+    frente: completo.frente, contrato: completo.contrato, contratista: completo.contratista,
+    proyecto: completo.proyecto, municipio: completo.municipio || null,
+    direccion: completo.direccion || null, tipoCierre: completo.tipoCierre,
+    inicio: vig.inicio, fin: vig.fin, inicioMs: vig.inicioMs, finMs: vig.finMs,
+    vigenciaValida: vig.valida, vigenciaEstado: vig.estado,
+    geometria: completo.geometria, tipoGeometria: completo.geometria?.type ?? null,
+    tieneGeometria: !!completo.geometria,
+    analizable: !!completo.geometria && vig.valida && !!completo.contrato,
+    origenArchivo: 'creado en la plataforma', carpeta: null,
+    avisos: vig.avisos ?? [],
+    duplicadoExacto: false, idRepetidoEnOrigen: false,
+    ...docs,
+  };
+}

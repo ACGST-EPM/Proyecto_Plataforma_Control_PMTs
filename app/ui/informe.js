@@ -521,16 +521,20 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
   <!-- EL ESTADO ES DERIVADO. En ningun sitio se guarda la palabra «Pendiente»:
        si el codigo esta vacio, el estado que se calcula es PENDIENTE. Asi un
        texto de relleno no puede hacerse pasar por un documento tramitado. -->
-  <p class="inf-p">De los <b>${num(resumen.pmts)}</b> PMT de este informe,
+  <p class="inf-p">De los <b>${num(resumen.documental?.total ?? resumen.pmts)}</b> PMT de este informe,
     <b>${num(resumen.documental?.completos ?? 0)}</b> tienen los ${DOCUMENTOS.length} documentos registrados
     y <b>${num(resumen.documental?.sinNinguno ?? 0)}</b> no tienen ninguno.
     «Pendiente» significa <b>que la casilla está vacía</b>, no que alguien haya escrito esa palabra.</p>
   <table class="inf-tabla">
     <thead><tr><th>Documento</th><th>Registrados</th><th>Pendientes</th></tr></thead>
     <tbody>${DOCUMENTOS.map((d) => {
+      // El denominador sale del MISMO recuento que los pendientes, no de otra
+      // cifra: asi «registrados + pendientes» siempre suma el total, y no hace
+      // falta un Math.max que taparia la diferencia si dejaran de cuadrar.
+      const total = resumen.documental?.total ?? filas.length;
       const pend = resumen.documental?.pendientePorDocumento?.[d.clave] ?? 0;
       return `<tr><td>${esc(d.etiqueta)}</td>
-        <td class="num">${num(Math.max(0, resumen.pmts - pend))}</td>
+        <td class="num">${num(total - pend)}</td>
         <td class="num"><b>${num(pend)}</b></td></tr>`;
     }).join('')}</tbody>
   </table>

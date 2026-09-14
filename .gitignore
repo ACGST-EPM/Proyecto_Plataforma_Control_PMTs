@@ -23,3 +23,7 @@ motor/node_modules/
 *.kmz
 reporte_dinamico.csv
 crudo_*.json
+
+# PROYECTOS GUARDADOS: llevan los trazados reales (direcciones, contratistas,
+# fechas de obra). El repositorio es publico, asi que no entran nunca.
+*.pmt.json

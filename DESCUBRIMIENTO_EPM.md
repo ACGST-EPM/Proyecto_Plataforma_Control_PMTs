@@ -151,6 +151,40 @@ no hay.
 
 ---
 
+## Bloque 6 · El dato maestro y la captura *(nuevo tras la Etapa 3)*
+
+> Estas tres preguntas **no van a TI**, o no solo: van al área que gobierna la contratación. Aparecen
+> porque la plataforma ya permite **crear** un PMT, no solo leerlo, y crear obliga a decidir quién
+> manda sobre los datos que no son del contratista.
+
+### P18. ¿Quién mantiene la lista maestra de contratos, y dónde vive hoy?
+- **Por qué importa:** la plataforma ya no deja que el contratista escriba su propio nombre: elige el
+  contrato de una lista y de ahí se **derivan** contratista, proyecto y municipios permitidos. Eso
+  acaba con que «MEXICHEM», «Mexichem» y «MEXICHEM S.A.» sean tres entidades distintas. Pero la lista
+  tiene que venir de algún sitio que alguien mantenga.
+- **Desbloquea:** si el alta de un contrato es un archivo que alguien actualiza (hoy) o una consulta a
+  un sistema de EPM (mañana).
+- **Respuesta mínima:** un nombre de área, y si existe ya una lista en algún sistema (SAP, Ariba, una
+  hoja, lo que sea).
+
+### P19. Cuando un PMT se crea dentro de la plataforma, ¿dónde debe quedar?
+- **Por qué importa:** hoy queda en el proyecto local de quien lo creó. Eso funciona para una persona
+  sola. Con dos personas, dos proyectos locales divergen en silencio y no hay forma de reconciliarlos.
+- **Desbloquea:** si hace falta un sitio común donde **escribir** (y entonces es la misma decisión que
+  P1–P4, vista desde el otro lado), o si el flujo seguirá siendo «el contratista manda el KMZ».
+- **Respuesta mínima:** si se contempla o no que EPM capture PMT directamente, en vez de recibirlos.
+
+### P20. ¿Existen reglas formales sobre los documentos del PMT (resolución, permiso de rotura, cierre)?
+- **Por qué importa:** la plataforma ya lleva el seguimiento de los tres, y distingue «registrado» de
+  «pendiente» sin inventarse nada: pendiente significa **que la casilla está vacía**. Lo que **no**
+  hace es rechazar un PMT por incumplir un plazo legal, porque no conocemos ninguno y no vamos a
+  inventarlo.
+- **Desbloquea:** si hay que validar plazos o secuencias (por ejemplo, que el cierre no puede
+  registrarse antes que el permiso), y con qué fundamento.
+- **Respuesta mínima:** si existe un procedimiento escrito, y de qué municipio o autoridad depende.
+
+---
+
 ## Lo que NO estamos pidiendo
 
 Para que quede claro en la conversación con TI:

@@ -18,6 +18,7 @@
     "construir:prototipo": "node herramientas/construir-app.mjs --prototipo",
     "comparar": "cd motor && npm run comparar",
     "test:navegador": "npm run construir:app && node --test app/test/navegador.test.mjs",
-    "test:todo": "npm run test && npm run test:navegador"
+    "compuertas": "node herramientas/compuertas.mjs",
+    "test:todo": "npm run test && npm run test:navegador && npm run compuertas"
   }
 }

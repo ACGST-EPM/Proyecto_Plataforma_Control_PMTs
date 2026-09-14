@@ -39,8 +39,11 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
   persistencia y flujo de automatización. Todo marcado CONFIRMADO / HIPÓTESIS / VALIDAR EPM.
 - `INVESTIGACION_MICROSOFT_EPM.md` — qué es posible con SharePoint, Graph, Power Automate, SPFx,
   Teams y Azure, con documentación oficial; cuatro arquitecturas comparadas y una recomendación.
-- `DESCUBRIMIENTO_EPM.md` — las 17 preguntas exactas para TI, cada una con qué decisión desbloquea.
-- `ESCALABILIDAD.md` — medida real de 460 a 10.000 PMT y a partir de cuándo hay que actuar.
+- `DESCUBRIMIENTO_EPM.md` — las 20 preguntas exactas para TI y para el área que gobierna la contratación, cada una con qué decisión desbloquea.
+- `ESCALABILIDAD.md` — medida real de 460 a 10.000 PMT, a partir de cuándo hay que actuar, y
+  (§4 bis) por qué el modelo de zonas **no** es más lento: lo que crece es la salida, no el cálculo.
+- `AUTOREVISION_ETAPA3.md` — el intento deliberado de romper lo construido en la Etapa 3: qué
+  ataqué, qué encontré, y **dónde no he mirado**. Es el punto de partida de la auditoría independiente.
 - `SEGURIDAD_MODELO_AMENAZAS.md` — qué se protege, de quién, qué está cerrado y qué no.
 
 Repo publicado: `ACGST-EPM/Control-y-Articulacion-de-PMTs-EPM` (GitHub Pages).
@@ -108,7 +111,48 @@ Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada
   En el CSV va en el nombre del archivo; el **CSV legado no se toca** (11 columnas, invariante).
 - **Un error nunca queda invisible, tampoco los no previstos**: `error` y `unhandledrejection` van a
   `#avisoGlobal`.
-- Pruebas: **231 motor + 164 app + 45 de navegador real**.
+
+#### Gobierno del dato maestro y captura dentro de la plataforma
+- **Si un dato se puede derivar, no se pide.** Elegir el contrato DERIVA contratista y proyecto y
+  limita los municipios (`app/nucleo/catalogos.js`). Eso elimina la clase entera de error «la misma
+  organización escrita de cuatro maneras», no un caso concreto. El catálogo manda **al guardar**.
+- **Tres niveles de validación que no se mezclan** (`app/nucleo/validacion-pmt.js`): ERROR impide
+  guardar, ADVERTENCIA deja guardar y pide revisión, INFORMACIÓN solo orienta. Si todo es error, la
+  gente escribe cualquier cosa en la casilla para saltárselo.
+- **No se inventan restricciones jurídicas.** No sabemos cuánto puede durar un PMT ni qué forma tiene
+  un código de resolución. Cuando EPM aporte una regla, entra citada.
+- **«Pendiente» NUNCA es un código.** El dato queda vacío y el estado PENDIENTE se DERIVA
+  (`estadoDocumental`). Lo que alguien escribió se descarta **con aviso**, nunca en silencio.
+- `filaDePmtCreado()` vive en `app/nucleo`, **sin DOM**: es lo que tiene que sobrevivir a guardar y
+  volver a abrir, así que tiene que poder probarse en Node.
+- **KMZ y KML se siguen leyendo igual.** El editor es una entrada más, no un sustituto.
+
+#### Modelo espacial y vocabulario operativo
+- **El modelo de zonas de influencia es CANDIDATO, no vigente.** Por defecto sigue
+  `modeloEspacial: 'minima'` a 120 m. `zonasDeInfluenciaSeSuperponen` se calcula siempre pero **no
+  decide nada**. Sustituirlo exige validación humana: no es una decisión técnica.
+- Medido: el modelo candidato **no cuesta más tiempo** (idénticas distancias calculadas); produce
+  casi el **triple de relaciones**. El coste no lo paga la máquina, lo paga quien las lee.
+- **Lectura operativa PROVISIONAL** (`lecturaOperativa` en `app/nucleo/modelo.js`): ARTICULACIÓN
+  REQUERIDA = comparten espacio Y coinciden en el tiempo · COINCIDENCIA ESPACIAL = comparten espacio,
+  en momentos distintos. Son **excluyentes**, no un orden de gravedad. **No es criticidad** y hay una
+  prueba que recorre todas las etiquetas buscando vocabulario de gravedad.
+- La lectura **no sustituye a los hechos**: las tres columnas (lectura, espacio, tiempo) se ven a la
+  vez, para poder comprobar de dónde sale. Y va con el criterio espacial con el que se calculó.
+- En el CSV de relaciones, `LECTURA_OPERATIVA` va **al final**: quien lea por posición sigue leyendo
+  lo mismo.
+
+#### Accesibilidad (medida, no mirada)
+- **La marca no cambia, pero el fondo con texto blanco sí.** Blanco sobre `#009300` da 4,06:1 y AA
+  exige 4,5:1. `--verde-texto` (#007000) y `--naranja-texto` (#a35200) son SOLO para superficies con
+  letras blancas encima; `#009300` y `#d56b00` se siguen usando en bordes, iconos y gráficos.
+- El contraste se mide **sobre el fondo real** (subiendo por los ancestros hasta el primero opaco) y
+  **con los paneles abiertos**, exigiendo antes que se hayan abierto de verdad.
+
+#### Compuertas de entrega
+- `npm run compuertas` ejecuta 12 comprobaciones (A..L) sobre el PRODUCTO, no sobre el código. Cada
+  una se rompió a propósito una vez para comprobar que detecta su infracción: 12 de 12.
+- Pruebas: **259 motor + 200 app + 66 de navegador real + 12 compuertas**.
 
 ### Otras reglas de la 2.4
 - `motor/src/geo/plano-local.js` añade `desproyectar()` (inverso del plano ENU, iterando

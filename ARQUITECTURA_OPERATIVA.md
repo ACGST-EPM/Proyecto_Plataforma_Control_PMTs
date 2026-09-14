@@ -275,3 +275,67 @@ visto.
 
 **Nada de lo construido habla con ningún servicio corporativo, tiene credenciales, ni supone qué
 tiene EPM.** El día que TI responda, lo único nuevo es un archivo que cumpla `listar()` y `leer()`.
+
+---
+
+## 10 · Lo que cambia al poder CREAR un PMT dentro de la plataforma (Etapa 3)
+
+Hasta la Etapa 2 la plataforma solo **leía**. Ahora también **escribe**: se puede crear o corregir un
+PMT sin salir de ella, dibujando el trazado en el mismo mapa. Eso no es una funcionalidad más —
+cambia la dirección del flujo, y conviene decir exactamente qué cambia y qué no.
+
+### 10.1 · El dato maestro deja de escribirse a mano
+
+El problema real, medido sobre los KMZ existentes: el contratista escribe su propio nombre en cada
+archivo. «MEXICHEM», «Mexichem», «MEXICHEM S.A.» y «MEXICHEM SAS» son, para cualquier programa, cuatro
+entidades distintas. Filtrar por contratista deja fuera tres cuartas partes de sus PMT sin avisar de
+nada, porque no hay nada que avisar: los cuatro textos son perfectamente válidos.
+
+La respuesta no es limpiar los textos después. Es **que nadie los escriba**:
+
+| Dato | Quién lo pone | Cómo |
+|---|---|---|
+| Contrato | se elige de una lista | catálogo maestro de EPM |
+| Contratista | **se deriva** | del contrato; no hay campo que escribir |
+| Proyecto | **se deriva** | del contrato |
+| Municipio | se elige | solo los declarados para ese contrato |
+| Tipo de cierre | se elige | lista cerrada de exactamente tres |
+| Frente, dirección, fechas, trazado | los pone el contratista | son suyos de verdad |
+
+El catálogo (`contratos_db.json`, embebido en `app/nucleo/catalogo-embebido.js`) es hoy un archivo
+del repositorio y se puede cargar uno más nuevo desde la propia interfaz, sin reconstruir nada. Eso
+resuelve el alta de un contrato sin depender de un despliegue, pero **no resuelve quién lo gobierna**:
+esa pregunta va a TI y al área de contratación (§ nuevas preguntas del paquete de descubrimiento).
+
+### 10.2 · Validación en tres niveles que no se mezclan
+
+- **ERROR** — impide guardar. Falta algo sin lo cual el PMT no se puede analizar (contrato,
+  vigencia legible, trazado).
+- **ADVERTENCIA** — deja guardar y pide revisión. Algo es raro pero puede ser correcto: una vigencia
+  de nueve meses, un municipio que no es el habitual del contrato, un código con forma extraña.
+- **INFORMACIÓN** — solo informa.
+
+Lo que **no** se hace: inventar restricciones jurídicas. No se rechaza un PMT «porque la resolución
+debe emitirse con 15 días de antelación» ni nada parecido. Esa clase de regla la fija la autoridad de
+tránsito del municipio, y no la conocemos. Cuando EPM la aporte, entra como regla explícita, citada.
+
+### 10.3 · Lo que NO cambia
+
+- **KMZ y KML se siguen leyendo igual.** El editor es una entrada más, no un sustituto. Un contratista
+  que mande un KMZ sigue funcionando exactamente como antes.
+- **El PMT creado no es un dato privilegiado.** Entra como una fuente más y **se recalcula todo**: no
+  se añade «a un lado» del análisis.
+- **Nada se envía a ningún sitio.** El PMT creado vive en la sesión y en el proyecto `.pmt.json` que
+  la usuaria guarde. No hay servidor, ni cuenta, ni credencial.
+
+### 10.4 · La pregunta que esto abre, y que no podemos responder solos
+
+Si el PMT se crea **dentro** de la plataforma, ¿dónde queda? Hoy: en el proyecto local. Eso vale para
+una persona trabajando sola, y **no vale** para varias personas trabajando sobre lo mismo — dos
+proyectos locales divergen en silencio y no hay forma de reconciliarlos.
+
+Esa es exactamente la misma decisión de la §6 (persistencia) y la §3 (frontera), vista desde el otro
+lado: **hace falta un sitio común donde escribir**, y ese sitio es corporativo. Mientras no exista,
+la postura es la de siempre: se construye lo que funciona sin él, y se deja el hueco con su forma
+—`listar()` / `leer()` para entrada; un `escribir()` simétrico el día que haya dónde— en vez de
+inventar un servidor propio que nadie ha aprobado.
