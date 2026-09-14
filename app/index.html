@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plataforma de Control y Articulación de PMTs — Grupo EPM</title>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+
+<header class="cabecera">
+  <span class="marca-epm">EPM</span>
+  <div class="crece">
+    <h1>Plataforma de Control y Articulación de PMTs</h1>
+    <p class="sub">Centro de Gestión Servicios Técnicos · análisis de interferencias entre Planes de Manejo de Tránsito</p>
+  </div>
+  <button id="btnGuardarProyecto" class="b-lima no-imprimir oculto" title="Guarda todo el análisis en un archivo para volver a abrirlo sin recargar los KMZ">💾 Guardar proyecto</button>
+  <button id="btnEmpezarDeNuevo" class="b-suave no-imprimir oculto">Empezar de nuevo</button>
+</header>
+
+<main class="envoltorio">
+
+  <!-- Zona de avisos SIEMPRE visible: un error jamás puede quedarse escondido
+       porque el panel que lo contenía esté oculto. -->
+  <div id="avisoGlobal" class="frase oculto no-imprimir" role="status" aria-live="polite"></div>
+
+  <!-- ═══════════ BARRA DE TRABAJO ═══════════
+       Lo que se usa CONTINUAMENTE, siempre a la vista y en una sola línea:
+       buscar, periodo, municipio, contrato. Todo lo demás vive detrás de «Más
+       filtros», porque enseñar veinte controles a la vez no es dar opciones:
+       es esconder las cuatro que importan entre las otras dieciséis. -->
+  <div class="barra-trabajo oculto no-imprimir" id="barraTrabajo">
+    <div class="bt-fila">
+      <label class="bt-buscar">
+        <span class="bt-lupa" aria-hidden="true">⌕</span>
+        <input type="search" id="buscarGlobal" placeholder="Buscar frente, contrato, dirección o código de resolución…"
+               autocomplete="off" aria-label="Buscar en todos los PMT">
+      </label>
+      <div class="bt-rapidos" id="filtrosRapidos"></div>
+      <button class="b-suave b-mini" id="btnMasFiltros" aria-expanded="false">Más filtros</button>
+      <span class="crece"></span>
+      <span class="bt-cuenta" id="btCuenta"></span>
+    </div>
+    <div class="bt-chips" id="chipsFiltros"></div>
+  </div>
+
+
+  <!-- ─────────────── PASO 1 · CARGA ─────────────── -->
+  <section class="panel no-imprimir" id="panelCarga">
+    <h2><span class="paso">1</span> Seleccione los archivos de sus PMT</h2>
+    <div class="cuerpo">
+      <div class="zona-soltar" id="zona">
+        <p class="grande">Arrastre aquí sus archivos KMZ o KML</p>
+        <p class="pista">…o pulse el botón. Puede seleccionar varios a la vez, de cualquier carpeta de su computador.</p>
+        <p style="margin-top:14px">
+          <button class="b-verde" id="btnElegir">Elegir archivos…</button>
+          <button class="b-suave" id="btnAbrirProyecto2" title="Abrir un análisis que guardó antes">Abrir un proyecto guardado…</button>
+        </p>
+        <input type="file" id="entrada" accept=".kmz,.kml" multiple hidden>
+        <p class="pista" style="margin-top:14px">
+          No necesita abrir QGIS, ni generar el reporte, ni publicar nada.<br>
+          Sus archivos <b>no salen de su computador</b>: todo el análisis ocurre aquí mismo.
+        </p>
+      </div>
+      <div id="progreso" class="frase oculto" style="margin-top:14px"></div>
+      <input type="file" id="entradaAnadir" accept=".kmz,.kml" multiple hidden>
+      <input type="file" id="entradaProyecto" accept=".json,.pmt.json" hidden>
+      <input type="file" id="entradaCatalogo" accept=".json" hidden>
+    </div>
+  </section>
+
+  <!-- ─────────────── GESTOR DE FUENTES (siempre visible con datos) ─────────────── -->
+  <section class="panel oculto no-imprimir" id="panelFuentes">
+    <h2>Fuentes del análisis <span class="cuenta" id="cuentaFuentes">0</span></h2>
+    <div class="cuerpo">
+      <div class="barra-acciones">
+        <button class="b-verde b-mini" id="btnAnadir" title="Suma más archivos al análisis actual">＋ Añadir archivos</button>
+        <button class="b-suave b-mini" id="btnAbrirProyecto">Añadir un proyecto guardado…</button>
+        <span class="sep"></span>
+        <button class="b-suave b-mini" id="btnDetalleFuentes" aria-expanded="true">Ocultar detalle</button>
+      </div>
+      <div id="listaFuentes"></div>
+    </div>
+  </section>
+
+  <!-- ─────────────── PASO 2 · RESUMEN ─────────────── -->
+  <section class="panel oculto" id="panelResumen">
+    <h2><span class="paso">2</span> Esto es lo que se encontró</h2>
+    <div class="cuerpo">
+
+      <!-- BANDA DE CONTEXTO. Confundir «esto ocurrio en 2025» con «esto hay que
+           coordinarlo» es el error mas caro de esta pantalla, asi que el
+           contexto se dice CON PALABRAS y siempre encima de las cifras, no con
+           un matiz de color que puede no distinguirse o imprimirse en gris. -->
+      <div id="bandaContexto" class="banda-contexto"></div>
+
+      <!-- Que estoy viendo: operativo, historico de un año, o todo. NO es un
+           filtro mas: es el punto de vista desde el que se mira todo lo demas. -->
+      <div id="selectorPeriodo" class="selector-periodo no-imprimir"></div>
+
+      <!-- LA VISTA OPERATIVA PUEDE ESCONDERLO TODO. Con datos de hace unos
+           meses la pantalla queda vacia, y sin explicacion eso no se lee como
+           «no hay nada que coordinar» sino como «no cargo mis archivos». -->
+      <div id="avisoVistaVacia" class="frase atencion oculto no-imprimir"
+        style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"></div>
+
+      <div id="fraseResumen" class="frase"></div>
+
+      <!-- ALCANCE: dice SIEMPRE de que conjunto hablan las tarjetas de abajo.
+           Sin esta linea, un 2 arriba y un 1 en la tabla parecen un error. -->
+      <div id="alcanceResumen" class="alcance"></div>
+      <div class="tarjetas" id="tarjetas"></div>
+
+      <!-- QUE SIGNIFICAN LAS DOS PRIMERAS. Van aqui, pegadas a las cifras, y no
+           en una ayuda aparte: una etiqueta que hay que ir a buscar se
+           interpreta a ojo, y ahi es donde nace «entonces esto es lo critico». -->
+      <p class="frase" id="glosarioOperativo" style="font-size:.85rem">
+        <b>Articulación requerida</b>: comparten espacio <b>y</b> coinciden en el tiempo — hay que
+        coordinar entre contratos. · <b>Coincidencia espacial</b>: comparten espacio pero en momentos
+        distintos. · Las dos se <b>deducen</b> de los hechos medidos que están debajo;
+        <b>no son un nivel de criticidad</b> y no ordenan por urgencia.
+      </p>
+
+      <!-- Segunda fila: habla de los ARCHIVOS, no de los PMT visibles, y por
+           eso no se mueve con los filtros. Va aparte para que no se confunda. -->
+      <h3 class="titulo-grupo" id="tituloArchivos">Archivos cargados <small>(no cambia con los filtros)</small></h3>
+      <div class="tarjetas" id="tarjetasArchivos"></div>
+
+      <div id="siguientePaso" class="frase" style="margin-top:16px;background:var(--azul-suave);border-left-color:var(--azul)"></div>
+    </div>
+  </section>
+
+  <!-- ═══════════ ESPACIO DE TRABAJO ═══════════
+       El mapa es el protagonista. A su izquierda, una columna estrecha con lo
+       que acompaña a la lectura del mapa: qué se está viendo (capas) y qué hay
+       seleccionado (ficha). Debajo, el recorrido en el tiempo. -->
+  <section class="oculto" id="panelExplorar">
+    <div class="espacio-trabajo">
+
+      <aside class="columna-lateral no-imprimir">
+        <div class="panel compacto">
+          <h2>Capas</h2>
+          <div class="cuerpo" id="panelCapas"></div>
+        </div>
+
+        <div class="panel compacto" id="panelFicha">
+          <h2 id="tituloFicha">Selección</h2>
+          <div class="cuerpo" id="fichaLateral"></div>
+        </div>
+      </aside>
+
+      <div class="columna-mapa">
+        <div class="panel" style="margin-bottom:16px">
+          <div class="cuerpo" style="padding-bottom:0;padding-top:12px">
+            <div class="barra-mapa no-imprimir">
+              <span id="elegirFondo"></span>
+              <label class="mini-campo" for="selContexto">Contexto
+                <select id="selContexto">
+                  <option value="con-contexto">Ver también los demás, atenuados</option>
+                  <option value="solo-seleccion">Ver solo lo que entra en las cifras</option>
+                </select>
+              </label>
+              <span class="sep"></span>
+              <button class="b-suave b-mini" id="btnEncuadrar">Ver todo</button>
+              <button class="b-suave b-mini" id="btnComprobarCarto" title="Comprobar si un trazado cae donde debe">Comprobar cartografía</button>
+        <span class="sep"></span>
+        <button class="b-verde b-mini" id="btnNuevoPmt" title="Crear un PMT con los datos maestros de EPM">＋ Nuevo PMT</button>
+        <button class="b-suave b-mini oculto" id="btnEditarPmt">✎ Editar el seleccionado</button>
+        <button class="b-suave b-mini oculto" id="btnReactivarPmt"
+          title="Volver a usar este mismo PMT en otras fechas, sin redibujar el trazado">↻ Nueva vigencia</button>
+            </div>
+            <div id="avisoMapa" class="frase atencion oculto" style="margin-bottom:10px;font-size:.86rem"></div>
+            <div id="mapa"></div>
+            <div class="leyenda" id="leyendaMapa"></div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-bottom:0">
+          <h2>Recorrido en el tiempo</h2>
+          <div class="cuerpo"><div class="recorrido" id="recorrido"></div></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Editor de PMT: crear o corregir sin salir de la plataforma. -->
+    <section class="panel oculto no-imprimir" id="panelEditor" style="margin-top:16px">
+      <h2 id="tituloEditor">Nuevo PMT</h2>
+      <div class="cuerpo"></div>
+    </section>
+
+    <!-- Panel de filtros completo: se despliega desde «Más filtros». -->
+    <div class="panel oculto no-imprimir" id="panelFiltros" style="margin-top:16px">
+      <h2>Todos los filtros
+        <button class="b-suave b-mini" id="btnCerrarFiltros" style="float:right;margin-top:-4px">Cerrar</button>
+      </h2>
+      <div class="cuerpo" id="filtros"></div>
+    </div>
+  </section>
+
+  <!-- ─────────────── PASO 4 · DETALLE ─────────────── -->
+  <section class="panel oculto" id="panelDetalle" style="margin-top:20px">
+    <div class="pestanas no-imprimir" role="tablist">
+      <button role="tab" aria-selected="true"  data-pest="pmt">PMT <span class="cuenta" id="cuentaPmt">0</span></button>
+      <button role="tab" aria-selected="false" data-pest="rel">Relaciones <span class="cuenta" id="cuentaRel">0</span></button>
+      <button role="tab" aria-selected="false" data-pest="noeval" id="pestNoEval" class="oculto">No evaluables <span class="cuenta" id="cuentaNoEval">0</span></button>
+      <button role="tab" aria-selected="false" data-pest="doc">Seguimiento documental <span class="cuenta" id="cuentaDoc">0</span></button>
+      <button role="tab" aria-selected="false" data-pest="cal">Calidad de los datos <span class="cuenta" id="cuentaCal">0</span></button>
+    </div>
+    <div class="cuerpo">
+
+      <!-- ALCANCE DE LA PESTANA: tres de ellas cuentan lo VISIBLE y la de calidad
+           cuenta TODO lo cargado. Sin decirlo, parecen contradecirse. -->
+      <div id="alcancePestana" class="alcance-pestana"></div>
+
+      <div id="pest_pmt">
+        <div class="barra-acciones no-imprimir" id="barraTablaPmt"></div>
+        <div class="tabla-caja"><table class="datos" id="tablaPmt"><thead></thead><tbody></tbody></table></div>
+        <div class="paginador no-imprimir" id="pagPmt"></div>
+      </div>
+
+      <div id="pest_rel" class="oculto">
+        <div class="frase" style="font-size:.88rem">
+          Aquí están los <b>hechos</b> de cada pareja: a qué distancia están, si llegan a tocarse y si coinciden en el tiempo.
+          <b>Todavía no se clasifica ninguna como crítica</b>: esa decisión se tomará cuando se puedan ver los casos reales.
+        </div>
+        <div id="notaParejaFuera" class="frase atencion oculto" style="font-size:.86rem"></div>
+        <div class="tabla-caja"><table class="datos" id="tablaRel"><thead></thead><tbody></tbody></table></div>
+        <div class="paginador no-imprimir" id="pagRel"></div>
+      </div>
+
+      <div id="pest_noeval" class="oculto"><div id="panelNoEval"></div></div>
+
+      <div id="pest_doc" class="oculto"><div id="panelDocumental"></div></div>
+
+      <div id="pest_cal" class="oculto"><div id="panelCalidad"></div></div>
+
+    </div>
+  </section>
+
+  <!-- ─────────────── PASO 5 · EXPORTAR ─────────────── -->
+  <section class="panel oculto no-imprimir" id="panelExportar" style="margin-top:20px">
+    <h2><span class="paso">4</span> Guardar o compartir los resultados</h2>
+    <div class="cuerpo">
+      <p style="margin-top:0;color:var(--tinta-2)" id="alcanceExportar">Se exporta <b>lo que está viendo ahora</b>, con los filtros aplicados.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:9px">
+        <button class="b-verde"  id="expPmtCsv">PMT en Excel (CSV)</button>
+        <button class="b-verde"  id="expRelCsv">Relaciones en Excel (CSV)</button>
+        <button class="b-lima"   id="expGeoJson">Trazados en GeoJSON</button>
+        <button class="b-lima"   id="expKml">Trazados en KML</button>
+        <button class="b-nar"    id="expInforme">Ver informe ejecutivo</button>
+        <button class="b-suave"  id="expLegado" title="Mismas 11 columnas que producía QGIS, por si algo todavía las espera">CSV compatible con el formato antiguo</button>
+      </div>
+      <p style="font-size:.82rem;color:var(--tenue);margin-bottom:0;margin-top:12px">
+        El informe usa la impresión del navegador: desde ahí puede elegir «Guardar como PDF».
+      </p>
+    </div>
+  </section>
+
+  <!-- ─────────────── INFORME EJECUTIVO ─────────────── -->
+  <section class="panel oculto" id="panelInforme" style="margin-top:20px">
+    <h2 class="no-imprimir">Informe ejecutivo</h2>
+    <div class="cuerpo">
+      <div class="barra-acciones no-imprimir">
+        <button class="b-nar" id="btnImprimirInforme">🖨 Imprimir o guardar como PDF</button>
+        <button class="b-suave" id="btnCerrarInforme">Cerrar informe</button>
+        <span class="pista-campo">En el diálogo de impresión elija «Guardar como PDF» como destino.</span>
+      </div>
+      <!-- AVISO DE INFORME CADUCADO: aparece en cuanto cambia aquello sobre lo
+           que se genero (fuentes, filtros o dia). Mientras esta visible, el
+           informe queda atenuado y NO se puede imprimir. -->
+      <div id="avisoInforme" class="aviso-caducado no-imprimir oculto" role="alert"></div>
+      <div id="informe" class="informe"></div>
+    </div>
+  </section>
+
+</main>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

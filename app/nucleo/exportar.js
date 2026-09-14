@@ -1,0 +1,221 @@
+/**
+ * EXPORTACIONES — generacion pura de texto, sin DOM ni descargas.
+ *
+ * Formatos y por que cada uno:
+ *  · CSV       lo que la usuaria abre en Excel. Se conserva ademas el formato
+ *              EXACTO del `reporte_dinamico.csv` legado para no romper nada que
+ *              hoy dependa de esas 11 columnas.
+ *  · GeoJSON   estandar abierto: entra en QGIS, ArcGIS, Power BI y cualquier
+ *              visor. Es el sustituto natural del paso por QGIS.
+ *  · KML       para volver a Google Earth, que es donde trabajan en campo.
+ *
+ * No se anaden formatos sin uso demostrable.
+ *
+ * ══ PROCEDENCIA: DONDE VA Y POR QUE NO VA EN TODAS PARTES ══════════════════
+ *
+ * Dentro de seis meses habra que poder responder «que version produjo esto».
+ * Cada formato admite el sello donde NO rompe a quien lo lee:
+ *
+ *   GeoJSON  una propiedad de nivel superior. El estandar lo permite y ningun
+ *            visor se atraganta.
+ *   KML      la `<description>` del `<Document>`. Google Earth la ensena.
+ *   CSV      NO se incrusta. Un CSV no tiene sitio para metadatos: una linea de
+ *            cabecera extra desplaza la fila de titulos y rompe a cualquiera
+ *            que lea la primera linea, y en el CSV legado las 11 columnas son
+ *            un invariante del proyecto. La procedencia va en el NOMBRE DEL
+ *            ARCHIVO, que viaja con el fichero aunque se envie por correo.
+ */
+import { estadoEspacial, estadoTemporal, lecturaOperativa,
+  ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL, ETIQUETA_OPERATIVO } from './modelo.js';
+import { selloProcedencia, selloEnUnaLinea, VERSION_APP, VERSION_REGLAS } from './version.js';
+
+const csvCampo = (v) => {
+  const s = v === null || v === undefined ? '' : String(v);
+  return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+};
+const csvFilas = (filas) => filas.map((f) => f.map(csvCampo).join(';')).join('\r\n');
+
+/** BOM para que Excel en Windows reconozca el UTF-8 sin destrozar las tildes. */
+export const BOM = '﻿';
+
+/** Listado de PMT, con todos los campos del modelo interno. */
+export function pmtsACsv(filas) {
+  const cab = ['ID', 'CONTRATO', 'CONTRATISTA', 'PROYECTO', 'MUNICIPIO', 'FRENTE', 'DIRECCION',
+    'TIPO_CIERRE', 'FECHA_INICIO', 'FECHA_FIN', 'GEOMETRIA',
+    // Seguimiento documental. El CODIGO va en su columna; el ESTADO en otra,
+    // separados a proposito: una columna que mezcle «RES-1234» con «Pendiente»
+    // no se puede contar ni filtrar.
+    'RESOLUCION_PMT', 'PERMISO_ROTURA', 'CIERRE_PERMISO_ROTURA', 'ESTADO_DOCUMENTAL',
+    'ARCHIVO_ORIGEN', 'AVISOS'];
+  const cuerpo = filas.map((x) => [x.id, x.contrato, x.contratista, x.proyecto, x.municipio,
+    x.frente, x.direccion, x.tipoCierre, x.inicio, x.fin, x.tipoGeometria,
+    x.resolucionPmt ?? '', x.permisoRotura ?? '', x.cierrePermisoRotura ?? '',
+    x.documental?.resumen ?? '', x.origenArchivo,
+    (x.avisos ?? []).join(' | ')]);
+  return BOM + csvFilas([cab, ...cuerpo]);
+}
+
+/** Relaciones detectadas, con los hechos separados y sin criticidad inventada. */
+export function relacionesACsv(relaciones, porId) {
+  // LECTURA_OPERATIVA va AL FINAL, no en medio: quien ya tenga una hoja o una
+  // macro leyendo este CSV por posicion sigue leyendo lo mismo. El CSV legado
+  // (11 columnas) no se toca en absoluto; este es otro archivo.
+  const cab = ['CONTRATO_A', 'FRENTE_A', 'CONTRATO_B', 'FRENTE_B', 'DISTANCIA_M',
+    'ESTADO_ESPACIAL', 'ESTADO_TEMPORAL', 'TRASLAPE_INICIO', 'TRASLAPE_FIN', 'TRASLAPE_DIAS',
+    'MUNICIPIO_A', 'MUNICIPIO_B', 'MOTIVO_NO_EVALUABLE', 'LECTURA_OPERATIVA'];
+  const cuerpo = relaciones.map((r) => {
+    const a = porId?.get(r.idA), b = porId?.get(r.idB);
+    return [
+      r.contratoA, r.frenteA, r.contratoB, r.frenteB,
+      r.distanciaMetros === null || r.distanciaMetros === undefined ? '' : r.distanciaMetros.toFixed(2),
+      ETIQUETA_ESPACIAL[estadoEspacial(r)], ETIQUETA_TEMPORAL[estadoTemporal(r)],
+      r.traslapeInicio ?? '', r.traslapeFin ?? '', r.traslapeDias ?? '',
+      a?.municipio ?? '', b?.municipio ?? '',
+      // El motivo lo publica el motor como `motivoNoEvaluableEspacial`. El
+      // nombre corto que habia aqui no existe en ningun sitio, asi que la
+      // columna caia siempre al respaldo y publicaba avisos donde prometia un
+      // motivo. Ahora se leen los dos motivos, cada uno con su etiqueta.
+      [r.motivoNoEvaluableEspacial ? `distancia: ${r.motivoNoEvaluableEspacial}` : '',
+       r.traslapeEvaluable === false && r.motivoSinTraslape ? `fechas: ${r.motivoSinTraslape}` : '']
+        .filter(Boolean).join(' | '),
+      ETIQUETA_OPERATIVO[lecturaOperativa(r)],
+    ];
+  });
+  return BOM + csvFilas([cab, ...cuerpo]);
+}
+
+/**
+ * CSV con las 11 columnas EXACTAS del `reporte_dinamico.csv` que producia QGIS.
+ * Existe solo por compatibilidad: si algo aguas abajo todavia espera ese
+ * formato, sigue funcionando sin abrir QGIS.
+ */
+export const COLUMNAS_LEGADO = Object.freeze(['CATEGORIA', 'CONTRATO', 'CONTRATISTA', 'MUNICIPIO',
+  'FRENTE', 'DIRECCION', 'ESTADO_CIERRE', 'HORARIO', 'FECHA_INICIO', 'FECHA_FIN', 'DURACION_DIAS']);
+
+const soloFecha = (s) => (s ? String(s).slice(0, 10) : 'N/A');
+
+function horarioDe(fila) {
+  if (!fila.inicio || !fila.fin) return 'No definido';
+  const h = Number(String(fila.inicio).slice(11, 13));
+  return h >= 6 && h < 18 ? 'Diurno' : 'Nocturno';
+}
+
+export function csvCompatibleLegado(filas, relaciones) {
+  const cuerpo = [];
+  for (const x of filas) {
+    const dias = x.inicioMs !== null && x.finMs !== null
+      ? String(Math.round((x.finMs - x.inicioMs) / 86400000)) : '0';
+    cuerpo.push(['Trazado Normal', x.contrato ?? '', x.contratista ?? '', x.municipio ?? '',
+      x.frente ?? '', x.direccion ?? '', (x.tipoCierre ?? '').toUpperCase(), horarioDe(x),
+      soloFecha(x.inicio), soloFecha(x.fin), dias]);
+  }
+  for (const r of relaciones) {
+    const e = estadoEspacial(r), t = estadoTemporal(r);
+    const categoria = t === 'coincide' ? 'Interferencia' : 'Cercanía';
+    cuerpo.push([categoria, `${r.contratoA} vs ${r.contratoB}`, '', 'Varios',
+      `${r.frenteA} / ${r.frenteB}`, 'Ver Mapa',
+      `${ETIQUETA_ESPACIAL[e]} · ${ETIQUETA_TEMPORAL[t]}`, 'Varios',
+      soloFecha(r.traslapeInicio), soloFecha(r.traslapeFin), String(r.traslapeDias ?? 0)]);
+  }
+  return BOM + csvFilas([[...COLUMNAS_LEGADO], ...cuerpo]);
+}
+
+/** GeoJSON estandar: cada PMT es una Feature con todas sus propiedades. */
+export function aGeoJson(filas, config = null, extra = {}) {
+  return {
+    type: 'FeatureCollection',
+    // PROCEDENCIA: el estandar admite miembros propios de nivel superior.
+    procedencia: selloProcedencia(config, extra),
+    features: filas.filter((x) => x.geometria).map((x) => ({
+      type: 'Feature',
+      geometry: x.geometria,
+      properties: {
+        id: x.id, frente: x.frente, contrato: x.contrato, contratista: x.contratista,
+        proyecto: x.proyecto, municipio: x.municipio, direccion: x.direccion,
+        tipo_cierre: x.tipoCierre, fecha_inicio: x.inicio, fecha_fin: x.fin,
+        resolucion_pmt: x.resolucionPmt ?? null,
+        permiso_rotura: x.permisoRotura ?? null,
+        cierre_permiso_rotura: x.cierrePermisoRotura ?? null,
+        estado_documental: x.documental?.resumen ?? null,
+        archivo_origen: x.origenArchivo, avisos: x.avisos ?? [],
+      },
+    })),
+  };
+}
+
+const xmlEsc = (s) => String(s ?? '').replace(/[<>&'"]/g,
+  (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
+
+/** Coordenadas KML: lon,lat,0 separadas por espacio. */
+function coordsKml(anillo) {
+  return anillo.map(([x, y]) => `${x},${y},0`).join(' ');
+}
+
+function geomKml(g) {
+  if (!g) return '';
+  switch (g.type) {
+    case 'Point': return `<Point><coordinates>${g.coordinates[0]},${g.coordinates[1]},0</coordinates></Point>`;
+    case 'MultiPoint': return `<MultiGeometry>${g.coordinates.map((c) => geomKml({ type: 'Point', coordinates: c })).join('')}</MultiGeometry>`;
+    case 'LineString': return `<LineString><coordinates>${coordsKml(g.coordinates)}</coordinates></LineString>`;
+    case 'MultiLineString': return `<MultiGeometry>${g.coordinates.map((c) => geomKml({ type: 'LineString', coordinates: c })).join('')}</MultiGeometry>`;
+    case 'Polygon': return `<Polygon><outerBoundaryIs><LinearRing><coordinates>${coordsKml(g.coordinates[0])}</coordinates></LinearRing></outerBoundaryIs>` +
+      g.coordinates.slice(1).map((h) => `<innerBoundaryIs><LinearRing><coordinates>${coordsKml(h)}</coordinates></LinearRing></innerBoundaryIs>`).join('') + '</Polygon>';
+    case 'MultiPolygon': return `<MultiGeometry>${g.coordinates.map((c) => geomKml({ type: 'Polygon', coordinates: c })).join('')}</MultiGeometry>`;
+    case 'GeometryCollection': return `<MultiGeometry>${(g.geometries ?? []).map(geomKml).join('')}</MultiGeometry>`;
+    default: return '';
+  }
+}
+
+/**
+ * KML de salida. La descripcion se escribe con el MISMO formato invariante del
+ * proyecto, asi que el archivo exportado se puede volver a cargar tanto en esta
+ * aplicacion como en el generador sin perder un solo campo.
+ */
+export function aKml(filas, nombreDoc = 'PMT exportados', config = null, extra = {}) {
+  const pm = filas.filter((x) => x.geometria).map((x) => {
+    const desc = ['fecha_inicio: ' + (x.inicio ?? ''), 'fecha_fin: ' + (x.fin ?? ''),
+      'tipo_cierre: ' + (x.tipoCierre ?? ''), 'direccion: ' + (x.direccion ?? ''),
+      'municipio: ' + (x.municipio ?? ''), 'contrato: ' + (x.contrato ?? ''),
+      'contratista: ' + (x.contratista ?? ''), 'proyecto: ' + (x.proyecto ?? ''),
+      // Solo si existen: escribir «Pendiente» seria guardar relleno como codigo.
+      ...(x.resolucionPmt ? ['resolucion_pmt: ' + x.resolucionPmt] : []),
+      ...(x.permisoRotura ? ['permiso_rotura: ' + x.permisoRotura] : []),
+      ...(x.cierrePermisoRotura ? ['cierre_permiso_rotura: ' + x.cierrePermisoRotura] : [])]
+      .map((s) => s.replace(/\|/g, '')).join(' | ');
+    return `<Placemark><name>${xmlEsc(x.frente ?? '')}</name>` +
+      `<description>${xmlEsc(desc)}</description>` +
+      `<ExtendedData><Data name="pmt:id"><value>${xmlEsc(x.id)}</value></Data></ExtendedData>` +
+      geomKml(x.geometria) + '</Placemark>';
+  }).join('');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2">` +
+    `<Document><name>${xmlEsc(nombreDoc)}</name>` +
+    `<description>${xmlEsc(selloEnUnaLinea(config, extra))}</description>${pm}</Document></kml>`;
+}
+
+/**
+ * NOMBRE DE ARCHIVO CON PROCEDENCIA.
+ *
+ * Es el unico sitio donde un CSV puede llevar su version sin romper a quien lo
+ * lee, y tiene una ventaja: sobrevive al correo, a la carpeta compartida y a
+ * que alguien lo renombre a medias. Sin caracteres que molesten en Windows.
+ *
+ * @param {string} base   por ejemplo 'PMT' o 'Relaciones_PMT'
+ * @param {string} ext    extension sin punto
+ */
+export function nombreConProcedencia(base, ext, { fecha = new Date(), contexto = null } = {}) {
+  const dia = fecha.toISOString().slice(0, 10);
+  // ══ EL CONTEXTO TEMPORAL VA EN EL NOMBRE ════════════════════════════════
+  //
+  // Dos exportaciones del mismo día —una operativa y otra del histórico 2025—
+  // se llamaban igual y se pisaban en la carpeta de descargas. Peor: una vez
+  // fuera de la aplicación no había forma de saber cuál era cuál, y un CSV
+  // histórico abierto en Excel parece exactamente igual que uno operativo.
+  //
+  // Se normaliza a algo que sobreviva a cualquier sistema de archivos.
+  const marca = contexto
+    ? '_' + `${contexto.etiqueta}-${contexto.detalle}`
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase()
+    : '';
+  return `${base}_${dia}${marca}_app-${VERSION_APP}_reglas-${VERSION_REGLAS}.${ext}`;
+}
