@@ -45,6 +45,7 @@ export function fijarFiltros(f) {
     contratista: lista(f.contratista), contrato: lista(f.contrato), proyecto: lista(f.proyecto),
     municipio: lista(f.municipio), frente: lista(f.frente), tipoCierre: lista(f.tipoCierre),
     relacion: lista(f.relacion).filter((c) => Filtro.CLAVES_RELACION.some(([k]) => k === c)),
+    documental: lista(f.documental).filter((c) => Filtro.CLAVES_DOCUMENTAL.some(([k]) => k === c)),
     desde: fecha(f.desde), hasta: fecha(f.hasta),
     texto: typeof f.texto === 'string' ? f.texto : '',
   };
@@ -80,6 +81,23 @@ export function reiniciarEstado() {
   alPaso = () => {};
 }
 
+/**
+ * Oculta las opciones que no coinciden con lo escrito, conservando SIEMPRE las
+ * elegidas. Se manipula `hidden` en cada `<option>`, no se reconstruye la
+ * lista: reconstruirla perderia la seleccion y el foco.
+ */
+function filtrarOpciones(select, texto) {
+  const t = String(texto ?? '').trim().toLowerCase();
+  let visibles = 0;
+  for (const o of select.options) {
+    const coincide = !t || o.value.toLowerCase().includes(t) || o.textContent.toLowerCase().includes(t);
+    // Lo elegido no se oculta nunca.
+    o.hidden = !(coincide || o.selected);
+    if (!o.hidden) visibles++;
+  }
+  select.setAttribute('data-visibles', String(visibles));
+}
+
 export function montarFiltros(filas, onCambio) {
   todas = filas;
   alCambiar = onCambio;
@@ -105,9 +123,24 @@ export function montarFiltros(filas, onCambio) {
         cambiar(campo);
       },
     });
-    caja.appendChild(crear('div', { clase: 'campo', id: 'campo_' + campo }, [
-      crear('label', { for: 'f_' + campo, id: 'et_' + campo, texto: ETIQUETAS[campo] }), sel,
-    ]));
+    // BUSCADOR DENTRO DEL FILTRO.
+    //
+    // Con ocho contratos una lista se lee; con cuatrocientos frentes, no. El
+    // buscador oculta las opciones que no coinciden, PERO NUNCA LAS ELEGIDAS:
+    // si al escribir desapareciera un valor marcado, habria un filtro activo
+    // sin control visible, que es el defecto que mas veces ha salido aqui.
+    const buscador = crear('input', {
+      type: 'search', clase: 'filtro-buscar', id: 'buscar_' + campo,
+      placeholder: `Buscar en ${(ETIQUETAS[campo] ?? campo).toLowerCase()}…`,
+      'aria-label': `Buscar en ${ETIQUETAS[campo] ?? campo}`,
+      oninput: (e) => filtrarOpciones(sel, e.target.value),
+    });
+    const partes = [crear('label', { for: 'f_' + campo, id: 'et_' + campo, texto: ETIQUETAS[campo] })];
+    // Solo se pone buscador donde hace falta: en una lista de tres valores
+    // seria un estorbo.
+    if (Filtro.opcionesDe(filas, campo).length > 8) partes.push(buscador);
+    partes.push(sel);
+    caja.appendChild(crear('div', { clase: 'campo', id: 'campo_' + campo }, partes));
   }
 
   const r = rangoTemporal(filas);
@@ -146,6 +179,30 @@ export function montarFiltros(filas, onCambio) {
   }
   caja.appendChild(crear('div', { clase: 'campo' }, [
     crear('label', { texto: 'Tipo de relación' }), casillas,
+  ]));
+
+  // SEGUIMIENTO DOCUMENTAL. Filtra por ESTADO DERIVADO, no por el texto de la
+  // casilla: «le falta el permiso de rotura» es una pregunta sobre el tramite,
+  // y la respuesta no puede depender de como lo escribio cada quien.
+  const docs = crear('div', { clase: 'casillas' });
+  for (const [clave, titulo] of Filtro.CLAVES_DOCUMENTAL) {
+    const id = 'd_' + clave;
+    docs.appendChild(crear('label', { for: id }, [
+      crear('input', {
+        type: 'checkbox', id, value: clave,
+        checked: filtros.documental?.includes(clave) ? 'checked' : null,
+        onchange: (e) => {
+          filtros.documental = e.target.checked
+            ? [...(filtros.documental ?? []), clave]
+            : (filtros.documental ?? []).filter((x) => x !== clave);
+          cambiar(null);
+        },
+      }),
+      crear('span', { texto: titulo }),
+    ]));
+  }
+  caja.appendChild(crear('div', { clase: 'campo' }, [
+    crear('label', { texto: 'Seguimiento documental' }), docs,
   ]));
 
   caja.appendChild(crear('button', {
@@ -254,6 +311,33 @@ export const intervaloDe = (multiplicador) => INTERVALO_BASE_MS / (multiplicador
  * pausar, paso de dia/semana/mes, velocidad, volver a todo el periodo) y anade
  * la barra arrastrable, que es lo que permite ir directo a una fecha concreta.
  */
+/**
+ * RECORRIDO EN EL TIEMPO — la temporalidad es una funcion central, no un filtro.
+ *
+ * ══ QUE SE RECUPERA Y QUE SE AÑADE ════════════════════════════════════════
+ *
+ * Del tablero historico se conserva todo: reproducir, pausar, paso de dia,
+ * semana o mes, velocidad, y volver al periodo entero. Se añade lo que faltaba:
+ *
+ *   · INICIO Y FIN DEL RECORRIDO, elegibles. Antes se recorria siempre todo el
+ *     dominio; ahora se puede acotar a la semana que viene, a un mes, o al
+ *     periodo de una obra concreta.
+ *   · IR A UNA FECHA directamente, escribiendola.
+ *   · AVANZAR Y RETROCEDER de uno en uno.
+ *   · LA FECHA VISIBLE EN GRANDE. Era el dato mas importante de la pantalla y
+ *     estaba en letra pequeña al lado de la barra.
+ *
+ * ══ LAS TRES PREGUNTAS TEMPORALES, QUE NO SON LA MISMA ════════════════════
+ *
+ *   1. PMT VIGENTES EN UNA FECHA    -> lo que hace el recorrido: `vigentesEnDia`.
+ *   2. PMT PROGRAMADOS EN UN RANGO  -> lo que hace el filtro «desde/hasta»:
+ *                                      cualquier PMT que toque ese intervalo.
+ *   3. PMT QUE SE SOLAPAN ENTRE SI  -> lo que calcula el motor, y no es un
+ *                                      filtro: es una relacion entre dos.
+ *
+ * Mezclarlas produce cifras que nadie puede explicar. El recorrido dice
+ * siempre, en su rotulo, cual de las tres esta aplicando.
+ */
 export function montarRecorrido(filas, onPaso) {
   alPaso = onPaso;
   filasRec = filas;
@@ -267,29 +351,127 @@ export function montarRecorrido(filas, onPaso) {
   // Dias de CALENDARIO, no duracion redondeada: asi el ultimo dia con
   // actividad siempre se puede seleccionar.
   const dias = dominio.dias;
+  recorte = { desde: 0, hasta: dias };
+  const primero = soloDia(dominio.primerDia);
+  const ultimo = soloDia(dominio.primerDia + dias * MS_DIA);
+
   caja.innerHTML = `
-    <button id="btnPlay" class="b-verde" aria-label="Reproducir el recorrido">▶ Reproducir</button>
-    <input type="range" id="barraTiempo" min="0" max="${dias}" value="0" aria-label="Día del recorrido">
-    <span class="fecha-viva" id="fechaViva">Todo</span>
-    <label class="mini-campo">Paso
-      <select id="pasoDias"><option value="1">1 día</option><option value="7" selected>1 semana</option><option value="30">1 mes</option></select>
-    </label>
-    <label class="mini-campo">Velocidad
-      <select id="velocidad">${VELOCIDADES.map(([v, t], i) => `<option value="${v}"${i === 1 ? ' selected' : ''}>${t}</option>`).join('')}</select>
-    </label>
-    <button id="btnTodoTiempo" class="b-suave b-mini">Ver todo el periodo</button>
-    <span id="vigentesAhora" class="pista-campo"></span>`;
+    <div class="recorrido-cabecera">
+      <div class="fecha-grande" id="fechaViva"><small>Periodo completo</small>${esc(primero)} — ${esc(ultimo)}</div>
+      <div class="crece"></div>
+      <span id="vigentesAhora" class="pista-campo"></span>
+    </div>
+
+    <div class="recorrido-controles">
+      <button id="btnPlay" class="b-verde b-redondo" title="Reproducir el recorrido" aria-label="Reproducir">▶</button>
+      <button id="btnAtras" class="b-suave b-redondo" title="Un paso atrás" aria-label="Un paso atrás">◀</button>
+      <button id="btnAdelante" class="b-suave b-redondo" title="Un paso adelante" aria-label="Un paso adelante">▶|</button>
+      <label class="mini-campo" for="pasoDias">Paso
+        <select id="pasoDias">
+          <option value="1">Día a día</option>
+          <option value="7" selected>Semana a semana</option>
+          <option value="30">Mes a mes</option>
+        </select>
+      </label>
+      <label class="mini-campo" for="velocidad">Velocidad
+        <select id="velocidad">${VELOCIDADES.map(([v, t], i) => `<option value="${v}"${i === 1 ? ' selected' : ''}>${t}</option>`).join('')}</select>
+      </label>
+      <span class="sep"></span>
+      <label class="mini-campo" for="irAFecha">Ir a la fecha
+        <input type="date" id="irAFecha" min="${esc(primero)}" max="${esc(ultimo)}">
+      </label>
+      <button id="btnTodoTiempo" class="b-suave b-mini">Ver todo el periodo</button>
+    </div>
+
+    <input type="range" id="barraTiempo" min="0" max="${dias}" value="0"
+           aria-label="Día del recorrido" style="margin:14px 0 6px">
+
+    <div class="recorrido-controles" style="font-size:.84rem">
+      <label class="mini-campo" for="recorridoDesde">Recorrer desde
+        <input type="date" id="recorridoDesde" value="${esc(primero)}" min="${esc(primero)}" max="${esc(ultimo)}">
+      </label>
+      <label class="mini-campo" for="recorridoHasta">hasta
+        <input type="date" id="recorridoHasta" value="${esc(ultimo)}" min="${esc(primero)}" max="${esc(ultimo)}">
+      </label>
+      <span id="avisoRecorte" class="pista-campo"></span>
+    </div>`;
 
   $('barraTiempo').oninput = (e) => aplicarPaso(+e.target.value);
   $('btnPlay').onclick = () => (tocando ? parar() : reproducir());
+  $('btnAtras').onclick = () => mover(-1);
+  $('btnAdelante').onclick = () => mover(1);
   $('btnTodoTiempo').onclick = () => volverATodo();
   $('velocidad').onchange = () => { if (tocando) { parar(); reproducir(); } };
+  $('irAFecha').onchange = (e) => irAFecha(e.target.value);
+  $('recorridoDesde').onchange = () => fijarRecorte();
+  $('recorridoHasta').onchange = () => fijarRecorte();
+}
+
+/** Tramo del dominio que se recorre. Por defecto, todo. */
+let recorte = { desde: 0, hasta: 0 };
+const MS_DIA = 86400000;
+
+/** Indice de dia dentro del dominio, a partir de una fecha AAAA-MM-DD. */
+function diaDeTexto(texto) {
+  const v = validarFechaCalendario(texto);
+  if (!v.ok) return null;
+  return Math.round((v.ms - dominio.primerDia) / MS_DIA);
+}
+
+/**
+ * Acota el recorrido. Si el rango queda invertido o fuera del dominio NO se
+ * aplica a medias: se dice y se deja como estaba. Es la misma regla que en los
+ * filtros de fecha.
+ */
+function fijarRecorte() {
+  const d = diaDeTexto($('recorridoDesde').value);
+  const h = diaDeTexto($('recorridoHasta').value);
+  const aviso = $('avisoRecorte');
+  if (d === null || h === null) { aviso.textContent = 'Escriba dos fechas válidas.'; return; }
+  if (d > h) { aviso.textContent = 'La fecha de inicio es posterior a la de fin: no se aplicó.'; return; }
+  const desde = Math.max(0, Math.min(d, dominio.dias));
+  const hasta = Math.max(0, Math.min(h, dominio.dias));
+  recorte = { desde, hasta };
+  const barra = $('barraTiempo');
+  barra.min = String(desde);
+  barra.max = String(hasta);
+  if (+barra.value < desde) barra.value = String(desde);
+  if (+barra.value > hasta) barra.value = String(hasta);
+  aviso.textContent = (desde === 0 && hasta === dominio.dias)
+    ? 'Se recorre el periodo completo.'
+    : `Se recorren ${hasta - desde + 1} día(s) de los ${dominio.dias + 1} que hay.`;
+}
+
+/** Va directamente a una fecha escrita. */
+function irAFecha(texto) {
+  const d = diaDeTexto(texto);
+  if (d === null) return;
+  const barra = $('barraTiempo');
+  const v = Math.max(+barra.min, Math.min(d, +barra.max));
+  barra.value = String(v);
+  parar();
+  aplicarPaso(v);
+}
+
+/** Un paso adelante o atrás, del tamaño elegido. */
+function mover(signo) {
+  parar();
+  const barra = $('barraTiempo');
+  const paso = +($('pasoDias')?.value ?? 7);
+  const v = Math.max(+barra.min, Math.min(+barra.value + signo * paso, +barra.max));
+  barra.value = String(v);
+  aplicarPaso(v);
 }
 
 export function volverATodo() {
   parar();
-  const b = $('barraTiempo'); if (b) b.value = 0;
-  const f = $('fechaViva'); if (f) f.textContent = 'Todo';
+  const b = $('barraTiempo'); if (b) b.value = b.min;
+  const f = $('fechaViva');
+  if (f && dominio) {
+    const primero = soloDia(dominio.primerDia);
+    const ultimo = soloDia(dominio.primerDia + dominio.dias * MS_DIA);
+    f.innerHTML = `<small>Periodo completo</small>${esc(primero)} — ${esc(ultimo)}`;
+  }
   const v = $('vigentesAhora'); if (v) v.textContent = '';
   alPaso(null);
 }
@@ -297,19 +479,21 @@ export function volverATodo() {
 function aplicarPaso(dia) {
   // Se ancla al INICIO del dia calendario: el recorrido representa dias
   // completos, no el instante que resulte de arrastrar la hora del primer dato.
-  const ms = dominio.primerDia + dia * 86400000;
-  $('fechaViva').textContent = soloDia(ms);
+  const ms = dominio.primerDia + dia * MS_DIA;
+  $('fechaViva').innerHTML = `<small>PMT vigentes el día</small>${esc(soloDia(ms))}`;
   const n = vigentesEnDia(filasRec, ms).length;
   $('vigentesAhora').textContent = `${num(n)} PMT con actividad ese día completo`;
+  const ir = $('irAFecha'); if (ir) ir.value = soloDia(ms);
   alPaso(ms);
 }
 
 function reproducir() {
   tocando = true;
-  $('btnPlay').textContent = '⏸ Pausar';
+  $('btnPlay').textContent = '⏸';
+  $('btnPlay').setAttribute('aria-label', 'Pausar');
   const paso = +($('pasoDias')?.value ?? 7);
   const barra = $('barraTiempo');
-  if (+barra.value >= +barra.max) barra.value = 0;
+  if (+barra.value >= +barra.max) barra.value = barra.min;
   aplicarPaso(+barra.value);
   temporizador = setInterval(() => {
     const v = +barra.value + paso;
@@ -322,7 +506,8 @@ function reproducir() {
 export function parar() {
   tocando = false;
   clearInterval(temporizador);
-  const b = $('btnPlay'); if (b) b.textContent = '▶ Reproducir';
+  const b = $('btnPlay');
+  if (b) { b.textContent = '▶'; b.setAttribute('aria-label', 'Reproducir'); }
 }
 
 export const reproduciendo = () => tocando;

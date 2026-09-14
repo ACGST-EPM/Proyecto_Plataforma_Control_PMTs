@@ -102,17 +102,77 @@ function conectarOrden(tabla, clave, repintar) {
   });
 }
 
+/**
+ * COLUMNAS DE LA TABLA DE PMT.
+ *
+ * ══ POCAS DE ENTRADA, TODAS DISPONIBLES ═══════════════════════════════════
+ *
+ * Antes se enseñaban las diez a la vez. Con nombres de contratista como
+ * «CONSORCIO_INFRAESTRUCTURA_DE_AGUAS_2024» la tabla se iba de ancho y no se
+ * leia ninguna. Ahora entran siete de alto valor y el resto se añade desde
+ * «Columnas».
+ *
+ * `basica: true` marca las que salen por defecto. El criterio: responder
+ * «que es, de quien, donde, cuando y como va» sin desplazamiento horizontal.
+ */
 const COLS_PMT = [
-  ['frente', 'Frente'], ['contrato', 'Contrato'], ['contratista', 'Contratista'],
-  ['proyecto', 'Proyecto'], ['municipio', 'Municipio'], ['tipoCierre', 'Tipo de cierre'],
-  ['inicio', 'Desde'], ['fin', 'Hasta'], ['tipoGeometria', 'Geometria'], ['origenArchivo', 'Archivo'],
+  ['frente', 'Frente', { basica: true }],
+  ['contrato', 'Contrato', { basica: true }],
+  ['municipio', 'Municipio', { basica: true }],
+  ['tipoCierre', 'Tipo', { basica: true }],
+  ['inicio', 'Desde', { basica: true }],
+  ['fin', 'Hasta', { basica: true }],
+  ['documental', 'Documentos', { basica: true }],
+  ['contratista', 'Contratista', {}],
+  ['proyecto', 'Proyecto', {}],
+  ['direccion', 'Direccion', {}],
+  ['resolucionPmt', 'Resolucion PMT', {}],
+  ['permisoRotura', 'Permiso rotura', {}],
+  ['cierrePermisoRotura', 'Cierre rotura', {}],
+  ['tipoGeometria', 'Geometria', {}],
+  ['origenArchivo', 'Archivo', {}],
 ];
 
+export const COLUMNAS_PMT_BASICAS = Object.freeze(COLS_PMT.filter((c) => c[2]?.basica).map((c) => c[0]));
+export const COLUMNAS_PMT_TODAS = Object.freeze(COLS_PMT.map(([k, t]) => ({ clave: k, titulo: t })));
+
+/** Celda de cada columna. Una sola definicion: cabecera y celda no pueden separarse. */
+function celdaPmt(x, clave) {
+  switch (clave) {
+    case 'frente': {
+      const problema = !x.vigenciaValida || !x.tieneGeometria;
+      const marca = problema
+        ? ` <span class="pastilla p-nosabe" title="${esc((x.avisos ?? []).join(' · '))}">revisar</span>` : '';
+      return `<td>${esc(x.frente ?? '—')}${marca}</td>`;
+    }
+    case 'contrato': return `<td class="mono">${esc(x.contrato ?? '—')}</td>`;
+    case 'tipoCierre':
+      return `<td><span class="punto-cierre" style="background:${simbologiaDe(x.tipoCierre).color}"></span>${esc(x.tipoCierre ?? '—')}</td>`;
+    case 'inicio': return `<td class="mono">${esc(fechaLegible(x.inicio))}</td>`;
+    case 'fin': return `<td class="mono">${esc(fechaLegible(x.fin))}</td>`;
+    case 'documental': {
+      const d = x.documental;
+      if (!d) return '<td>—</td>';
+      const clase = d.completo ? 'p-ok' : d.sinNinguno ? 'p-gris' : 'p-parcial';
+      return `<td><span class="pastilla ${clase}" title="${esc(d.detalle.map((y) => y.etiqueta + ': ' + y.estado).join(' · '))}">${esc(d.resumen)}</span></td>`;
+    }
+    case 'resolucionPmt': case 'permisoRotura': case 'cierrePermisoRotura':
+      return x[clave]
+        ? `<td class="mono"><small>${esc(x[clave])}</small></td>`
+        : '<td><span class="doc-pendiente">Pendiente</span></td>';
+    case 'origenArchivo': return `<td><small>${esc(x.origenArchivo ?? '—')}</small></td>`;
+    case 'tipoGeometria': return `<td>${esc(x.tipoGeometria ?? 'sin geometria')}</td>`;
+    default: return `<td>${esc(x[clave] ?? '—')}</td>`;
+  }
+}
+
 /** Tabla de PMT. Al pulsar una fila, el mapa se acerca a ese trazado. */
-export function pintarPmts(filas, { onFila, seleccionado } = {}) {
+export function pintarPmts(filas, { onFila, seleccionado, columnas } = {}) {
   const tabla = $('tablaPmt');
-  const repintar = () => pintarPmts(filas, { onFila, seleccionado });
-  tabla.querySelector('thead').innerHTML = cabecera(COLS_PMT, 'pmt');
+  const activas = columnas?.length ? columnas : COLUMNAS_PMT_BASICAS;
+  const cols = COLS_PMT.filter(([k]) => activas.includes(k)).map(([k, t]) => [k, t]);
+  const repintar = () => pintarPmts(filas, { onFila, seleccionado, columnas });
+  tabla.querySelector('thead').innerHTML = cabecera(cols, 'pmt');
   conectarOrden(tabla, 'pmt', repintar);
 
   const todos = ordenar(filas, orden.pmt.col, orden.pmt.asc);
@@ -121,29 +181,78 @@ export function pintarPmts(filas, { onFila, seleccionado } = {}) {
   const cuerpo = tabla.querySelector('tbody');
   pintarPaginador('pagPmt', 'pmt', todos.length, info, repintar);
   if (!todos.length) {
-    cuerpo.innerHTML = `<tr><td colspan="${COLS_PMT.length}" class="vacio">Ningún PMT coincide con los filtros aplicados.<br><small>Pruebe a quitar algún filtro.</small></td></tr>`;
+    cuerpo.innerHTML = `<tr><td colspan="${cols.length}" class="vacio">Ningún PMT coincide con los filtros aplicados.<br><small>Pruebe a quitar algún filtro.</small></td></tr>`;
     return;
   }
-  cuerpo.innerHTML = datos.map((x) => {
-    const problema = !x.vigenciaValida || !x.tieneGeometria;
-    const marca = problema
-      ? ` <span class="pastilla p-nosabe" title="${esc((x.avisos ?? []).join(' · '))}">revisar</span>` : '';
-    return `<tr data-id="${esc(x.id)}" class="${x.id === seleccionado ? 'sel' : ''}">
-      <td>${esc(x.frente ?? '—')}${marca}</td>
-      <td class="mono">${esc(x.contrato ?? '—')}</td>
-      <td>${esc(x.contratista ?? '—')}</td>
-      <td>${esc(x.proyecto ?? '—')}</td>
-      <td>${esc(x.municipio ?? '—')}</td>
-      <td><span class="punto-cierre" style="background:${simbologiaDe(x.tipoCierre).color}"></span>${esc(x.tipoCierre ?? '—')}</td>
-      <td class="mono">${esc(fechaLegible(x.inicio))}</td>
-      <td class="mono">${esc(fechaLegible(x.fin))}</td>
-      <td>${esc(x.tipoGeometria ?? 'sin geometria')}</td>
-      <td><small>${esc(x.origenArchivo ?? '—')}</small></td>
-    </tr>`;
-  }).join('');
+  cuerpo.innerHTML = datos.map((x) =>
+    `<tr data-id="${esc(x.id)}" class="${x.id === seleccionado ? 'sel' : ''}">` +
+    cols.map(([k]) => celdaPmt(x, k)).join('') + '</tr>').join('');
   cuerpo.querySelectorAll('tr[data-id]').forEach((tr) => {
     tr.onclick = () => onFila?.(tr.dataset.id);
   });
+}
+
+/**
+ * VISTA DE SEGUIMIENTO DOCUMENTAL.
+ *
+ * Existe como pestaña propia y no como columnas del mapa por una razon: son
+ * datos de TRAMITE, no de territorio. Meterlos en el mapa lo satura y no
+ * aportan nada a la lectura espacial; en su propia vista, en cambio, se puede
+ * ver de un golpe a cuantos PMT les falta cada documento.
+ */
+export function pintarDocumental(filas, { onFila } = {}) {
+  const caja = $('panelDocumental');
+  if (!caja) return;
+  const conteo = { completos: 0, sinNinguno: 0, resolucionPmt: 0, permisoRotura: 0, cierrePermisoRotura: 0 };
+  for (const x of filas) {
+    const d = x.documental;
+    if (!d) continue;
+    if (d.completo) conteo.completos++;
+    if (d.sinNinguno) conteo.sinNinguno++;
+    for (const p of d.pendientes) conteo[p]++;
+  }
+  const t = (n, txt, clase = '') =>
+    `<div class="tarjeta ${clase}"><div class="n">${num(n)}</div><div class="t">${esc(txt)}</div></div>`;
+
+  const pendientes = filas.filter((x) => !x.documental?.completo);
+  const filasHtml = pendientes.slice(0, 400).map((x) => {
+    const d = x.documental;
+    const celda = (clave) => x[clave]
+      ? `<td class="mono"><small>${esc(x[clave])}</small></td>`
+      : '<td><span class="doc-pendiente">Pendiente</span></td>';
+    return `<tr data-id="${esc(x.id)}">
+      <td>${esc(x.frente ?? '—')}</td>
+      <td class="mono">${esc(x.contrato ?? '—')}</td>
+      <td>${esc(x.municipio ?? '—')}</td>
+      ${celda('resolucionPmt')}${celda('permisoRotura')}${celda('cierrePermisoRotura')}
+      <td><span class="pastilla ${d?.sinNinguno ? 'p-gris' : 'p-parcial'}">${esc(d?.resumen ?? '—')}</span></td>
+    </tr>`;
+  }).join('');
+
+  caja.innerHTML = `
+    <p class="pista-campo" style="margin-top:0">
+      El <b>código</b> y el <b>estado</b> van separados a propósito. Cuando un documento no existe,
+      la casilla queda <b>vacía</b> y el estado es <b>Pendiente</b>: escribir «Pendiente» como si fuera
+      el número de la resolución haría imposible distinguirlo de un código de verdad.
+    </p>
+    <div class="tarjetas" style="margin-bottom:16px">
+      ${t(conteo.completos, 'con los 3 documentos', conteo.completos ? 'verde' : 'gris')}
+      ${t(conteo.resolucionPmt, 'sin Resolución PMT', conteo.resolucionPmt ? 'nar' : '')}
+      ${t(conteo.permisoRotura, 'sin Permiso de rotura', conteo.permisoRotura ? 'nar' : '')}
+      ${t(conteo.cierrePermisoRotura, 'sin Cierre de rotura', conteo.cierrePermisoRotura ? 'nar' : '')}
+      ${t(conteo.sinNinguno, 'sin ningún documento', 'gris')}
+    </div>
+    ${pendientes.length ? `
+      <h3 class="titulo-grupo">PMT con documentación pendiente</h3>
+      <div class="tabla-caja"><table class="datos">
+        <thead><tr><th>Frente</th><th>Contrato</th><th>Municipio</th>
+          <th>Resolución PMT</th><th>Permiso rotura</th><th>Cierre rotura</th><th>Estado</th></tr></thead>
+        <tbody>${filasHtml}</tbody>
+      </table></div>
+      ${pendientes.length > 400 ? `<p class="pista-campo">Se listan los primeros 400 de ${num(pendientes.length)}.</p>` : ''}
+    ` : '<div class="frase">Todos los PMT del alcance actual tienen sus tres documentos registrados.</div>'}`;
+
+  caja.querySelectorAll('tr[data-id]').forEach((tr) => { tr.onclick = () => onFila?.(tr.dataset.id); });
 }
 
 const COLS_REL = [

@@ -21,9 +21,10 @@
  * el motor (hay una prueba que lo exige).
  */
 import { $, crear, esc, fechaLegible } from './dom.js';
-import { simbologiaDe, estadoEspacial, estadoTemporal, ESPACIAL, TEMPORAL,
+import { simbologiaDe, SIMBOLOGIA_COORDINACION, estadoEspacial, estadoTemporal, ESPACIAL, TEMPORAL,
   ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL, SIMBOLOGIA_CIERRE } from '../nucleo/modelo.js';
 import { puntosMasCercanos } from '../../motor/src/geo/acercamiento.js';
+import { zonaDeInfluencia, RADIO_INFLUENCIA_METROS } from '../../motor/src/geo/zona-influencia.js';
 import * as Base from '../nucleo/mapas-base.js';
 
 const COLOR_REL = {
@@ -45,9 +46,14 @@ export function iniciar(idContenedor, { onSeleccion } = {}) {
   mapa = L.map(idContenedor, { preferCanvas: true, zoomControl: true })
     .setView([6.25, -75.57], 11);
   capas = {
+    // ORDEN DE PINTADO, de abajo arriba. Las zonas van las primeras para que no
+    // tapen los trazados: son contexto, no protagonistas.
+    zonas: L.layerGroup().addTo(mapa),
+    superposicion: L.layerGroup().addTo(mapa),
     trazados: L.layerGroup().addTo(mapa),
     accesos: L.layerGroup().addTo(mapa),
     relaciones: L.layerGroup().addTo(mapa),
+    seleccion: L.layerGroup().addTo(mapa),
   };
   aplicarFondo();
   return mapa;
@@ -181,6 +187,22 @@ function ficha(x) {
 }
 
 /** Pinta los PMT. `resaltados` (Set de ids) decide cuáles van en primer plano. */
+/**
+ * CONTEXTO DEL MAPA.
+ *
+ * `solo-seleccion`  se dibuja unicamente lo que entra en las cifras.
+ * `con-contexto`    se dibujan tambien los demas PMT, atenuados, para no
+ *                   perder de vista que hay alrededor.
+ *
+ * Existe porque lo gris confundia: se veian trazados que no estaban en los
+ * contadores y nada decia que fueran otra cosa. Ahora es una eleccion visible,
+ * y la leyenda dice cuantos hay y que no cuentan.
+ */
+export const CONTEXTO = Object.freeze({ SOLO: 'solo-seleccion', CON: 'con-contexto' });
+let contexto = CONTEXTO.CON;
+export const fijarContexto = (c) => { contexto = c === CONTEXTO.SOLO ? CONTEXTO.SOLO : CONTEXTO.CON; };
+export const contextoActual = () => contexto;
+
 export function pintarPmts(filas, mapaPorId, resaltados = null) {
   if (!mapa) return;
   porId = mapaPorId;
@@ -190,15 +212,28 @@ export function pintarPmts(filas, mapaPorId, resaltados = null) {
   for (const x of filas) {
     if (!x.geometria) continue;
     const destacado = !resaltados || resaltados.has(x.id);
+    // CONTEXTO: si se pidio ver solo la seleccion, lo de fuera no se dibuja.
+    if (!destacado && contexto === CONTEXTO.SOLO) continue;
     const s = simbologiaDe(x.tipoCierre);
     const estilo = {
       color: destacado ? s.color : '#b6bcc1',
       weight: destacado ? s.grosor : 2,
-      opacity: destacado ? 0.92 : 0.3,
+      opacity: destacado ? 0.95 : 0.32,
       dashArray: s.guion,
       fillColor: destacado ? s.color : '#b6bcc1',
       fillOpacity: destacado ? 0.2 : 0.08,
+      lineCap: 'round', lineJoin: 'round',
     };
+    // HALO: un contorno blanco por debajo. Sin el, una linea de color puro se
+    // pierde sobre un callejero claro y sobre una imagen de satelite oscura.
+    // Es la tecnica habitual en cartografia y no añade ningun color nuevo.
+    if (destacado && s.halo) {
+      const h = dibujar(x.geometria, {
+        color: '#ffffff', weight: s.grosor + s.halo * 2, opacity: 0.85,
+        dashArray: s.guion, fill: false, lineCap: 'round', lineJoin: 'round',
+      });
+      if (h) h.addTo(capas.trazados);
+    }
     const capa = dibujar(x.geometria, estilo);
     if (!capa) continue;
     capa.bindPopup(ficha(x));
@@ -221,16 +256,118 @@ export function pintarPmts(filas, mapaPorId, resaltados = null) {
 
 const claveRel = (r) => `${r.idA}|${r.idB}`;
 
+/* ═══════════════ ZONAS DE INFLUENCIA Y SUPERPOSICION ═══════════════
+ *
+ * Es la forma de explicar POR QUE dos PMT estan relacionados sin pedirle a
+ * nadie que entienda geometria computacional. La linea que unia los dos puntos
+ * de minima distancia hacia justo lo contrario: dibujaba triangulos y redes que
+ * parecian rutas o infraestructura, y saturaba el mapa.
+ *
+ * Ahora, al inspeccionar una relacion, se ve lo que de verdad la produce: dos
+ * zonas de senalizacion que se tocan. La medicion exacta sigue disponible como
+ * capa tecnica, para quien la necesite.
+ */
+export function limpiarZonas() {
+  if (!mapa) return;
+  capas.zonas.clearLayers();
+  capas.superposicion.clearLayers();
+  capas.seleccion.clearLayers();
+}
+
+/**
+ * Dibuja la zona de influencia de uno o varios PMT.
+ * @param {Array} filas
+ * @param {number} radio metros
+ */
+export function pintarZonas(filas, radio = RADIO_INFLUENCIA_METROS) {
+  if (!mapa) return;
+  capas.zonas.clearLayers();
+  const z = SIMBOLOGIA_COORDINACION.zona;
+  for (const x of filas) {
+    if (!x.geometria) continue;
+    const poli = zonaDeInfluencia(x.geometria, radio);
+    if (!poli) continue;
+    const capa = dibujar(poli, {
+      color: z.borde, weight: 1.5, opacity: z.opacidadBorde, dashArray: z.guionBorde,
+      fillColor: z.color, fillOpacity: z.opacidad, interactive: false,
+    });
+    if (capa) capa.addTo(capas.zonas);
+  }
+}
+
+/**
+ * Resalta una relacion: los dos PMT, sus zonas y —cuando se puede situar— el
+ * punto donde se aproximan. Lo demas queda atenuado.
+ */
+export function inspeccionarRelacion(rel, { radio = RADIO_INFLUENCIA_METROS, verMedicion = false } = {}) {
+  if (!mapa) return null;
+  limpiarZonas();
+  const a = porId.get(rel.idA), b = porId.get(rel.idB);
+  if (!a?.geometria || !b?.geometria) return null;
+
+  pintarZonas([a, b], radio);
+
+  // Los dos trazados, cada uno con su color de papel: A y B. Aqui el color NO
+  // dice el tipo de cierre —eso ya lo dice la capa de trazados— sino cual es
+  // cual, que es lo que hace falta para leer la ficha.
+  const S = SIMBOLOGIA_COORDINACION;
+  for (const [x, cfg] of [[a, S.seleccionA], [b, S.seleccionB]]) {
+    const halo = dibujar(x.geometria, { color: '#fff', weight: cfg.grosor + 5, opacity: .9, fill: false });
+    if (halo) halo.addTo(capas.seleccion);
+    const capa = dibujar(x.geometria, {
+      color: cfg.color, weight: cfg.grosor, opacity: .95, fill: false, lineCap: 'round',
+    });
+    if (capa) capa.addTo(capas.seleccion);
+  }
+
+  // MEDICION EXACTA: capa tecnica, apagada por defecto. Se conserva porque es
+  // la unica forma de ver DONDE se aproximan de verdad, pero ya no es la
+  // representacion principal.
+  const k = claveRel(rel);
+  let ac = acercamientos.get(k);
+  if (!ac) { ac = puntosMasCercanos(a.geometria, b.geometria); acercamientos.set(k, ac); }
+  if (verMedicion && ac.evaluable && ac.a && ac.b) {
+    L.polyline([aLatLng(ac.a), aLatLng(ac.b)], {
+      color: '#1c1e21', weight: 2, opacity: .8, dashArray: '4 4',
+    }).addTo(capas.seleccion);
+    for (const p of [ac.a, ac.b]) {
+      L.circleMarker(aLatLng(p), { radius: 4, color: '#1c1e21', weight: 2, fillColor: '#fff', fillOpacity: 1 })
+        .addTo(capas.seleccion);
+    }
+  }
+
+  try {
+    const cap = [...capas.seleccion.getLayers(), ...capas.zonas.getLayers()];
+    const b2 = cap.reduce((acc, c) => (c.getBounds ? (acc ? acc.extend(c.getBounds()) : c.getBounds()) : acc), null);
+    if (b2) mapa.fitBounds(b2.pad(0.15), { maxZoom: 18 });
+  } catch { /* si no se puede encuadrar, no pasa nada */ }
+  return ac;
+}
+
 /**
  * Dibuja las relaciones uniendo los puntos REALES de maxima aproximacion.
  * Lo que se ve sobre el mapa es, literalmente, el segmento que mide el motor.
  */
-export function pintarRelaciones(relaciones, mostrarlas) {
+/**
+ * Dibuja la capa TECNICA de medicion exacta.
+ *
+ * Apagada por defecto desde la Etapa 3: unir con una linea los dos puntos de
+ * minima distancia de cada pareja llenaba el mapa de triangulos que parecian
+ * rutas o infraestructura, y no explicaba nada. Lo que explica la coordinacion
+ * son las zonas; esto es una herramienta de comprobacion.
+ */
+export function pintarRelaciones(relaciones, mostrarlas, capasActivas = null) {
   if (!mapa) return;
   capas.relaciones.clearLayers();
   if (!mostrarlas) return;
 
   for (const r of relaciones) {
+    // Las capas de coordinacion filtran QUE relaciones se dibujan.
+    if (capasActivas) {
+      const aLaVez = estadoTemporal(r) === TEMPORAL.COINCIDE;
+      if (aLaVez && !capasActivas.articulaciones) continue;
+      if (!aLaVez && !capasActivas.coincidencias) continue;
+    }
     const a = porId.get(r.idA), b = porId.get(r.idB);
     if (!a?.geometria || !b?.geometria) continue;
 
@@ -317,3 +454,53 @@ export function irARelacion(r) {
 export const instancia = () => mapa;
 export const capaDe = (n) => capas[n];
 export { SIMBOLOGIA_CIERRE, COLOR_REL };
+
+/**
+ * Datos para comprobar si un trazado cae donde debe.
+ *
+ * NO corrige nada. Devuelve lo que hace falta para que una persona pueda
+ * decidir si un desfase aparente viene del dato o del mapa de fondo:
+ * la coordenada exacta que se esta dibujando y cuanto mide un pixel.
+ */
+export function medirDesfase(pmt) {
+  const zoom = mapa ? mapa.getZoom() : 17;
+  const lat = centroDe(pmt.geometria)?.[0] ?? 6.2;
+  // Resolucion de Web Mercator: 156543,03 m/px en el ecuador a zoom 0.
+  const metrosPorPixel = (156543.03392 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
+  const g = pmt.geometria;
+  const primero = g?.type === 'Point' ? g.coordinates
+    : Array.isArray(g?.coordinates) ? [g.coordinates].flat(3).slice(0, 2).reverse().reverse() : null;
+  const v = g?.type === 'Point' ? g.coordinates
+    : g?.type === 'LineString' ? g.coordinates[0]
+    : g?.type === 'Polygon' ? g.coordinates[0]?.[0]
+    : g?.type === 'MultiLineString' ? g.coordinates[0]?.[0]
+    : primero;
+  return {
+    zoom,
+    metrosPorPixel,
+    primerVertice: v ? `lon ${v[0]} · lat ${v[1]}` : 'sin geometria',
+    // Se dice explicitamente: no hay transformacion entre el archivo y el mapa.
+    transformacionAplicada: 'ninguna: las coordenadas del KMZ se entregan a Leaflet tal cual',
+  };
+}
+
+/**
+ * Cuantas geometrias hay dibujadas en cada capa.
+ *
+ * El mapa usa el renderizador de LIENZO —mas rapido con cientos de trazados—
+ * asi que las formas no son elementos del DOM y no se pueden contar desde
+ * fuera. Esto lo expone para poder comprobarlo en las pruebas de navegador
+ * sin cambiar el renderizador, que seria pagar rendimiento por poder observar.
+ */
+export function contarDibujados() {
+  if (!mapa) return null;
+  const n = (c) => (c ? c.getLayers().length : 0);
+  return {
+    trazados: n(capas.trazados),
+    accesos: n(capas.accesos),
+    relaciones: n(capas.relaciones),
+    zonas: n(capas.zonas),
+    seleccion: n(capas.seleccion),
+    contexto,
+  };
+}

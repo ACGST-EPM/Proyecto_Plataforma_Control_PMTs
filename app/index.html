@@ -25,6 +25,26 @@
        porque el panel que lo contenía esté oculto. -->
   <div id="avisoGlobal" class="frase oculto no-imprimir" role="status" aria-live="polite"></div>
 
+  <!-- ═══════════ BARRA DE TRABAJO ═══════════
+       Lo que se usa CONTINUAMENTE, siempre a la vista y en una sola línea:
+       buscar, periodo, municipio, contrato. Todo lo demás vive detrás de «Más
+       filtros», porque enseñar veinte controles a la vez no es dar opciones:
+       es esconder las cuatro que importan entre las otras dieciséis. -->
+  <div class="barra-trabajo oculto no-imprimir" id="barraTrabajo">
+    <div class="bt-fila">
+      <label class="bt-buscar">
+        <span class="bt-lupa" aria-hidden="true">⌕</span>
+        <input type="search" id="buscarGlobal" placeholder="Buscar frente, contrato, dirección o código de resolución…"
+               autocomplete="off" aria-label="Buscar en todos los PMT">
+      </label>
+      <div class="bt-rapidos" id="filtrosRapidos"></div>
+      <button class="b-suave b-mini" id="btnMasFiltros" aria-expanded="false">Más filtros</button>
+      <span class="crece"></span>
+      <span class="bt-cuenta" id="btCuenta"></span>
+    </div>
+    <div class="bt-chips" id="chipsFiltros"></div>
+  </div>
+
 
   <!-- ─────────────── PASO 1 · CARGA ─────────────── -->
   <section class="panel no-imprimir" id="panelCarga">
@@ -83,24 +103,39 @@
     </div>
   </section>
 
-  <!-- ─────────────── PASO 3 · EXPLORAR ─────────────── -->
+  <!-- ═══════════ ESPACIO DE TRABAJO ═══════════
+       El mapa es el protagonista. A su izquierda, una columna estrecha con lo
+       que acompaña a la lectura del mapa: qué se está viendo (capas) y qué hay
+       seleccionado (ficha). Debajo, el recorrido en el tiempo. -->
   <section class="oculto" id="panelExplorar">
-    <div class="rejilla">
+    <div class="espacio-trabajo">
 
-      <div class="panel" style="margin-bottom:0">
-        <h2>Filtros</h2>
-        <div class="cuerpo" id="filtros"></div>
-      </div>
+      <aside class="columna-lateral no-imprimir">
+        <div class="panel compacto">
+          <h2>Capas</h2>
+          <div class="cuerpo" id="panelCapas"></div>
+        </div>
 
-      <div>
-        <div class="panel" style="margin-bottom:20px">
-          <h2><span class="paso">3</span> Mapa</h2>
-          <div class="cuerpo" style="padding-bottom:0">
+        <div class="panel compacto" id="panelFicha">
+          <h2 id="tituloFicha">Selección</h2>
+          <div class="cuerpo" id="fichaLateral"></div>
+        </div>
+      </aside>
+
+      <div class="columna-mapa">
+        <div class="panel" style="margin-bottom:16px">
+          <div class="cuerpo" style="padding-bottom:0;padding-top:12px">
             <div class="barra-mapa no-imprimir">
-              <label class="mini-campo"><input type="checkbox" id="verRelaciones" checked> Mostrar las relaciones</label>
               <span id="elegirFondo"></span>
+              <label class="mini-campo" for="selContexto">Contexto
+                <select id="selContexto">
+                  <option value="con-contexto">Ver también los demás, atenuados</option>
+                  <option value="solo-seleccion">Ver solo lo que entra en las cifras</option>
+                </select>
+              </label>
               <span class="sep"></span>
               <button class="b-suave b-mini" id="btnEncuadrar">Ver todo</button>
+              <button class="b-suave b-mini" id="btnComprobarCarto" title="Comprobar si un trazado cae donde debe">Comprobar cartografía</button>
             </div>
             <div id="avisoMapa" class="frase atencion oculto" style="margin-bottom:10px;font-size:.86rem"></div>
             <div id="mapa"></div>
@@ -115,6 +150,14 @@
       </div>
 
     </div>
+
+    <!-- Panel de filtros completo: se despliega desde «Más filtros». -->
+    <div class="panel oculto no-imprimir" id="panelFiltros" style="margin-top:16px">
+      <h2>Todos los filtros
+        <button class="b-suave b-mini" id="btnCerrarFiltros" style="float:right;margin-top:-4px">Cerrar</button>
+      </h2>
+      <div class="cuerpo" id="filtros"></div>
+    </div>
   </section>
 
   <!-- ─────────────── PASO 4 · DETALLE ─────────────── -->
@@ -123,6 +166,7 @@
       <button role="tab" aria-selected="true"  data-pest="pmt">PMT <span class="cuenta" id="cuentaPmt">0</span></button>
       <button role="tab" aria-selected="false" data-pest="rel">Relaciones <span class="cuenta" id="cuentaRel">0</span></button>
       <button role="tab" aria-selected="false" data-pest="noeval" id="pestNoEval" class="oculto">No evaluables <span class="cuenta" id="cuentaNoEval">0</span></button>
+      <button role="tab" aria-selected="false" data-pest="doc">Seguimiento documental <span class="cuenta" id="cuentaDoc">0</span></button>
       <button role="tab" aria-selected="false" data-pest="cal">Calidad de los datos <span class="cuenta" id="cuentaCal">0</span></button>
     </div>
     <div class="cuerpo">
@@ -132,6 +176,7 @@
       <div id="alcancePestana" class="alcance-pestana"></div>
 
       <div id="pest_pmt">
+        <div class="barra-acciones no-imprimir" id="barraTablaPmt"></div>
         <div class="tabla-caja"><table class="datos" id="tablaPmt"><thead></thead><tbody></tbody></table></div>
         <div class="paginador no-imprimir" id="pagPmt"></div>
       </div>
@@ -147,6 +192,8 @@
       </div>
 
       <div id="pest_noeval" class="oculto"><div id="panelNoEval"></div></div>
+
+      <div id="pest_doc" class="oculto"><div id="panelDocumental"></div></div>
 
       <div id="pest_cal" class="oculto"><div id="panelCalidad"></div></div>
 

@@ -14,13 +14,13 @@ import { estadoEspacial, estadoTemporal, ESPACIAL, TEMPORAL } from './modelo.js'
 export function filtrosVacios() {
   return {
     contratista: [], contrato: [], proyecto: [], municipio: [],
-    frente: [], tipoCierre: [], relacion: [],
+    frente: [], tipoCierre: [], relacion: [], documental: [],
     desde: null, hasta: null, texto: '',
   };
 }
 
 export function hayFiltrosActivos(f) {
-  return ['contratista', 'contrato', 'proyecto', 'municipio', 'frente', 'tipoCierre', 'relacion']
+  return ['contratista', 'contrato', 'proyecto', 'municipio', 'frente', 'tipoCierre', 'relacion', 'documental']
     .some((k) => f[k]?.length) || !!f.desde || !!f.hasta || !!(f.texto ?? '').trim();
 }
 
@@ -46,7 +46,11 @@ const norm = (s) => (s ?? '').toString().toLowerCase();
 function coincideTexto(fila, texto) {
   const t = norm(texto).trim();
   if (!t) return true;
-  return [fila.frente, fila.contrato, fila.contratista, fila.proyecto, fila.municipio, fila.direccion]
+  // El buscador tiene que encontrar TAMBIEN un codigo de resolucion: es la
+  // forma natural de llegar a un PMT cuando lo que se tiene a mano es el
+  // numero del tramite, no el nombre del frente.
+  return [fila.frente, fila.contrato, fila.contratista, fila.proyecto, fila.municipio, fila.direccion,
+    fila.resolucionPmt, fila.permisoRotura, fila.cierrePermisoRotura]
     .some((v) => norm(v).includes(t));
 }
 
@@ -59,8 +63,42 @@ export function filtrarPmts(filas, f) {
     enLista(f.municipio, x.municipio) &&
     enLista(f.frente, x.frente) &&
     enLista(f.tipoCierre, x.tipoCierre) &&
+    cumpleDocumental(x, f.documental) &&
     tocaRango(x, f.desde, f.hasta) &&
     coincideTexto(x, f.texto));
+}
+
+/**
+ * Claves del filtro documental. Son ESTADOS DERIVADOS, no valores guardados:
+ * se calculan de los codigos, asi que no se pueden falsear escribiendo
+ * «Pendiente» en una casilla. Ver `motor/src/modelo/documental.js`.
+ */
+export const CLAVES_DOCUMENTAL = Object.freeze([
+  ['completa', 'Documentacion completa (3 de 3)'],
+  ['falta-resolucion', 'Falta la Resolucion PMT'],
+  ['falta-permiso', 'Falta el Permiso de rotura'],
+  ['falta-cierre', 'Falta el Cierre del permiso de rotura'],
+  ['sin-ninguno', 'Sin ningun documento todavia'],
+]);
+
+const CLAVE_A_PENDIENTE = {
+  'falta-resolucion': 'resolucionPmt',
+  'falta-permiso': 'permisoRotura',
+  'falta-cierre': 'cierrePermisoRotura',
+};
+
+function cumpleDocumental(x, claves) {
+  if (!claves?.length) return true;
+  const d = x.documental;
+  if (!d) return false;
+  // Varias claves se combinan con O: «falta el permiso O falta el cierre» es lo
+  // que alguien quiere decir al marcar las dos, no «faltan las dos a la vez».
+  return claves.some((c) => {
+    if (c === 'completa') return d.completo;
+    if (c === 'sin-ninguno') return d.sinNinguno;
+    const p = CLAVE_A_PENDIENTE[c];
+    return p ? d.pendientes.includes(p) : false;
+  });
 }
 
 /**

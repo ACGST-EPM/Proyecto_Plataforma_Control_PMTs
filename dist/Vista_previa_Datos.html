@@ -529,6 +529,169 @@ details.tecnico pre {
 }
 .alcance-pestana b { color: var(--tinta); }
 
+/* ════════════════════════════════════════════════════════════════════════
+   ETAPA 3 · ESPACIO DE TRABAJO
+   ════════════════════════════════════════════════════════════════════════
+   Tres decisiones que gobiernan todo lo de abajo:
+
+   1. EL MAPA ES EL PROTAGONISTA. Todo lo demas se aparta o se encoge.
+   2. POCAS DECISIONES A LA VISTA. Lo que se usa siempre, arriba y en una
+      linea; lo demas, detras de un boton.
+   3. NINGUNA INFORMACION SIN JERARQUIA. Si todo tiene el mismo peso visual,
+      no hay nada importante.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Barra de trabajo ── */
+.barra-trabajo {
+  position: sticky; top: 0; z-index: 500;
+  background: var(--papel); border: 1px solid var(--borde); border-radius: var(--radio);
+  box-shadow: var(--sombra); padding: 10px 12px; margin-bottom: 16px;
+}
+.bt-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.bt-buscar {
+  position: relative; display: flex; align-items: center;
+  flex: 1 1 320px; min-width: 240px;
+}
+.bt-lupa {
+  position: absolute; left: 10px; font-size: 1.1rem; color: var(--tenue); pointer-events: none;
+}
+.bt-buscar input {
+  width: 100%; padding: 8px 10px 8px 30px; font: inherit;
+  border: 1px solid var(--borde); border-radius: 6px; background: var(--fondo);
+}
+.bt-buscar input:focus { outline: 2px solid var(--epm-verde); outline-offset: 1px; background: var(--papel); }
+.bt-rapidos { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.bt-rapidos .mini-campo { margin: 0; }
+.bt-cuenta { font-size: .85rem; color: var(--tinta-2); white-space: nowrap; }
+.bt-cuenta b { color: var(--tinta); }
+
+/* ── Chips de filtros activos ──
+   Un filtro puesto tiene que VERSE y poder quitarse de un clic. Es la version
+   compacta del invariante «ningun filtro activo sin su control visible». */
+.bt-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.bt-chips:empty { display: none; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--verde-suave); color: var(--verde-oscuro);
+  border: 1px solid #b9dfb9; border-radius: 999px;
+  padding: 3px 6px 3px 10px; font-size: .8rem; font-weight: 600;
+}
+.chip .chip-campo { font-weight: 400; color: var(--gris); }
+.chip button {
+  border: 0; background: rgba(0,0,0,.06); color: inherit; cursor: pointer;
+  width: 18px; height: 18px; border-radius: 50%; line-height: 1; font-size: .78rem; padding: 0;
+}
+.chip button:hover { background: rgba(0,0,0,.16); }
+.chip.chip-limpiar { background: var(--gris-suave); color: var(--tinta-2); border-color: var(--borde); }
+
+/* ── Espacio de trabajo: columna estrecha + mapa ── */
+.espacio-trabajo { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .espacio-trabajo { grid-template-columns: 1fr; } }
+.columna-lateral { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 86px; }
+@media (max-width: 1100px) { .columna-lateral { position: static; } }
+.columna-mapa { min-width: 0; }
+.panel.compacto > h2 { font-size: .9rem; padding: 10px 14px; }
+.panel.compacto > .cuerpo { padding: 12px 14px; }
+
+/* ── Panel de capas ── */
+.capa-fila { display: flex; align-items: center; gap: 9px; padding: 5px 0; font-size: .88rem; }
+.capa-fila + .capa-fila { border-top: 1px solid var(--gris-suave); }
+.capa-fila input { margin: 0; flex: none; }
+.capa-fila .muestra-svg { flex: none; line-height: 0; }
+.capa-fila .capa-nombre { flex: 1; }
+.capa-fila .capa-cuenta { color: var(--tenue); font-size: .78rem; font-variant-numeric: tabular-nums; }
+.capa-grupo { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--tenue); margin: 12px 0 4px; }
+.capa-grupo:first-child { margin-top: 0; }
+.capa-ayuda { font-size: .76rem; color: var(--tenue); margin: 6px 0 0; line-height: 1.45; }
+
+/* ── Ficha lateral ── */
+.ficha-vacia { color: var(--tenue); font-size: .86rem; line-height: 1.5; }
+.ficha-titulo { font-size: 1.02rem; font-weight: 700; color: var(--tinta); line-height: 1.25; }
+.ficha-sub { font-size: .82rem; color: var(--tinta-2); margin-top: 2px; }
+.ficha-bloque { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--gris-suave); }
+.ficha-bloque:first-of-type { border-top: 0; padding-top: 0; }
+.ficha-rotulo { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--tenue); margin-bottom: 5px; }
+.ficha-dato { font-size: .88rem; color: var(--tinta); line-height: 1.5; }
+.ficha-dato small { color: var(--tinta-2); }
+.ficha-fila { display: flex; justify-content: space-between; gap: 10px; font-size: .85rem; padding: 3px 0; }
+.ficha-fila .k { color: var(--tinta-2); }
+.ficha-fila .v { font-weight: 600; text-align: right; }
+.ficha-acciones { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+
+/* ── Seguimiento documental ── */
+.doc-barra { display: flex; align-items: center; gap: 8px; margin: 4px 0 2px; }
+.doc-pasos { display: flex; gap: 3px; }
+.doc-paso { width: 26px; height: 6px; border-radius: 3px; background: var(--borde); }
+.doc-paso.hecho { background: var(--epm-verde); }
+.doc-lista { margin: 8px 0 0; padding: 0; list-style: none; }
+.doc-lista li { display: flex; justify-content: space-between; gap: 10px; font-size: .83rem; padding: 4px 0;
+  border-top: 1px solid var(--gris-suave); }
+.doc-lista li:first-child { border-top: 0; }
+.doc-codigo { font-family: var(--mono); font-size: .8rem; color: var(--tinta); }
+.doc-pendiente { color: var(--naranja-oscuro); font-weight: 600; font-size: .78rem; }
+
+/* ── Recorrido en el tiempo ── */
+.fecha-grande {
+  font-size: 1.5rem; font-weight: 700; color: var(--verde-oscuro);
+  font-variant-numeric: tabular-nums; line-height: 1.1;
+}
+.fecha-grande small { display: block; font-size: .72rem; font-weight: 400; color: var(--tenue);
+  text-transform: uppercase; letter-spacing: .05em; }
+.recorrido-cabecera { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-bottom: 12px; }
+.recorrido-controles { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.b-redondo { width: 34px; height: 34px; border-radius: 50%; padding: 0; font-size: 1rem; }
+
+/* ── Elegir columnas ── */
+.columnas-menu {
+  position: absolute; z-index: 600; background: var(--papel); border: 1px solid var(--borde);
+  border-radius: 6px; box-shadow: var(--sombra-alta); padding: 10px 12px; max-height: 320px; overflow: auto;
+}
+.columnas-menu label { display: block; font-size: .84rem; padding: 3px 0; white-space: nowrap; }
+
+/* ── Buscador dentro de un filtro largo ── */
+.filtro-buscar {
+  width: 100%; padding: 5px 8px; font: inherit; font-size: .84rem; margin-bottom: 5px;
+  border: 1px solid var(--borde); border-radius: 5px;
+}
+.filtro-vacio { font-size: .8rem; color: var(--tenue); padding: 6px 2px; }
+
+/* ── Desplegable buscable ──
+   Plegado ocupa una linea; abierto trae buscador. Es lo que permite que un
+   filtro con cuatrocientos valores siga siendo usable. */
+.desp { position: relative; display: inline-block; }
+.desp-boton {
+  display: flex; align-items: baseline; gap: 6px; cursor: pointer;
+  padding: 6px 10px; border: 1px solid var(--borde); border-radius: 6px;
+  background: var(--papel); font-size: .84rem; white-space: nowrap; list-style: none;
+}
+.desp-boton::-webkit-details-marker { display: none; }
+.desp-boton::after { content: '▾'; color: var(--tenue); font-size: .7rem; }
+.desp[open] .desp-boton { border-color: var(--epm-verde); }
+.desp-etq { color: var(--tinta-2); }
+.desp-val { font-weight: 600; color: var(--tinta); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.desp-val.activo { color: var(--verde-oscuro); }
+.desp-caja {
+  position: absolute; z-index: 700; top: calc(100% + 4px); left: 0; min-width: 260px;
+  background: var(--papel); border: 1px solid var(--borde); border-radius: 6px;
+  box-shadow: var(--sombra-alta); padding: 8px; overflow: auto;
+}
+.desp-buscar {
+  width: 100%; padding: 5px 8px; font: inherit; font-size: .84rem; margin-bottom: 6px;
+  border: 1px solid var(--borde); border-radius: 5px;
+}
+.desp-fila { display: flex; align-items: center; gap: 8px; padding: 3px 2px; font-size: .84rem; cursor: pointer; }
+.desp-fila:hover { background: var(--gris-suave); border-radius: 4px; }
+.desp-fila input { margin: 0; flex: none; }
+.desp-texto { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desp-n { color: var(--tenue); font-size: .76rem; font-variant-numeric: tabular-nums; }
+.desp-sep { border-top: 1px solid var(--borde); margin: 5px 0; }
+.desp-limpiar {
+  width: 100%; margin-top: 6px; padding: 5px; font: inherit; font-size: .8rem;
+  border: 1px solid var(--borde); border-radius: 5px; background: var(--gris-suave); cursor: pointer;
+}
+
 </style>
 
 <header class="cabecera">

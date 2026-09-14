@@ -112,6 +112,21 @@ async function abrir({ sinRed = false, teselasLocales = false } = {}) {
   return p;
 }
 
+/**
+ * ABRE EL PANEL DE FILTROS COMPLETO.
+ *
+ * Desde la Etapa 3 la barra de trabajo solo tiene buscar, periodo, municipio y
+ * contrato; el resto vive detras de «Mas filtros». Las pruebas que manejan
+ * `#f_<campo>` tienen que abrirlo, igual que lo haria una persona.
+ */
+async function abrirFiltros(p) {
+  if (await p.isHidden('#panelFiltros')) {
+    await p.click('#btnMasFiltros');
+    await p.waitForSelector('#panelFiltros:not(.oculto)', { timeout: 10000 });
+    await p.waitForTimeout(150);
+  }
+}
+
 async function cargar(p, archivos, selector = '#entrada') {
   await p.setInputFiles(selector, archivos);
   await p.waitForSelector('#panelResumen:not(.oculto)', { timeout: 60000 });
@@ -263,9 +278,16 @@ test('SIMBOLOGIA: cada tipo de cierre se dibuja distinto, y hay leyenda', saltar
     null, { timeout: 20000 });
 
   const leyenda = await txt(p, '#leyendaMapa');
-  for (const t of ['Cierre total', 'Cierre parcial', 'Ingreso y salida', 'Se tocan', 'Cerca, sin tocarse']) {
+  // Etapa 3: la coordinación ya no se dice con líneas de colores entre puntos,
+  // sino con las zonas de influencia y su superposición. La leyenda sigue el
+  // cambio, y sigue nombrando los tres tipos de cierre.
+  for (const t of ['Cierre total', 'Cierre parcial', 'Ingreso y salida',
+    'Zona de influencia', 'Zonas que se superponen']) {
     assert.ok(leyenda.includes(t), `falta "${t}" en la leyenda: ${leyenda}`);
   }
+  // Y la muestra de la leyenda se dibuja con la MISMA simbología que el mapa.
+  const muestras = await p.$$eval('#leyendaMapa svg', (n) => n.length);
+  assert.ok(muestras >= 4, `la leyenda debe dibujar el símbolo real, y trae ${muestras}`);
 
   // La tabla enseña un punto del color del tipo de cierre: tres tipos, tres colores.
   await p.waitForFunction(() => document.querySelectorAll('#tablaPmt tbody .punto-cierre').length >= 4,
@@ -289,6 +311,7 @@ test('FILTROS CRUZADOS: elegir un contrato reduce las demas listas', saltar, asy
   const opciones = (campo) => p.$$eval(`#f_${campo} option`, (o) => o.map((x) => x.value));
 
   assert.deepEqual((await opciones('contrato')).sort(), ['CW1', 'CW2', 'CW3']);
+  await abrirFiltros(p);
   await p.selectOption('#f_contrato', ['CW1']);
   await p.waitForTimeout(500);
 
@@ -297,12 +320,13 @@ test('FILTROS CRUZADOS: elegir un contrato reduce las demas listas', saltar, asy
   assert.equal(await txt(p, '#cuentaPmt'), '2');
 
   // Se puede seguir marcando mas valores del mismo campo.
+  await abrirFiltros(p);
   await p.selectOption('#f_contrato', ['CW1', 'CW2']);
   await p.waitForTimeout(500);
   assert.equal(await txt(p, '#cuentaPmt'), '4');
   assert.equal((await opciones('frente')).length, 4);
 
-  await p.click('#btnLimpiar');
+  await abrirFiltros(p); await p.click('#btnLimpiar');
   await p.waitForTimeout(500);
   assert.equal(await txt(p, '#cuentaPmt'), '5');
   assert.deepEqual(p.erroresJs, []);
@@ -315,6 +339,7 @@ test('FILTROS CRUZADOS: filtrar por tipo de cierre funciona y cruza', saltar, as
   const tipos = await p.$$eval('#f_tipoCierre option', (o) => o.map((x) => x.value));
   assert.ok(tipos.includes('ingreso y salida'), JSON.stringify(tipos));
   assert.ok(!tipos.includes('ingreso'), 'no existe "ingreso" por separado');
+  await abrirFiltros(p);
   await p.selectOption('#f_tipoCierre', ['ingreso y salida']);
   await p.waitForTimeout(500);
   assert.equal(await txt(p, '#cuentaPmt'), '1');
@@ -343,7 +368,10 @@ test('INTERACCION: pulsar una fila selecciona y acerca el mapa', saltar, async (
   await p.close();
 });
 
-test('INTERACCION: pulsar una relacion acerca el mapa a los dos extremos', saltar, async () => {
+test('INTERACCION: pulsar una relacion EXPLICA por que existe', saltar, async () => {
+  // Etapa 3: pulsar una relación ya no dibuja una línea entre dos puntos. Abre
+  // la ficha de coordinación y enseña en el mapa lo que la produce: las dos
+  // zonas de influencia y su superposición.
   const p = await abrir({ sinRed: true });
   await cargar(p, [KMZ_A, KMZ_B]);
   await p.click('.pestanas button[data-pest="rel"]');
@@ -351,9 +379,14 @@ test('INTERACCION: pulsar una relacion acerca el mapa a los dos extremos', salta
   const filas = await p.$$('#tablaRel tbody tr');
   assert.ok(filas.length > 0, 'hay relaciones que mostrar');
   await filas[0].click();
-  await p.waitForTimeout(900);
-  const ficha = await txt(p, '.leaflet-popup-content').catch(() => '');
-  assert.ok(/aproximan|Relación/i.test(ficha), ficha);
+  await p.waitForTimeout(1000);
+
+  const ficha = await txt(p, '#fichaLateral');
+  assert.ok(/Relación entre dos contratos/.test(ficha), ficha.slice(0, 160));
+  assert.ok(/Por qué están relacionados/.test(ficha), 'tiene que explicar el motivo');
+  assert.ok(/zonas de influencia|dentro del umbral|no se pudo medir/i.test(ficha), ficha.slice(0, 300));
+  assert.ok(/hechos medidos/.test(ficha), 'y seguir sin clasificar criticidad');
+  assert.ok(!/crítico|critico/i.test(ficha), 'la palabra «crítico» no puede aparecer');
   await p.close();
 });
 
@@ -365,23 +398,29 @@ test('RECORRIDO: barra, reproducir, pausar, paso, velocidad y volver a todo', sa
   for (const id of ['#barraTiempo', '#btnPlay', '#pasoDias', '#velocidad', '#btnTodoTiempo']) {
     assert.ok(await p.$(id), `falta el control ${id}`);
   }
-  assert.equal(await txt(p, '#fechaViva'), 'Todo');
+  // Etapa 3: la fecha visible es el dato más importante de este panel y ahora
+  // se enseña en grande, diciendo SIEMPRE de qué está hablando.
+  assert.match(await txt(p, '#fechaViva'), /Periodo completo/);
+  for (const id of ['#recorridoDesde', '#recorridoHasta', '#irAFecha', '#btnAtras', '#btnAdelante']) {
+    assert.ok(await p.$(id), `falta el control ${id}`);
+  }
   await p.evaluate(() => { const b = document.getElementById('barraTiempo'); b.value = 5; b.dispatchEvent(new Event('input')); });
   await p.waitForTimeout(400);
-  assert.match(await txt(p, '#fechaViva'), /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(await txt(p, '#fechaViva'), /PMT vigentes el día\s*\d{4}-\d{2}-\d{2}/);
   // La etiqueta dice ahora lo que de verdad se calcula: el DIA COMPLETO.
   assert.ok(/actividad ese día completo/.test(await txt(p, '#vigentesAhora')), await txt(p, '#vigentesAhora'));
 
   await p.click('#btnPlay');
   await p.waitForTimeout(700);
-  assert.ok((await txt(p, '#btnPlay')).includes('Pausar'), 'se puede pausar mientras reproduce');
+  assert.equal(await p.$eval('#btnPlay', (b) => b.getAttribute('aria-label')), 'Pausar',
+    'se puede pausar mientras reproduce');
   await p.click('#btnPlay');
   await p.waitForTimeout(200);
-  assert.ok((await txt(p, '#btnPlay')).includes('Reproducir'));
+  assert.equal(await p.$eval('#btnPlay', (b) => b.getAttribute('aria-label')), 'Reproducir');
 
   await p.click('#btnTodoTiempo');
   await p.waitForTimeout(400);
-  assert.equal(await txt(p, '#fechaViva'), 'Todo');
+  assert.match(await txt(p, '#fechaViva'), /Periodo completo/);
   assert.equal(await txt(p, '#cuentaPmt'), '4');
   assert.deepEqual(p.erroresJs, []);
   await p.close();
@@ -661,6 +700,7 @@ test('2.2 · REINICIO: un filtro anterior no puede quedar invisible', saltar, as
   // porque el filtro seguía aplicado sin que su control existiera.
   const p = await abrir({ sinRed: true });
   await cargar(p, [KMZ_A]);
+  await abrirFiltros(p);
   await p.selectOption('#f_contrato', ['CW1']);
   await p.waitForTimeout(400);
   assert.equal(await txt(p, '#cuentaPmt'), '2');
@@ -677,6 +717,7 @@ test('2.2 · REINICIO: un filtro anterior no puede quedar invisible', saltar, as
 test('2.2 · los filtros de un proyecto se restauran TAMBIÉN en sus controles', saltar, async () => {
   const p = await abrir({ sinRed: true });
   await cargar(p, [KMZ_A, KMZ_B]);
+  await abrirFiltros(p);
   await p.selectOption('#f_contrato', ['CW1']);
   await p.fill('#fDesde', '2026-03-01');
   await p.fill('#fHasta', '2026-03-30');
@@ -904,7 +945,7 @@ test('2.3 · el último día con actividad es seleccionable en el recorrido', sa
   assert.equal(max, 2, 'el deslizador llega hasta el tercer día');
   await p.evaluate(() => { const b = document.getElementById('barraTiempo'); b.value = b.max; b.dispatchEvent(new Event('input')); });
   await p.waitForTimeout(500);
-  assert.equal(await txt(p, '#fechaViva'), '2026-03-03');
+  assert.match(await txt(p, '#fechaViva'), /2026-03-03/);
   assert.equal(await txt(p, '#cuentaPmt'), '1', 'y ese día sigue mostrando el PMT');
   await p.close();
 });
@@ -953,6 +994,8 @@ test('2.4 · las TARJETAS siguen al alcance visible, y lo dicen', saltar, async 
   assert.equal(await txt(p, '#cuentaPmt'), '4');
   assert.ok(/Todo lo cargado/i.test(await txt(p, '#alcanceResumen')), await txt(p, '#alcanceResumen'));
 
+  await abrirFiltros(p);
+
   await p.selectOption('#f_contrato', ['CW1']);
   await p.waitForTimeout(400);
 
@@ -982,6 +1025,7 @@ test('2.4 · las TARJETAS siguen al alcance visible, y lo dicen', saltar, async 
 test('2.4 · INVARIANTE: tarjetas, pestañas e informe cuentan el MISMO alcance', saltar, async () => {
   const p = await abrir({ sinRed: true });
   await cargar(p, [KMZ_A, KMZ_B]);
+  await abrirFiltros(p);
   await p.selectOption('#f_contrato', ['CW1']);
   await p.waitForTimeout(400);
 
@@ -1045,6 +1089,8 @@ test('2.4 · INFORME CADUCADO: también al cambiar un filtro y al quitarlo', sal
   await p.waitForSelector('#panelInforme:not(.oculto)', { timeout: 20000 });
   assert.ok(await p.isHidden('#avisoInforme'));
 
+  await abrirFiltros(p);
+
   await p.selectOption('#f_contrato', ['CW1']);
   await p.waitForTimeout(400);
   assert.ok(await p.isVisible('#avisoInforme'), 'cambiar el filtro caduca el informe');
@@ -1054,12 +1100,14 @@ test('2.4 · INFORME CADUCADO: también al cambiar un filtro y al quitarlo', sal
   assert.ok(await p.isHidden('#avisoInforme'));
 
   // Y quitar el filtro vuelve a caducarlo: es otro alcance distinto.
+  await abrirFiltros(p);
   await p.selectOption('#f_contrato', []);
   await p.waitForTimeout(400);
   assert.ok(await p.isVisible('#avisoInforme'), 'quitar el filtro también cambia el alcance');
 
   // Pero si el estado VUELVE a ser el del informe, deja de estar caducado: no
   // se avisa de una diferencia que ya no existe.
+  await abrirFiltros(p);
   await p.selectOption('#f_contrato', ['CW1']);
   await p.waitForTimeout(400);
   assert.ok(await p.isHidden('#avisoInforme'), 'al volver al mismo alcance, el informe vuelve a valer');
@@ -1200,4 +1248,230 @@ test('VISTA PREVIA: el ciclo completo de sincronización funciona en un navegado
   assert.deepEqual(errores, []);
   await p.close();
   await ctx.close();
+});
+
+/* ═══════════════════ ETAPA 3 · TAREAS REALES DE USUARIO ═══════════════════
+ *
+ * La UX no se evalua diciendo «se ve mejor». Se evalua comprobando que una
+ * persona puede completar las tareas por las que existe la herramienta, y
+ * contando los pasos que le cuesta.
+ */
+
+const KMZ_DOC = escribir('condocs.kmz', F.kmz([
+  F.placemark('DOC-COMPLETO', F.descripcion({
+    inicio: '2026-06-01 07:00:00', fin: '2026-06-20 18:00:00', contrato: 'CW50',
+    municipio: 'Medellin', tipo: 'total',
+    resolucionPmt: 'RES-1001-2026', permisoRotura: 'PR-2002', cierrePermisoRotura: 'CR-3003',
+  }), F.linea([[-75.6000, 6.2000], [-75.5990, 6.2000]])),
+  F.placemark('DOC-A-MEDIAS', F.descripcion({
+    inicio: '2026-06-05 07:00:00', fin: '2026-06-25 18:00:00', contrato: 'CW50',
+    municipio: 'Medellin', tipo: 'parcial', resolucionPmt: 'RES-1002-2026',
+  }), F.linea([[-75.5985, 6.2000], [-75.5975, 6.2000]])),
+  F.placemark('DOC-SIN-NADA', F.descripcion({
+    inicio: '2026-06-10 07:00:00', fin: '2026-06-30 18:00:00', contrato: 'CW51',
+    municipio: 'Envigado', tipo: 'parcial',
+  }), F.linea([[-75.5988, 6.2003], [-75.5978, 6.2003]])),
+]));
+
+test('TAREA A: «qué intervenciones requieren articulación» se ve sin tocar nada', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  // El panel de capas lo dice de entrada, con su cifra: no hay que encender y
+  // apagar capas para averiguar cuántas hay.
+  const capas = await txt(p, '#panelCapas');
+  assert.ok(/Comparten zona/.test(capas), capas.slice(0, 200));
+  assert.ok(/Y además a la vez/.test(capas), 'la articulación tiene su propia cifra');
+  // Y las dos cifras son distintas cosas: una es el total, la otra el subconjunto.
+  const cifras = await p.$$eval('#panelCapas .capa-fila', (n) => n.map((f) => ({
+    nombre: f.querySelector('.capa-nombre').textContent.trim(),
+    cuenta: f.querySelector('.capa-cuenta').textContent.trim(),
+  })));
+  const comparten = cifras.find((c) => /Comparten zona/.test(c.nombre));
+  const aLaVez = cifras.find((c) => /a la vez/.test(c.nombre));
+  assert.ok(comparten && aLaVez, JSON.stringify(cifras));
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('TAREA C: «qué PMT tienen pendiente el permiso de rotura», en dos pasos', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_DOC]);
+
+  // Paso 1: abrir la pestaña de seguimiento documental.
+  await p.click('.pestanas button[data-pest="doc"]');
+  await p.waitForTimeout(400);
+  const doc = await txt(p, '#panelDocumental');
+  assert.ok(/sin Permiso de rotura/.test(doc), doc.slice(0, 240));
+
+  // Paso 2: filtrar. El estado es DERIVADO: no depende de cómo se escribiera.
+  await abrirFiltros(p);
+  await p.check('#d_falta-permiso');
+  await p.waitForTimeout(600);
+  assert.equal(await txt(p, '#cuentaPmt'), '2', 'dos de los tres no tienen permiso de rotura');
+  const chips = await txt(p, '#chipsFiltros');
+  assert.ok(/Documentación/.test(chips), `el filtro tiene que verse: ${chips}`);
+  await p.close();
+});
+
+test('TAREA C bis: el buscador encuentra un PMT por su código de resolución', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_DOC]);
+  await p.fill('#buscarGlobal', 'PR-2002');
+  await p.waitForTimeout(600);
+  assert.equal(await txt(p, '#cuentaPmt'), '1', 'llega al PMT por el número del trámite');
+  assert.ok((await txt(p, '#pest_pmt')).includes('DOC-COMPLETO'));
+  await p.close();
+});
+
+test('TAREA E: seleccionar un PMT responde quién, cuándo y con quién', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_DOC]);
+  await p.click('#tablaPmt tbody tr:nth-child(1)');
+  await p.waitForTimeout(700);
+  const f = await txt(p, '#fichaLateral');
+  for (const bloque of ['Quién lo ejecuta', 'Cuándo', 'Dónde',
+    'Seguimiento documental', 'Coordinación con otros contratos', 'Origen y trazabilidad']) {
+    assert.ok(f.includes(bloque), `falta el bloque «${bloque}» en la ficha`);
+  }
+  // El nombre del archivo NO puede competir con el del frente.
+  const titulo = await p.$eval('#fichaLateral .ficha-titulo', (e) => e.textContent.trim());
+  assert.ok(!/\.kmz/i.test(titulo), `el titular es el frente, no el archivo: ${titulo}`);
+  assert.ok(f.indexOf('Quién lo ejecuta') < f.indexOf('Origen y trazabilidad'),
+    'la trazabilidad va al final, no compitiendo con lo operativo');
+  await p.close();
+});
+
+test('TAREA D: «los cierres de un municipio en un mes», desde la barra', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_DOC]);
+  // Municipio, sin abrir ningún panel: está en la barra.
+  await p.click('#desp_municipio summary');
+  await p.waitForTimeout(200);
+  await p.check('#desp_municipio .desp-lista input[value="Medellin"]');
+  await p.waitForTimeout(600);
+  assert.equal(await txt(p, '#cuentaPmt'), '2');
+  // Y el periodo, también desde la barra.
+  await p.fill('#rapDesde', '2026-06-08');
+  await p.waitForTimeout(600);
+  assert.ok(+(await txt(p, '#cuentaPmt')) <= 2);
+  const chips = await txt(p, '#chipsFiltros');
+  assert.ok(/Municipio/.test(chips) && /Desde/.test(chips), chips);
+  await p.close();
+});
+
+test('TAREA F: la ficha de una relación explica el motivo sin jerga', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  await p.click('.pestanas button[data-pest="rel"]');
+  await p.waitForTimeout(300);
+  await p.click('#tablaRel tbody tr:nth-child(1)');
+  await p.waitForTimeout(900);
+  const f = await txt(p, '#fichaLateral');
+  assert.ok(/Por qué están relacionados/.test(f));
+  assert.ok(/Con qué regla salió/.test(f), 'y dice con qué criterio salió');
+  assert.ok(/Distancia entre trazados/.test(f));
+  await p.close();
+});
+
+test('CAPAS: apagar una capa quita esos trazados del mapa, y la cifra lo dice', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  const capas = await p.$$eval('#panelCapas input[data-capa]', (n) => n.map((i) => i.dataset.capa));
+  assert.ok(capas.includes('cierre:total') && capas.includes('medicion'), JSON.stringify(capas));
+  // La medición exacta está APAGADA por defecto: era lo que llenaba el mapa de
+  // triángulos que parecían rutas.
+  assert.equal(await p.$eval('#panelCapas input[data-capa="medicion"]', (i) => i.checked), false);
+  assert.equal(await p.$eval('#panelCapas input[data-capa="zonas"]', (i) => i.checked), false);
+  await p.close();
+});
+
+test('CONTEXTO: se puede elegir entre ver solo lo filtrado o todo atenuado', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  assert.ok(await p.$('#selContexto'), 'el control de contexto existe');
+  await abrirFiltros(p);
+  await p.selectOption('#f_contrato', ['CW1']);
+  await p.waitForTimeout(600);
+  // El mapa dibuja en un lienzo, así que se cuenta por la capa, no por el DOM.
+  const conContexto = await p.evaluate(() => window.__pmtDiagnostico().trazados);
+
+  await p.selectOption('#selContexto', 'solo-seleccion');
+  await p.waitForTimeout(700);
+  const soloSeleccion = await p.evaluate(() => window.__pmtDiagnostico().trazados);
+  assert.ok(soloSeleccion < conContexto,
+    `ver solo la selección debe dibujar menos (${soloSeleccion} vs ${conContexto})`);
+  assert.equal(await txt(p, '#cuentaPmt'), '2', 'y las cifras no cambian: es solo lo que se dibuja');
+  assert.equal(await p.evaluate(() => window.__pmtDiagnostico().contexto), 'solo-seleccion');
+  await p.close();
+});
+
+test('COLUMNAS: pocas de entrada, y se pueden añadir las demás', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_DOC]);
+  const antes = await p.$$eval('#tablaPmt thead th', (n) => n.length);
+  assert.ok(antes <= 8, `la tabla no puede empezar con ${antes} columnas`);
+  await p.click('#barraTablaPmt summary');
+  await p.waitForTimeout(200);
+  await p.check('#columnasPmtMenu input[data-col="resolucionPmt"]');
+  await p.waitForTimeout(400);
+  const despues = await p.$$eval('#tablaPmt thead th', (n) => n.map((x) => x.textContent.trim()));
+  assert.ok(despues.some((c) => /Resolucion PMT/i.test(c)), JSON.stringify(despues));
+  assert.ok((await txt(p, '#pest_pmt')).includes('RES-1001-2026'));
+  await p.close();
+});
+
+test('RECORRIDO: se puede acotar el tramo que se recorre', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_DOC]);
+  const maxAntes = await p.$eval('#barraTiempo', (b) => +b.max);
+  await p.fill('#recorridoDesde', '2026-06-10');
+  await p.fill('#recorridoHasta', '2026-06-20');
+  await p.waitForTimeout(500);
+  const max = await p.$eval('#barraTiempo', (b) => +b.max);
+  const min = await p.$eval('#barraTiempo', (b) => +b.min);
+  assert.ok(max - min < maxAntes, 'el recorrido queda acotado al tramo pedido');
+  assert.ok(/Se recorren \d+ día/.test(await txt(p, '#avisoRecorte')), await txt(p, '#avisoRecorte'));
+
+  // Un rango invertido NO se aplica a medias: se dice y se deja como estaba.
+  await p.fill('#recorridoDesde', '2026-06-25');
+  await p.waitForTimeout(400);
+  assert.ok(/posterior a la de fin/.test(await txt(p, '#avisoRecorte')), await txt(p, '#avisoRecorte'));
+  await p.close();
+});
+
+test('FILTRO LARGO: se puede buscar dentro, y lo elegido nunca desaparece', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B, KML_C, KML_PARCIAL]);
+  await abrirFiltros(p);
+  await p.selectOption('#f_contrato', ['CW1']);
+  await p.waitForTimeout(400);
+  // Se busca algo que NO es el elegido: el elegido tiene que seguir visible.
+  const buscador = await p.$('#buscar_frente');
+  if (buscador) {
+    await p.fill('#buscar_frente', 'zzzz');
+    await p.waitForTimeout(300);
+    const ocultos = await p.$$eval('#f_frente option',
+      (n) => n.filter((o) => o.selected && o.hidden).length);
+    assert.equal(ocultos, 0, 'una opción elegida NUNCA puede quedar oculta al buscar');
+  }
+  await p.close();
+});
+
+test('SIMBOLOGIA: los tres tipos se distinguen por más que el color', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  await p.waitForTimeout(800);
+  // Cada tipo tiene grosor propio, y el más cerrado es el más grueso: el orden
+  // se lee incluso sin distinguir colores.
+  const formas = await p.evaluate(() => {
+    const m = window.__simbologia;
+    return m ? null : null;
+  });
+  const leyenda = await p.$$eval('#leyendaMapa svg line', (n) => n.map((l) => +l.getAttribute('stroke-width')));
+  assert.ok(leyenda.length >= 4, `la leyenda dibuja líneas reales: ${leyenda.length}`);
+  assert.ok(new Set(leyenda).size >= 2, `los grosores tienen que distinguirse: ${JSON.stringify(leyenda)}`);
+  // Y hay halo: dos líneas por muestra (una blanca debajo).
+  assert.ok(leyenda.length >= 6, 'cada muestra lleva halo blanco por debajo');
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
 });

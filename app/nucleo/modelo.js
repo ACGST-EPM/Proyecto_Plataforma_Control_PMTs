@@ -45,17 +45,106 @@ export const TIPOS_CIERRE = Object.freeze(['total', 'parcial', 'ingreso y salida
  *     dependa solo del color: quien no distinga rojo de verde sigue leyendo el
  *     mapa. El color nunca es la unica senal.
  */
+/**
+ * SIMBOLOGIA DE LOS CIERRES — rediseñada en la Etapa 3.
+ *
+ * ══ QUE NO FUNCIONABA ═════════════════════════════════════════════════════
+ *
+ * La usuaria dijo que la linea punteada del cierre PARCIAL no se entendia. Y
+ * tenia razon por un motivo concreto: los tres tipos se distinguian SOLO por el
+ * color y por el patron de guiones. A tamaño de mapa, `10 5` y `2 6` se parecen;
+ * y quien no distinga bien el rojo del naranja —entre un 5 % y un 8 % de los
+ * hombres— no ve ninguna diferencia.
+ *
+ * ══ EL CRITERIO NUEVO ═════════════════════════════════════════════════════
+ *
+ * Cada tipo se reconoce por TRES cosas a la vez, no por una:
+ *
+ *   CIERRE TOTAL      linea GRUESA y CONTINUA.  «la via esta cerrada»
+ *   CIERRE PARCIAL    linea mas fina con un TRAZO LARGO Y CLARO, y un halo
+ *                     blanco debajo.            «se pasa, pero a medias»
+ *   INGRESO Y SALIDA  no es una linea: es un PUNTO con anillo. Es lo que es:
+ *                     un sitio, no un tramo.
+ *
+ * El grosor hace de jerarquia —cuanto mas cerrado, mas gruesa la linea— asi que
+ * el orden se lee incluso en blanco y negro. Y el patron de guiones del parcial
+ * pasa a `14 8`: suficientemente largo para no confundirse con un punteado fino.
+ *
+ * ══ EL HALO ═══════════════════════════════════════════════════════════════
+ *
+ * Todas las lineas llevan un contorno blanco por debajo. Sobre un callejero con
+ * las vias en gris claro y sobre una imagen de satelite oscura, una linea de
+ * color puro se pierde; con halo se lee sobre las dos. Es la tecnica habitual
+ * en cartografia y no añade color.
+ */
 export const SIMBOLOGIA_CIERRE = Object.freeze({
-  'total':            { color: '#c62828', grosor: 5,   guion: null,    etiqueta: 'Cierre total',      marcador: false },
-  'parcial':          { color: '#e08600', grosor: 4,   guion: '10 5',  etiqueta: 'Cierre parcial',    marcador: false },
-  'ingreso y salida': { color: '#0066cc', grosor: 3.5, guion: '2 6',   etiqueta: 'Ingreso y salida',  marcador: true },
-  '(sin dato)':       { color: '#6b7075', grosor: 3,   guion: '4 4',   etiqueta: 'Sin tipo de cierre', marcador: false },
+  'total': {
+    color: '#c1272d', grosor: 6, guion: null, halo: 3, marcador: false,
+    etiqueta: 'Cierre total',
+    ayuda: 'La via queda cerrada al transito en ese tramo.',
+    forma: 'linea-continua',
+  },
+  'parcial': {
+    color: '#d56b00', grosor: 4.5, guion: '14 8', halo: 3, marcador: false,
+    etiqueta: 'Cierre parcial',
+    ayuda: 'Se mantiene el paso, con la calzada reducida o desviada.',
+    forma: 'linea-trazos',
+  },
+  'ingreso y salida': {
+    color: '#1565c0', grosor: 3, guion: null, halo: 2, marcador: true,
+    etiqueta: 'Ingreso y salida',
+    ayuda: 'Punto por donde entran y salen los vehiculos de la obra.',
+    forma: 'punto-anillo',
+  },
+  '(sin dato)': {
+    color: '#6b7075', grosor: 3, guion: '3 5', halo: 2, marcador: false,
+    etiqueta: 'Sin tipo de cierre',
+    ayuda: 'El KMZ no dice de que tipo es. Falta un dato, no es un tipo mas.',
+    forma: 'linea-punteada',
+  },
+});
+
+/**
+ * COLORES DE LA COORDINACION — deliberadamente pocos.
+ *
+ * El mapa ya usa tres colores para los tipos de cierre. Si la coordinacion
+ * usara otros tres, habria seis colores compitiendo y ninguno significaria
+ * nada. Asi que la coordinacion NO se dice con color de relleno: se dice con
+ * una ZONA translucida y su SUPERPOSICION, que es lo que representa de verdad.
+ */
+export const SIMBOLOGIA_COORDINACION = Object.freeze({
+  zona: { color: '#009300', opacidad: 0.10, borde: '#009300', opacidadBorde: 0.35, guionBorde: '6 4' },
+  superposicion: { color: '#d56b00', opacidad: 0.30, borde: '#a35200', opacidadBorde: 0.8 },
+  seleccionA: { color: '#009300', grosor: 8 },
+  seleccionB: { color: '#1565c0', grosor: 8 },
+  contexto: { color: '#b6bcc1', opacidad: 0.35 },
 });
 
 /** Simbologia de un registro, con respaldo seguro si el tipo no se reconoce. */
 export function simbologiaDe(tipoCierre) {
   const k = String(tipoCierre ?? '').trim().toLowerCase();
   return SIMBOLOGIA_CIERRE[k] ?? SIMBOLOGIA_CIERRE['(sin dato)'];
+}
+
+/**
+ * Muestra en SVG del simbolo, para leyendas y fichas.
+ *
+ * Se dibuja igual que en el mapa —mismo grosor, mismo halo, mismo trazo— para
+ * que la leyenda y el mapa no puedan decir cosas distintas.
+ */
+export function muestraSvg(tipoCierre, { ancho = 44, alto = 16 } = {}) {
+  const s = simbologiaDe(tipoCierre);
+  const y = alto / 2;
+  if (s.forma === 'punto-anillo') {
+    return `<svg width="${ancho}" height="${alto}" viewBox="0 0 ${ancho} ${alto}" aria-hidden="true">` +
+      `<circle cx="${ancho / 2}" cy="${y}" r="6" fill="#fff"/>` +
+      `<circle cx="${ancho / 2}" cy="${y}" r="5" fill="none" stroke="${s.color}" stroke-width="3"/>` +
+      `<circle cx="${ancho / 2}" cy="${y}" r="1.6" fill="${s.color}"/></svg>`;
+  }
+  const guion = s.guion ? ` stroke-dasharray="${s.guion}"` : '';
+  return `<svg width="${ancho}" height="${alto}" viewBox="0 0 ${ancho} ${alto}" aria-hidden="true">` +
+    `<line x1="2" y1="${y}" x2="${ancho - 2}" y2="${y}" stroke="#fff" stroke-width="${s.grosor + s.halo}" stroke-linecap="round"${guion}/>` +
+    `<line x1="2" y1="${y}" x2="${ancho - 2}" y2="${y}" stroke="${s.color}" stroke-width="${s.grosor}" stroke-linecap="round"${guion}/></svg>`;
 }
 
 /** Estado de evaluacion espacial de una relacion, sin ambiguedad posible. */

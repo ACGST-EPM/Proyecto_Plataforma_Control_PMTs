@@ -10,6 +10,9 @@ import * as Mapa from './ui/mapa.js';
 import * as Tablas from './ui/tablas.js';
 import * as Controles from './ui/controles.js';
 import * as Informe from './ui/informe.js';
+import * as Capas from './ui/capas.js';
+import * as Ficha from './ui/ficha.js';
+import * as Barra from './ui/barra.js';
 import * as Ingesta from './nucleo/ingesta.js';
 import * as Filtro from './nucleo/filtrado.js';
 import * as Export from './nucleo/exportar.js';
@@ -18,7 +21,8 @@ import * as Base from './nucleo/mapas-base.js';
 import { resumir, frasePrincipal } from './nucleo/resumen.js';
 import { diaDe } from './nucleo/tiempo.js';
 import { VERSION_APP, VERSION_MOTOR, selloProcedencia } from './nucleo/version.js';
-import { LECTURA, TIPOS_CIERRE, simbologiaDe } from './nucleo/modelo.js';
+import { LECTURA, TIPOS_CIERRE, simbologiaDe, muestraSvg,
+  SIMBOLOGIA_COORDINACION } from './nucleo/modelo.js';
 import { calcularRelaciones, VERSION_REGLAS } from '../motor/src/nucleo/index.js';
 import { caja as cajaDeGeometria } from '../motor/src/geo/geometria.js';
 
@@ -120,7 +124,7 @@ function reiniciar() {
   Object.assign(estado, {
     fuentes: [], filas: [], relaciones: [], noEvaluables: [], porId: new Map(),
     archivos: [], analisis: null, visibles: [], relVisibles: [],
-    seleccionado: null, instanteRecorrido: null, nombreProyecto: '',
+    seleccionado: null, relacionSeleccionada: null, instanteRecorrido: null, nombreProyecto: '',
   });
   $('listaFuentes').innerHTML = '';
   $('cuentaFuentes').textContent = '0';
@@ -497,6 +501,7 @@ function pintarTodo(ms, extra = null) {
     if (rechazados.length) (extra.notas ??= []).push(...rechazados);
   }
   Controles.montarFiltros(estado.filas, aplicarFiltros);
+  montarEspacioDeTrabajo();
   Controles.montarRecorrido(estado.filas, (instante) => {
     estado.instanteRecorrido = instante;
     aplicarFiltros();
@@ -514,6 +519,192 @@ function pintarTodo(ms, extra = null) {
     estado.filas.filter((x) => (x.avisos ?? []).length));
 
   $('panelResumen').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ═══════════════════ ESPACIO DE TRABAJO (Etapa 3) ═══════════════════
+ *
+ * Tres piezas que antes no existian y que cambian como se usa la herramienta:
+ *
+ *   BARRA DE TRABAJO  buscar, periodo, municipio y contrato, siempre a la
+ *                     vista. Lo demas, detras de «Mas filtros».
+ *   PANEL DE CAPAS    que se dibuja y cuanto hay de cada cosa, sin tener que
+ *                     encender y apagar para averiguarlo.
+ *   FICHA LATERAL     que hay seleccionado, con jerarquia.
+ */
+
+/** Columnas visibles de la tabla de PMT. Empieza por las basicas. */
+let columnasPmt = [...Tablas.COLUMNAS_PMT_BASICAS];
+
+/**
+ * Selector de columnas. Pocas de entrada, todas disponibles: la tabla tiene que
+ * caber en la pantalla sin desplazamiento horizontal, y a la vez no puede
+ * esconder informacion que alguien necesite.
+ */
+function montarSelectorColumnas() {
+  const caja = $('barraTablaPmt');
+  if (!caja || caja.dataset.listo) return;
+  caja.dataset.listo = '1';
+  caja.innerHTML = `<details class="mini-campo"><summary style="cursor:pointer">Columnas</summary>
+    <div id="columnasPmtMenu" style="margin-top:8px"></div></details>
+    <span class="pista-campo">Pulse una fila para ver ese PMT en el mapa.</span>`;
+  const menu = $('columnasPmtMenu');
+  menu.innerHTML = Tablas.COLUMNAS_PMT_TODAS.map((c) =>
+    `<label style="display:inline-block;min-width:170px;font-size:.84rem;padding:2px 0">
+      <input type="checkbox" data-col="${esc(c.clave)}"${columnasPmt.includes(c.clave) ? ' checked' : ''}>
+      ${esc(c.titulo)}</label>`).join('');
+  for (const inp of menu.querySelectorAll('input[data-col]')) {
+    inp.onchange = () => {
+      const k = inp.dataset.col;
+      if (inp.checked) { if (!columnasPmt.includes(k)) columnasPmt.push(k); }
+      else columnasPmt = columnasPmt.filter((c) => c !== k);
+      // Nunca cero columnas: una tabla sin columnas no es una tabla.
+      if (!columnasPmt.length) { columnasPmt = ['frente']; inp.checked = inp.dataset.col === 'frente'; }
+      Tablas.pintarPmts(estado.visibles, { onFila: seleccionar, seleccionado: estado.seleccionado, columnas: columnasPmt });
+    };
+  }
+}
+
+function montarEspacioDeTrabajo() {
+  mostrar('barraTrabajo', true);
+  montarSelectorColumnas();
+
+  // Buscador general. Se sincroniza con el filtro de texto del panel grande:
+  // son el MISMO filtro, y tener dos cajas que no se hablan seria una trampa.
+  const buscar = $('buscarGlobal');
+  if (buscar && !buscar.dataset.listo) {
+    buscar.dataset.listo = '1';
+    buscar.oninput = (e) => {
+      Controles.fijarFiltros({ ...Controles.actuales(), texto: e.target.value });
+      const t = $('fTexto'); if (t) t.value = e.target.value;
+      aplicarFiltros();
+    };
+  }
+
+  // Filtros rapidos de la barra.
+  const f = Controles.actuales();
+  Barra.montarRapidos({
+    municipio: Filtro.opcionesDe(estado.filas, 'municipio'),
+    contrato: Filtro.opcionesDe(estado.filas, 'contrato'),
+  }, f, (cambio) => {
+    Controles.fijarFiltros({ ...Controles.actuales(), ...cambio });
+    Controles.montarFiltros(estado.filas, aplicarFiltros);
+    aplicarFiltros();
+  });
+
+  // Panel de filtros completo: se despliega, no ocupa sitio permanentemente.
+  const mas = $('btnMasFiltros');
+  if (mas && !mas.dataset.listo) {
+    mas.dataset.listo = '1';
+    mas.onclick = () => {
+      const abierto = mas.getAttribute('aria-expanded') === 'true';
+      mas.setAttribute('aria-expanded', String(!abierto));
+      mostrar('panelFiltros', !abierto);
+      if (!abierto) $('panelFiltros').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+  }
+  const cerrar = $('btnCerrarFiltros');
+  if (cerrar && !cerrar.dataset.listo) {
+    cerrar.dataset.listo = '1';
+    cerrar.onclick = () => {
+      mostrar('panelFiltros', false);
+      $('btnMasFiltros')?.setAttribute('aria-expanded', 'false');
+    };
+  }
+
+  // Contexto del mapa.
+  const ctx = $('selContexto');
+  if (ctx && !ctx.dataset.listo) {
+    ctx.dataset.listo = '1';
+    ctx.value = Mapa.contextoActual();
+    ctx.onchange = (e) => { Mapa.fijarContexto(e.target.value); aplicarFiltros(); };
+  }
+
+  // Panel de capas.
+  Capas.montar(cuentasDeCapas(), () => aplicarFiltros());
+
+  const comprobar = $('btnComprobarCarto');
+  if (comprobar && !comprobar.dataset.listo) {
+    comprobar.dataset.listo = '1';
+    comprobar.onclick = () => abrirComprobacionCartografica();
+  }
+}
+
+/**
+ * COMPROBACION CARTOGRAFICA.
+ *
+ * ══ POR QUE ES UNA HERRAMIENTA Y NO UNA CORRECCION ════════════════════════
+ *
+ * A mucho zoom, algunos trazados parecen desplazados respecto de los ejes de
+ * via del mapa de fondo. La reaccion equivocada seria mover la geometria para
+ * que cuadre: eso falsifica el dato y ademas cambia las distancias, que es
+ * justo lo que el producto mide.
+ *
+ * Se comprobo numericamente que entre el KMZ y Leaflet NO hay ninguna
+ * transformacion que pueda introducir metros de error: las coordenadas llegan
+ * al mapa exactamente como vienen en el archivo (43 vertices comprobados, 0
+ * grados de perdida). Asi que, si se ve desfase, o esta en el dato de origen o
+ * esta en el mapa de fondo.
+ *
+ * Esta herramienta permite distinguirlo SIN salir de la aplicacion: enseña las
+ * coordenadas exactas del trazado, cuantos metros mide un pixel al zoom actual,
+ * y deja medir la separacion aparente pulsando sobre el eje de la via. Si esa
+ * medida CAMBIA al cambiar de fondo, el desfase es del fondo. Si no cambia, es
+ * del dato.
+ */
+function abrirComprobacionCartografica() {
+  const pmt = estado.seleccionado ? estado.porId.get(estado.seleccionado) : null;
+  if (!pmt) {
+    return avisar('Para comprobar la cartografía, <b>seleccione antes un PMT</b> ' +
+      '(en el mapa o en la tabla). La comprobación se hace sobre un trazado concreto.', 'atencion');
+  }
+  const info = Mapa.medirDesfase(pmt);
+  avisar(
+    `<b>Comprobación cartográfica de «${esc(pmt.frente ?? pmt.id)}»</b><br>` +
+    `<small class="mono">Primer vértice: ${esc(info.primerVertice)}</small><br>` +
+    `Al zoom actual (${esc(info.zoom)}), <b>1 píxel = ${esc(info.metrosPorPixel.toFixed(2))} m</b>. ` +
+    `Un desplazamiento aparente de 5 píxeles serían ${esc((info.metrosPorPixel * 5).toFixed(1))} m.<br>` +
+    `<b>Cómo comprobarlo:</b> acerque el mapa al trazado y <b>cambie el fondo</b> entre Calles y Satélite. ` +
+    `Si el trazado se mueve respecto de la vía <b>al cambiar de fondo</b>, el desfase es del mapa de fondo, ` +
+    `no de su dato. Las coordenadas llegan al mapa exactamente como vienen en el KMZ: ` +
+    `<b>no se corrigen geometrías para que cuadren con un fondo.</b>`, 'atencion');
+}
+
+/** Cuantos hay de cada cosa, para que el panel de capas se lea sin tocarlo. */
+function cuentasDeCapas() {
+  const vis = estado.visibles ?? [];
+  const rel = estado.relVisibles ?? [];
+  const porCierre = {};
+  for (const t of [...TIPOS_CIERRE, '(sin dato)']) porCierre[t] = 0;
+  for (const x of vis) {
+    const k = String(x.tipoCierre ?? '').toLowerCase();
+    porCierre[TIPOS_CIERRE.includes(k) ? k : '(sin dato)']++;
+  }
+  const aLaVez = rel.filter((r) => r.hayTraslapeTemporal).length;
+  return {
+    pmts: vis.length,
+    porCierre,
+    accesos: porCierre['ingreso y salida'],
+    coincidencias: rel.length - aLaVez,
+    articulaciones: aLaVez,
+  };
+}
+
+/** Pinta la ficha de lo que este seleccionado: un PMT, una relacion o nada. */
+function pintarFicha() {
+  const caja = $('fichaLateral');
+  if (!caja) return;
+  const titulo = $('tituloFicha');
+  if (estado.relacionSeleccionada) {
+    if (titulo) titulo.textContent = 'Relación seleccionada';
+    caja.innerHTML = Ficha.fichaRelacion(estado.relacionSeleccionada, estado.porId, {
+      modelo: CONFIG.modeloEspacial ?? 'minima',
+      radio: CONFIG.radioInfluenciaMetros ?? 120,
+    });
+    return;
+  }
+  const pmt = estado.seleccionado ? estado.porId.get(estado.seleccionado) : null;
+  if (titulo) titulo.textContent = pmt ? 'PMT seleccionado' : 'Selección';
+  caja.innerHTML = Ficha.fichaPmt(pmt, { relaciones: estado.relVisibles ?? [], porId: estado.porId });
 }
 
 /* ═════════════════════ RESUMEN: UN MODELO, DOS ALCANCES ═════════════════════
@@ -714,10 +905,15 @@ function aplicarFiltros() {
     if (fuera > 0) pista.innerHTML = `<i class="muestra" style="background:#b6bcc1"></i>` +
       `${num(fuera)} fuera de los filtros (se dibujan en gris, no entran en las cifras)`;
   }
-  Mapa.pintarRelaciones(relVisibles, $('verRelaciones').checked);
+  // QUE RELACIONES SE DIBUJAN lo decide el panel de capas, no un unico
+  // interruptor. Y la capa tecnica de medicion exacta va aparte: era la que
+  // llenaba el mapa de triangulos azules.
+  const capas = Capas.capasActivas();
+  Mapa.pintarRelaciones(relVisibles, capas.medicion, capas);
 
-  Tablas.pintarPmts(visibles, { onFila: seleccionar, seleccionado: estado.seleccionado });
-  Tablas.pintarRelaciones(relVisibles, { onFila: (r) => Mapa.irARelacion(r) });
+  Tablas.pintarPmts(visibles, { onFila: seleccionar, seleccionado: estado.seleccionado, columnas: columnasPmt });
+  Tablas.pintarDocumental(visibles, { onFila: seleccionar });
+  Tablas.pintarRelaciones(relVisibles, { onFila: (r) => inspeccionar(r) });
 
   // UNA RELACION SE VE SI AL MENOS UNO DE SUS DOS EXTREMOS ESTA VISIBLE.
   //
@@ -741,6 +937,26 @@ function aplicarFiltros() {
   pintarTarjetas();
   pintarAlcancePestana();
   pintarAlcanceExportar();
+
+  // BARRA DE TRABAJO: los chips son la version compacta del invariante «ningun
+  // filtro activo sin su control visible». Con el panel grande cerrado, son
+  // ellos los que lo cumplen.
+  Barra.pintarChips(f, (campo, valor) => {
+    const actual = Controles.actuales();
+    if (campo === '*') { Controles.reiniciarEstado(); }
+    else if (valor === null) {
+      Controles.fijarFiltros({ ...actual, [campo]: Array.isArray(actual[campo]) ? [] : (campo === 'texto' ? '' : null) });
+    } else {
+      Controles.fijarFiltros({ ...actual, [campo]: (actual[campo] ?? []).filter((v) => v !== valor) });
+    }
+    const t = $('buscarGlobal'); if (t) t.value = Controles.actuales().texto ?? '';
+    Controles.montarFiltros(estado.filas, aplicarFiltros);
+    montarEspacioDeTrabajo();
+    aplicarFiltros();
+  });
+  Barra.pintarCuenta(visibles.length, estado.filas.length);
+  Capas.actualizarCuentas(cuentasDeCapas());
+  pintarFicha();
   // Y si hay un informe en pantalla, deja de corresponder: se marca.
   revisarInforme('Ha cambiado lo que se está viendo (filtros o día del recorrido).');
 
@@ -748,13 +964,38 @@ function aplicarFiltros() {
   $('cuentaRel').textContent = num(relVisibles.length);
   $('cuentaNoEval').textContent = num(noEvalVisibles.length);
   $('cuentaCal').textContent = num(estado.archivos.length);
+  $('cuentaDoc').textContent = num(visibles.filter((x) => !x.documental?.completo).length);
   mostrar('pestNoEval', noEvalVisibles.length > 0 || estado.noEvaluables.length > 0);
 }
 
 function seleccionar(id) {
   estado.seleccionado = id;
+  estado.relacionSeleccionada = null;
+  Mapa.limpiarZonas();
+  // La zona de influencia del PMT seleccionado se enseña siempre: es lo que
+  // explica su alcance real, y verla solo al inspeccionar una relacion obligaba
+  // a buscar una relacion para entender un PMT.
+  const pmt = estado.porId.get(id);
+  if (pmt) Mapa.pintarZonas([pmt], CONFIG.radioInfluenciaMetros ?? 120);
   Mapa.irA(id);
-  Tablas.pintarPmts(estado.visibles, { onFila: seleccionar, seleccionado: id });
+  Tablas.pintarPmts(estado.visibles, { onFila: seleccionar, seleccionado: id, columnas: columnasPmt });
+  pintarFicha();
+}
+
+/**
+ * Inspecciona una relacion: los dos PMT, sus zonas y la superposicion.
+ *
+ * Es la respuesta a «por que estan relacionados estos dos», y se contesta
+ * enseñando lo que la produce, no una linea entre dos puntos.
+ */
+function inspeccionar(rel) {
+  estado.relacionSeleccionada = rel;
+  estado.seleccionado = null;
+  Mapa.inspeccionarRelacion(rel, {
+    radio: CONFIG.radioInfluenciaMetros ?? 120,
+    verMedicion: Capas.capasActivas().medicion,
+  });
+  pintarFicha();
 }
 
 let pestanaActual = 'pmt';
@@ -762,7 +1003,7 @@ let pestanaActual = 'pmt';
 function irAPestana(cual) {
   pestanaActual = cual;
   for (const b of $$('.pestanas button')) b.setAttribute('aria-selected', String(b.dataset.pest === cual));
-  for (const p of ['pmt', 'rel', 'noeval', 'cal']) mostrar('pest_' + p, p === cual);
+  for (const p of ['pmt', 'rel', 'doc', 'noeval', 'cal']) mostrar('pest_' + p, p === cual);
   pintarAlcancePestana();
 }
 
@@ -882,21 +1123,26 @@ export function verInforme() {
 /* ───────────────────────── Arranque ───────────────────────── */
 
 function conectarResto() {
-  $('verRelaciones').onchange = () => Mapa.pintarRelaciones(estado.relVisibles, $('verRelaciones').checked);
   $('btnEncuadrar').onclick = () => Mapa.encuadrar();
   for (const b of $$('.pestanas button')) b.onclick = () => irAPestana(b.dataset.pest);
   // Leyenda del mapa, generada desde la misma simbologia que usa el dibujo.
+  // LEYENDA: dibuja la MISMA muestra que el mapa, no un cuadrado de color. Si
+  // la leyenda y el mapa se dibujan por caminos distintos, acaban diciendo
+  // cosas distintas; con `muestraSvg` sale de la misma simbologia.
   $('leyendaMapa').innerHTML =
     [...TIPOS_CIERRE, '(sin dato)'].map((t) => {
       const s = simbologiaDe(t);
-      return `<span><i class="muestra" style="background:${s.color}"></i>${esc(s.etiqueta)}</span>`;
+      return `<span title="${esc(s.ayuda)}">${muestraSvg(t, { ancho: 34, alto: 14 })} ${esc(s.etiqueta)}</span>`;
     }).join('') +
-    `<span><i class="muestra" style="background:#c62828"></i>Se tocan</span>` +
-    `<span><i class="muestra" style="background:#1565c0"></i>Cerca, sin tocarse</span>` +
-    `<span><i class="muestra" style="background:#6a1b9a"></i>No se pudo analizar</span>` +
-    `<span class="pista-campo">Línea discontinua = no coinciden en el tiempo</span>` +
+    `<span><i class="muestra" style="background:${SIMBOLOGIA_COORDINACION.zona.color};opacity:.35"></i>Zona de influencia (120 m)</span>` +
+    `<span><i class="muestra" style="background:${SIMBOLOGIA_COORDINACION.superposicion.color};opacity:.6"></i>Zonas que se superponen</span>` +
     `<span id="pistaFueraFiltro" class="oculto"></span>`;
 }
+
+// Punto de observacion para las pruebas de navegador. El mapa dibuja en un
+// lienzo, asi que sus formas no son elementos del DOM: sin esto no habria
+// manera de comprobar desde fuera que una capa se apago de verdad.
+if (typeof window !== 'undefined') window.__pmtDiagnostico = () => Mapa.contarDibujados();
 
 conectarCarga();
 conectarExportaciones();
