@@ -1585,3 +1585,103 @@ test('EDITOR: «Pendiente» se avisa y NUNCA se guarda como si fuera el código'
   assert.deepEqual(p.erroresJs, []);
   await p.close();
 });
+
+/* ═══════════ TAREAS QUE FALTABAN Y VOCABULARIO OPERATIVO (Etapa 3) ═══════════ */
+
+test('TAREA B: «qué está abierto un día concreto», escribiendo la fecha', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_DOC]);
+
+  // Paso unico: escribir el dia. No hay que arrastrar la barra hasta acertar.
+  await p.fill('#irAFecha', '2026-06-28');
+  await p.waitForTimeout(600);
+  const viva = await txt(p, '#fechaViva');
+  assert.ok(viva.includes('2026-06-28'), 'la fecha viva se ve en grande: ' + viva);
+
+  // Ese dia solo esta vigente DOC-SIN-NADA (del 10 al 30); los otros ya cerraron.
+  assert.equal(await txt(p, '#cuentaPmt'), '1', 'el día filtra de verdad, no solo pinta');
+  const tabla = await txt(p, '#pest_pmt');
+  assert.ok(tabla.includes('DOC-SIN-NADA'), tabla.slice(0, 200));
+  assert.ok(!tabla.includes('DOC-COMPLETO'), 'lo que no está vigente ese día no puede salir');
+
+  // Y volver a todo es un solo boton.
+  await p.click('#btnTodoTiempo');
+  await p.waitForTimeout(400);
+  assert.equal(await txt(p, '#cuentaPmt'), '3');
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('TAREA G: el informe sirve para una reunión sin explicar nada antes', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B, KMZ_DOC]);
+  await p.click('#expInforme');
+  await p.waitForSelector('#panelInforme:not(.oculto)', { timeout: 20000 });
+  const inf = await txt(p, '#informe');
+
+  // 1. Responde la pregunta operativa antes que los metros.
+  assert.ok(inf.includes('articulación requerida'), 'la cifra operativa encabeza el informe');
+  assert.ok(inf.includes('coincidencia espacial'), inf.slice(0, 400));
+  assert.ok(/Cómo leer las dos primeras cifras/.test(inf), 'y explica qué significan, ahí mismo');
+
+  // 2. Declara con QUE criterio se saco, y que el candidato no esta aplicado.
+  assert.ok(/no pasa de 120 m|zonas de influencia/.test(inf), 'declara el criterio vigente');
+  assert.ok(/pendiente de validación humana/i.test(inf),
+    'el modelo candidato se nombra como candidato, no como vigente');
+
+  // 3. Lleva el seguimiento documental, con «Pendiente» como ESTADO.
+  assert.ok(inf.includes('Seguimiento documental'), 'el informe trae la documentación');
+  assert.ok(/la casilla está vacía/.test(inf),
+    'y dice que Pendiente significa vacío, no una palabra escrita');
+  assert.ok(inf.includes('RES-1001-2026') || inf.includes('2/3') || inf.includes('1/3'),
+    'con los códigos reales o el resumen n/3');
+
+  // 4. Sigue sin clasificar criticidad, y lo dice.
+  assert.ok(inf.includes('No asigna niveles de criticidad'));
+  assert.ok(/vocabulario provisional/i.test(inf),
+    'el vocabulario operativo se presenta como provisional');
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('VOCABULARIO: la lectura operativa se deduce de los hechos, y se ve al lado', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+
+  // El glosario va pegado a las cifras, no escondido en una ayuda.
+  const glos = await txt(p, '#glosarioOperativo');
+  assert.ok(/Articulación requerida/.test(glos), glos);
+  assert.ok(/no son un nivel de criticidad/.test(glos), glos);
+
+  // En la tabla, la lectura NO sustituye a los hechos: las tres columnas salen.
+  await p.click('[data-pest="rel"]');
+  await p.waitForTimeout(400);
+  const cab = await p.$$eval('#tablaRel thead th', (n) => n.map((x) => x.textContent.trim()));
+  assert.ok(cab.some((c) => /Lectura/.test(c)), JSON.stringify(cab));
+  assert.ok(cab.some((c) => /En el espacio/.test(c)), JSON.stringify(cab));
+  assert.ok(cab.some((c) => /En el tiempo/.test(c)), JSON.stringify(cab));
+
+  // Y cada lectura cuadra con sus dos hechos, fila a fila.
+  // Se leen por CABECERA, no por posición: una columna nueva no debe poder
+  // hacer que esta prueba compare la distancia con el estado temporal.
+  const iLect = cab.findIndex((c) => /Lectura/.test(c));
+  const iEsp = cab.findIndex((c) => /En el espacio/.test(c));
+  const iTie = cab.findIndex((c) => /En el tiempo/.test(c));
+  const filas = await p.$$eval('#tablaRel tbody tr', (n, idx) => n.map((tr) => {
+    const c = [...tr.querySelectorAll('td')].map((x) => x.textContent.trim());
+    return { lectura: c[idx.l], espacio: c[idx.e], tiempo: c[idx.t] };
+  }), { l: iLect, e: iEsp, t: iTie });
+  assert.ok(filas.length > 0, 'hay relaciones que comprobar');
+  for (const f of filas) {
+    if (f.lectura === 'Articulación requerida') {
+      assert.ok(/Se tocan|Cerca/.test(f.espacio), JSON.stringify(f));
+      assert.equal(f.tiempo, 'A la vez', JSON.stringify(f));
+    }
+    if (f.lectura === 'Coincidencia espacial') {
+      assert.ok(/Se tocan|Cerca/.test(f.espacio), JSON.stringify(f));
+      assert.notEqual(f.tiempo, 'A la vez', JSON.stringify(f));
+    }
+  }
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});

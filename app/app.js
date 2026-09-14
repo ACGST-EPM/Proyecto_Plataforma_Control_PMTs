@@ -875,13 +875,19 @@ function pintarTarjetas() {
   }
 
   const t = (n, txt, clase = '') => `<div class="tarjeta ${clase}"><div class="n">${num(n)}</div><div class="t">${txt}</div></div>`;
+  // PRIMERO LA CONSECUENCIA, DESPUES LOS HECHOS: la pregunta que se hace quien
+  // coordina es «¿a quien tengo que convocar?», y esa la responde la lectura
+  // operativa. Los metros y los dias siguen ahi, al lado, para sustentarla.
+  // Las dos lecturas son EXCLUYENTES entre si; el orden no prioriza nada.
   $('tarjetas').innerHTML =
+    t(res.articulacion, 'articulación requerida', res.articulacion ? 'nar' : 'gris') +
+    t(res.coincidenciaEspacial, 'coincidencia espacial', res.coincidenciaEspacial ? 'azul' : 'gris') +
+    t(res.espacialNoEval + res.temporalNoEval, 'no se pudieron analizar', (res.espacialNoEval + res.temporalNoEval) ? 'rojo' : 'gris') +
     t(res.pmts, res.filtrado ? 'PMT visibles' : 'PMT encontrados', 'verde') +
     t(res.contratos, 'contratos') +
-    t(res.relaciones, 'relaciones entre contratos', res.relaciones ? 'azul' : '') +
+    t(res.relaciones, 'parejas con coincidencia', res.relaciones ? 'azul' : '') +
     t(res.contacto, 'llegan a tocarse', res.contacto ? 'nar' : '') +
-    t(res.aLaVez, 'coinciden en el tiempo', res.aLaVez ? 'nar' : '') +
-    t(res.espacialNoEval + res.temporalNoEval, 'no se pudieron analizar', (res.espacialNoEval + res.temporalNoEval) ? 'rojo' : 'gris');
+    t(res.aLaVez, 'coinciden en el tiempo', res.aLaVez ? 'nar' : '');
 
   // Segunda fila: los ARCHIVOS. No se mueven con los filtros y se dice.
   const ta = $('tarjetasArchivos');

@@ -21,8 +21,11 @@
  * informe que la insinuara induciria a actuar sobre una regla inexistente.
  */
 import { $, esc, num, fechaLegible, soloDia } from './dom.js';
-import { estadoEspacial, estadoTemporal, ESPACIAL, TEMPORAL,
-  ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL, simbologiaDe, TIPOS_CIERRE, LECTURA } from '../nucleo/modelo.js';
+import { estadoEspacial, estadoTemporal, lecturaOperativa, ESPACIAL, TEMPORAL, OPERATIVO,
+  ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL, ETIQUETA_OPERATIVO, EXPLICACION_OPERATIVO,
+  simbologiaDe, TIPOS_CIERRE, LECTURA } from '../nucleo/modelo.js';
+import { describirModeloEspacial } from '../../motor/src/nucleo/config.js';
+import { DOCUMENTOS, estadoDocumental } from '../../motor/src/modelo/documental.js';
 import { rangoTemporal, limitesDelDia } from '../nucleo/filtrado.js';
 import { centroDe } from './mapa.js';
 import { puntosMasCercanos } from '../../motor/src/geo/acercamiento.js';
@@ -329,15 +332,26 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
 
   // Se listan primero las que coinciden en espacio Y tiempo, luego el resto por
   // distancia. Es un ORDEN, no una clasificacion de criticidad.
-  const orden = [...relaciones].sort((a, b) => {
-    const p = (r) => (estadoEspacial(r) === ESPACIAL.CONTACTO ? 0 : 1) + (estadoTemporal(r) === TEMPORAL.COINCIDE ? 0 : 2);
-    return p(a) - p(b) || (a.distanciaMetros ?? 1e9) - (b.distanciaMetros ?? 1e9);
-  });
+  // ORDEN DE LECTURA, no de criticidad: primero lo que obliga a coordinar,
+  // porque es lo que se hace al recibir el informe. Dentro de cada grupo, por
+  // distancia, que es un hecho medido y no una opinion.
+  const PESO_OPERATIVO = {
+    [OPERATIVO.ARTICULACION_REQUERIDA]: 0,
+    [OPERATIVO.COINCIDENCIA_ESPACIAL]: 1,
+    [OPERATIVO.NO_EVALUABLE]: 2,
+    [OPERATIVO.SIN_COINCIDENCIA]: 3,
+  };
+  const porLectura = (a, b) =>
+    PESO_OPERATIVO[lecturaOperativa(a)] - PESO_OPERATIVO[lecturaOperativa(b)]
+    || (a.distanciaMetros ?? 1e9) - (b.distanciaMetros ?? 1e9);
+  const orden = [...relaciones].sort(porLectura);
   const detalle = orden.slice(0, 60);
 
   const filaRel = (r) => {
     const e = estadoEspacial(r), t = estadoTemporal(r);
+    const o = lecturaOperativa(r);
     return `<tr>
+      <td><span class="inf-op inf-op-${esc(o)}">${esc(ETIQUETA_OPERATIVO[o])}</span></td>
       <td>${esc(r.contratoA)}<br><small>${esc(r.frenteA ?? '')}</small></td>
       <td>${esc(r.contratoB)}<br><small>${esc(r.frenteB ?? '')}</small></td>
       <td class="num">${r.distanciaMetros === null || r.distanciaMetros === undefined ? 'no medible' : esc(r.distanciaMetros.toFixed(1)) + ' m'}</td>
@@ -379,10 +393,7 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
   // clasificarlas. Se limita el numero y se dice, para no producir un PDF
   // interminable.
   const MAX_DETALLE = 12;
-  const paraDetalle = [...relaciones].sort((a, b) => {
-    const p = (r) => (estadoEspacial(r) === ESPACIAL.CONTACTO ? 0 : 1) + (estadoTemporal(r) === TEMPORAL.COINCIDE ? 0 : 2);
-    return p(a) - p(b) || (a.distanciaMetros ?? 1e9) - (b.distanciaMetros ?? 1e9);
-  }).slice(0, MAX_DETALLE);
+  const paraDetalle = [...relaciones].sort(porLectura).slice(0, MAX_DETALLE);
 
   const html = `
   <div class="inf-portada">
@@ -394,23 +405,49 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
     <div class="inf-fecha">${esc(new Date().toLocaleString('es-CO'))}</div>
   </div>
 
+  <!-- PRIMERO LA CONSECUENCIA, DESPUES LOS HECHOS. Quien lee el informe decide
+       a quien convocar; los metros y los dias los necesita despues, para
+       sustentar esa decision. El orden no es una clasificacion de criticidad:
+       las dos lecturas son excluyentes, no una mas grave que la otra. -->
   <div class="inf-kpis">
+    ${tarjeta(resumen.articulacion, 'articulación requerida', resumen.articulacion ? 'nar' : 'gris')}
+    ${tarjeta(resumen.coincidenciaEspacial, 'coincidencia espacial', resumen.coincidenciaEspacial ? 'azul' : 'gris')}
+    ${tarjeta(resumen.espacialNoEval + resumen.temporalNoEval, 'no se pudieron analizar',
+      (resumen.espacialNoEval + resumen.temporalNoEval) ? 'rojo' : 'gris')}
     ${tarjeta(resumen.pmts, 'PMT analizados', 'verde')}
+  </div>
+  <div class="inf-kpis inf-kpis-hechos">
     ${tarjeta(resumen.contratos, 'contratos')}
     ${tarjeta(resumen.municipios, 'municipios')}
-    ${tarjeta(resumen.relaciones, 'relaciones entre contratos', resumen.relaciones ? 'azul' : '')}
+    ${tarjeta(resumen.relaciones, 'parejas con coincidencia', resumen.relaciones ? 'azul' : '')}
     ${tarjeta(resumen.contacto, 'llegan a tocarse', resumen.contacto ? 'nar' : '')}
     ${tarjeta(resumen.aLaVez, 'coinciden en el tiempo', resumen.aLaVez ? 'nar' : '')}
     ${tarjeta(contactoYTiempo.length, 'se tocan Y coinciden', contactoYTiempo.length ? 'nar' : '')}
-    ${tarjeta(resumen.espacialNoEval + resumen.temporalNoEval, 'no se pudieron analizar',
-      (resumen.espacialNoEval + resumen.temporalNoEval) ? 'rojo' : 'gris')}
+  </div>
+
+  <div class="inf-nota">
+    <b>Cómo leer las dos primeras cifras.</b>
+    <b>${esc(ETIQUETA_OPERATIVO[OPERATIVO.ARTICULACION_REQUERIDA])}</b>:
+    ${esc(EXPLICACION_OPERATIVO[OPERATIVO.ARTICULACION_REQUERIDA])}
+    <b>${esc(ETIQUETA_OPERATIVO[OPERATIVO.COINCIDENCIA_ESPACIAL])}</b>:
+    ${esc(EXPLICACION_OPERATIVO[OPERATIVO.COINCIDENCIA_ESPACIAL])}
+    Las dos se <b>deducen</b> de los hechos medidos que van debajo y del criterio espacial
+    declarado más abajo; <b>no son un nivel de criticidad</b> y no ordenan por urgencia.
   </div>
 
   <h2>Qué se analizó</h2>
   <table class="inf-tabla inf-datos">
     <tr><th>Archivos</th><td>${esc((archivos ?? []).map((a) => a.nombre).join(', ')) || '—'}</td></tr>
     <tr><th>Periodo cubierto</th><td>${rango ? `${esc(soloDia(rango.min))} a ${esc(soloDia(rango.max))}` : 'los datos no traen fechas válidas'}</td></tr>
-    <tr><th>Criterio espacial</th><td>distancia mínima real entre las geometrías, umbral de <b>${esc(config.umbralMetros)} m</b></td></tr>
+    <!-- CRITERIO ESPACIAL VIGENTE, dicho por el propio motor: si algun dia
+         cambia el modelo, el informe lo dice solo. Nunca se escribe a mano. -->
+    <tr><th>Criterio espacial</th><td>hay coincidencia cuando <b>${esc(describirModeloEspacial(config))}</b></td></tr>
+    <tr><th>Modelo espacial</th><td>${config.modeloEspacial === 'zonasDeInfluencia'
+      ? 'zonas de influencia de señalización'
+      : 'distancia mínima entre trazados'} — <b>el vigente</b>.
+      Existe un modelo <b>candidato</b> (zonas de influencia de ${esc(config.radioInfluenciaMetros ?? 120)} m,
+      que admite hasta ${esc(2 * (config.radioInfluenciaMetros ?? 120))} m de separación)
+      <b>pendiente de validación humana</b>: no está aplicado y no ha cambiado ninguna cifra de este informe.</td></tr>
     <tr><th>Criterio temporal</th><td>fecha <b>y hora</b> reales, coincidencia mínima exigida de ${esc(config.toleranciaMinutos)} minutos</td></tr>
     <tr><th>Regla invariante</th><td>dos frentes del <b>mismo contrato</b> nunca se consideran interferencia entre contratos</td></tr>
     <tr><th>Filtros aplicados</th><td>${esc(textoFiltros(filtros, diaRecorrido))}</td></tr>
@@ -430,8 +467,10 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
 
   <div class="inf-nota">
     Este informe presenta <b>hechos medidos</b>: a qué distancia están los trazados, si llegan a
-    tocarse y si coinciden en el tiempo. <b>No asigna niveles de criticidad</b>, porque esa
-    clasificación operativa todavía no está definida.
+    tocarse y si coinciden en el tiempo. La <b>lectura operativa</b> («articulación requerida»,
+    «coincidencia espacial») se deduce de esos hechos y es <b>vocabulario provisional</b>: nombra la
+    consecuencia inmediata, no una prioridad. <b>No asigna niveles de criticidad</b> —crítico, alto,
+    medio—, porque esa clasificación exige un criterio operativo que EPM todavía no ha aprobado.
   </div>
 
   <h2>Mapa de los trazados analizados</h2>
@@ -446,10 +485,10 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
 
   <h2>Relaciones detectadas</h2>
   ${relaciones.length ? `
-  <p class="inf-p">Se listan ordenadas poniendo primero las que coinciden en el espacio y en el tiempo.
+  <p class="inf-p">Se listan poniendo primero las que <b>exigen articulación</b>, y dentro de cada grupo, por distancia.
   ${orden.length > detalle.length ? `Se muestran las ${detalle.length} primeras de ${num(orden.length)}; el listado completo está en la exportación a Excel.` : ''}</p>
   <table class="inf-tabla">
-    <thead><tr><th>Contrato A</th><th>Contrato B</th><th>Distancia</th><th>En el espacio</th><th>En el tiempo</th><th>Coinciden</th><th>Días</th></tr></thead>
+    <thead><tr><th>Lectura</th><th>Contrato A</th><th>Contrato B</th><th>Distancia</th><th>En el espacio</th><th>En el tiempo</th><th>Coinciden</th><th>Días</th></tr></thead>
     <tbody>${detalle.map(filaRel).join('')}</tbody>
   </table>`
     : '<p class="inf-p">No se detectó ninguna relación entre contratos distintos con los criterios y filtros aplicados.</p>'}
@@ -458,7 +497,7 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
   <h2>Detalle cartográfico de las relaciones</h2>
   <p class="inf-p">Cada recuadro encuadra los dos trazados implicados y marca <b>el punto exacto donde
   más se aproximan</b>. ${relaciones.length > MAX_DETALLE
-    ? `Se muestran ${MAX_DETALLE} de ${num(relaciones.length)} relaciones, ordenadas poniendo primero las que se tocan y coinciden en el tiempo.`
+    ? `Se muestran ${MAX_DETALLE} de ${num(relaciones.length)} relaciones, poniendo primero las que exigen articulación.`
     : `Se muestran todas las relaciones encontradas.`}
   El orden <b>no es una clasificación de criticidad</b>.</p>
   <div class="inf-detalles">${paraDetalle.map((r) => mapaDetalle(r, porId)).join('')}</div>` : ''}
@@ -477,6 +516,51 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
       <td><small>${esc((h.avisos ?? h.errores ?? []).join(' · ') || 'sin motivo registrado')}</small></td>
     </tr>`).join('')}</tbody>
   </table>` : ''}
+
+  <h2>Seguimiento documental</h2>
+  <!-- EL ESTADO ES DERIVADO. En ningun sitio se guarda la palabra «Pendiente»:
+       si el codigo esta vacio, el estado que se calcula es PENDIENTE. Asi un
+       texto de relleno no puede hacerse pasar por un documento tramitado. -->
+  <p class="inf-p">De los <b>${num(resumen.pmts)}</b> PMT de este informe,
+    <b>${num(resumen.documental?.completos ?? 0)}</b> tienen los ${DOCUMENTOS.length} documentos registrados
+    y <b>${num(resumen.documental?.sinNinguno ?? 0)}</b> no tienen ninguno.
+    «Pendiente» significa <b>que la casilla está vacía</b>, no que alguien haya escrito esa palabra.</p>
+  <table class="inf-tabla">
+    <thead><tr><th>Documento</th><th>Registrados</th><th>Pendientes</th></tr></thead>
+    <tbody>${DOCUMENTOS.map((d) => {
+      const pend = resumen.documental?.pendientePorDocumento?.[d.clave] ?? 0;
+      return `<tr><td>${esc(d.etiqueta)}</td>
+        <td class="num">${num(Math.max(0, resumen.pmts - pend))}</td>
+        <td class="num"><b>${num(pend)}</b></td></tr>`;
+    }).join('')}</tbody>
+  </table>
+  ${(() => {
+    // Se listan SOLO los que tienen algo pendiente, y con lo que ya traen: un
+    // listado de todo obligaria a buscar dentro del PDF lo que falta.
+    const pendientes = filas
+      .map((x) => ({ x, e: x.documental ?? estadoDocumental(x) }))
+      .filter((r) => !r.e.completo)
+      .slice(0, 60);
+    if (!pendientes.length) {
+      return '<p class="inf-p">Todos los PMT de este informe tienen su documentación registrada.</p>';
+    }
+    return `<table class="inf-tabla" style="margin-top:10px">
+      <thead><tr><th>Contrato</th><th>Frente</th><th>Estado</th>${
+        DOCUMENTOS.map((d) => `<th>${esc(d.etiqueta)}</th>`).join('')}</tr></thead>
+      <tbody>${pendientes.map(({ x, e }) => `<tr>
+        <td>${esc(x.contrato ?? '—')}</td><td>${esc(x.frente ?? '—')}</td>
+        <td class="num">${esc(e.resumen)}</td>
+        ${DOCUMENTOS.map((d) => {
+          // `detalle` es una LISTA en el mismo orden que DOCUMENTOS, no un mapa
+          // por clave: se busca por clave para no depender del orden.
+          const c = e.detalle.find((z) => z.clave === d.clave)?.codigo;
+          return `<td>${c ? `<small>${esc(c)}</small>` : '<span class="inf-pend">Pendiente</span>'}</td>`;
+        }).join('')}
+      </tr>`).join('')}</tbody>
+    </table>
+    ${pendientes.length < filas.filter((x) => !(x.documental ?? estadoDocumental(x)).completo).length
+      ? `<p class="inf-p">Se listan los primeros ${pendientes.length}; el listado completo está en la exportación.</p>` : ''}`;
+  })()}
 
   <h2>Calidad de los datos</h2>
   <table class="inf-tabla">
@@ -498,6 +582,10 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
     <tr><th>Aplicación</th><td>Plataforma de Control y Articulación de PMTs — análisis ejecutado en el equipo del usuario</td></tr>
     <tr><th>Motor de cálculo</th><td>motor geoespacial y temporal propio, auditado de forma independiente (Etapa 1)</td></tr>
     <tr><th>Reproducibilidad</th><td>los mismos archivos con los mismos criterios producen exactamente el mismo resultado</td></tr>
+    <tr><th>Criterio espacial aplicado</th><td>${esc(describirModeloEspacial(config))}</td></tr>
+    <tr><th>Vocabulario operativo</th><td><b>Provisional.</b> «Articulación requerida» y «coincidencia
+      espacial» son lecturas derivadas de los hechos medidos, pendientes de validación por EPM.
+      No equivalen a ningún nivel de criticidad.</td></tr>
   </table>`;
 
   $('informe').innerHTML = html;

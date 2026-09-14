@@ -8,8 +8,9 @@
  * tabla y exportarla son treinta lineas propias.
  */
 import { $, esc, num, fechaLegible } from './dom.js';
-import { estadoEspacial, estadoTemporal, ESPACIAL, TEMPORAL,
-  ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL, LECTURA, simbologiaDe } from '../nucleo/modelo.js';
+import { estadoEspacial, estadoTemporal, lecturaOperativa, ESPACIAL, TEMPORAL, OPERATIVO,
+  ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL, ETIQUETA_OPERATIVO, EXPLICACION_OPERATIVO,
+  LECTURA, simbologiaDe } from '../nucleo/modelo.js';
 
 const CLASE_ESPACIAL = {
   [ESPACIAL.CONTACTO]: 'p-contacto', [ESPACIAL.CERCANIA]: 'p-cerca',
@@ -18,6 +19,15 @@ const CLASE_ESPACIAL = {
 const CLASE_TEMPORAL = {
   [TEMPORAL.COINCIDE]: 'p-avez', [TEMPORAL.NO_COINCIDE]: 'p-otro',
   [TEMPORAL.NO_EVALUABLE]: 'p-nosabe',
+};
+// LECTURA OPERATIVA: va en su PROPIA columna, la primera, porque es la
+// pregunta que se hace quien coordina. No sustituye a las dos de hechos: las
+// tres se ven a la vez y se puede comprobar de donde sale.
+const CLASE_OPERATIVO = {
+  [OPERATIVO.ARTICULACION_REQUERIDA]: 'p-articula',
+  [OPERATIVO.COINCIDENCIA_ESPACIAL]: 'p-coincide-esp',
+  [OPERATIVO.SIN_COINCIDENCIA]: 'p-lejos',
+  [OPERATIVO.NO_EVALUABLE]: 'p-nosabe',
 };
 
 const orden = { pmt: { col: 'frente', asc: true }, rel: { col: 'distanciaMetros', asc: true } };
@@ -256,6 +266,7 @@ export function pintarDocumental(filas, { onFila } = {}) {
 }
 
 const COLS_REL = [
+  ['_operativo', 'Lectura'],
   ['contratoA', 'Contrato A'], ['frenteA', 'Frente A'], ['contratoB', 'Contrato B'], ['frenteB', 'Frente B'],
   ['distanciaMetros', 'Distancia', 'num'], ['_espacial', 'En el espacio'], ['_temporal', 'En el tiempo'],
   ['traslapeInicio', 'Coinciden desde'], ['traslapeDias', 'Dias', 'num'],
@@ -270,6 +281,7 @@ export function pintarRelaciones(relaciones, { onFila } = {}) {
 
   const conEstado = relaciones.map((r) => ({
     ...r, _espacial: ETIQUETA_ESPACIAL[estadoEspacial(r)], _temporal: ETIQUETA_TEMPORAL[estadoTemporal(r)],
+    _operativo: ETIQUETA_OPERATIVO[lecturaOperativa(r)],
   }));
   const todos = ordenar(conEstado, orden.rel.col, orden.rel.asc);
   const info = recortar(todos, 'rel');
@@ -281,8 +293,9 @@ export function pintarRelaciones(relaciones, { onFila } = {}) {
     return;
   }
   cuerpo.innerHTML = datos.map((r, i) => {
-    const e = estadoEspacial(r), t = estadoTemporal(r);
+    const e = estadoEspacial(r), t = estadoTemporal(r), o = lecturaOperativa(r);
     return `<tr data-i="${i}">
+      <td><span class="pastilla ${CLASE_OPERATIVO[o]}" title="${esc(EXPLICACION_OPERATIVO[o])}">${esc(ETIQUETA_OPERATIVO[o])}</span></td>
       <td class="mono">${esc(r.contratoA)}</td><td>${esc(r.frenteA ?? '—')}</td>
       <td class="mono">${esc(r.contratoB)}</td><td>${esc(r.frenteB ?? '—')}</td>
       <td class="num">${r.distanciaMetros === null || r.distanciaMetros === undefined

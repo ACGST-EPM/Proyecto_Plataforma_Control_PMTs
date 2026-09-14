@@ -25,7 +25,8 @@
  *            un invariante del proyecto. La procedencia va en el NOMBRE DEL
  *            ARCHIVO, que viaja con el fichero aunque se envie por correo.
  */
-import { estadoEspacial, estadoTemporal, ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL } from './modelo.js';
+import { estadoEspacial, estadoTemporal, lecturaOperativa,
+  ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL, ETIQUETA_OPERATIVO } from './modelo.js';
 import { selloProcedencia, selloEnUnaLinea, VERSION_APP, VERSION_REGLAS } from './version.js';
 
 const csvCampo = (v) => {
@@ -56,9 +57,12 @@ export function pmtsACsv(filas) {
 
 /** Relaciones detectadas, con los hechos separados y sin criticidad inventada. */
 export function relacionesACsv(relaciones, porId) {
+  // LECTURA_OPERATIVA va AL FINAL, no en medio: quien ya tenga una hoja o una
+  // macro leyendo este CSV por posicion sigue leyendo lo mismo. El CSV legado
+  // (11 columnas) no se toca en absoluto; este es otro archivo.
   const cab = ['CONTRATO_A', 'FRENTE_A', 'CONTRATO_B', 'FRENTE_B', 'DISTANCIA_M',
     'ESTADO_ESPACIAL', 'ESTADO_TEMPORAL', 'TRASLAPE_INICIO', 'TRASLAPE_FIN', 'TRASLAPE_DIAS',
-    'MUNICIPIO_A', 'MUNICIPIO_B', 'MOTIVO_NO_EVALUABLE'];
+    'MUNICIPIO_A', 'MUNICIPIO_B', 'MOTIVO_NO_EVALUABLE', 'LECTURA_OPERATIVA'];
   const cuerpo = relaciones.map((r) => {
     const a = porId?.get(r.idA), b = porId?.get(r.idB);
     return [
@@ -74,6 +78,7 @@ export function relacionesACsv(relaciones, porId) {
       [r.motivoNoEvaluableEspacial ? `distancia: ${r.motivoNoEvaluableEspacial}` : '',
        r.traslapeEvaluable === false && r.motivoSinTraslape ? `fechas: ${r.motivoSinTraslape}` : '']
         .filter(Boolean).join(' | '),
+      ETIQUETA_OPERATIVO[lecturaOperativa(r)],
     ];
   });
   return BOM + csvFilas([cab, ...cuerpo]);

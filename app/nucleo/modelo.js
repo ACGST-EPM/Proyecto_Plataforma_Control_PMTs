@@ -198,6 +198,79 @@ export const ETIQUETA_TEMPORAL = Object.freeze({
   [TEMPORAL.NO_EVALUABLE]: 'No se pudo analizar',
 });
 
+/* ═══════════ LECTURA OPERATIVA (PROVISIONAL, Etapa 3) ═══════════════════
+ *
+ * ══ QUE PROBLEMA RESUELVE ══════════════════════════════════════════════
+ *
+ * «Se tocan» y «A la vez» son HECHOS MEDIDOS: dicen que paso en el terreno y
+ * en el calendario. Pero quien coordina no pregunta eso, pregunta «¿tengo que
+ * sentar a estos dos contratistas en la misma mesa?». Esa segunda pregunta es
+ * una CONSECUENCIA OPERATIVA, y hasta ahora habia que deducirla leyendo dos
+ * columnas y cruzandolas mentalmente.
+ *
+ * ══ POR QUE NO SE LLAMA «CRITICO» ══════════════════════════════════════
+ *
+ * «Critico» afirma una prioridad, y una prioridad implica un criterio aprobado
+ * (quien cede, en cuanto tiempo, con que consecuencia) que EPM no ha definido.
+ * Este vocabulario NO prioriza: solo nombra la consecuencia inmediata.
+ *
+ *   COINCIDENCIA_ESPACIAL  los dos ocupan el mismo espacio segun el criterio
+ *                          espacial VIGENTE, pero NO a la vez. Se sabe que
+ *                          comparten sitio; no hace falta coordinar fechas.
+ *   ARTICULACION_REQUERIDA ocupan el mismo espacio Y coinciden en el tiempo.
+ *                          Hay que articular: dos obras a la vez en el mismo
+ *                          punto es lo que esta plataforma existe para detectar.
+ *   SIN_COINCIDENCIA       se midio y no comparten espacio.
+ *   NO_EVALUABLE           no se pudo comprobar. NUNCA es «sin coincidencia».
+ *
+ * ══ LO QUE NO HACE ═════════════════════════════════════════════════════
+ *
+ * No sustituye a `estadoEspacial` ni a `estadoTemporal`: se DERIVA de ellos y
+ * se presenta AL LADO, nunca en su lugar. Y depende del criterio espacial
+ * vigente, asi que en cualquier sitio donde salga tiene que salir tambien con
+ * que criterio se calculo (`describirModeloEspacial`).
+ */
+export const OPERATIVO = Object.freeze({
+  ARTICULACION_REQUERIDA: 'articulacion-requerida',
+  COINCIDENCIA_ESPACIAL: 'coincidencia-espacial',
+  SIN_COINCIDENCIA: 'sin-coincidencia',
+  NO_EVALUABLE: 'no-evaluable',
+});
+
+export const ETIQUETA_OPERATIVO = Object.freeze({
+  [OPERATIVO.ARTICULACION_REQUERIDA]: 'Articulación requerida',
+  [OPERATIVO.COINCIDENCIA_ESPACIAL]: 'Coincidencia espacial',
+  [OPERATIVO.SIN_COINCIDENCIA]: 'Sin coincidencia',
+  [OPERATIVO.NO_EVALUABLE]: 'No se pudo analizar',
+});
+
+/** Qué significa cada lectura, en una frase, para ponerlo donde se muestre. */
+export const EXPLICACION_OPERATIVO = Object.freeze({
+  [OPERATIVO.ARTICULACION_REQUERIDA]:
+    'Comparten espacio y además coinciden en el tiempo: hay que coordinar entre contratos.',
+  [OPERATIVO.COINCIDENCIA_ESPACIAL]:
+    'Comparten espacio, pero en momentos distintos: no exige coordinar fechas.',
+  [OPERATIVO.SIN_COINCIDENCIA]:
+    'Se midió y no comparten espacio con el criterio vigente.',
+  [OPERATIVO.NO_EVALUABLE]:
+    'No se pudo comprobar. No significa que no exista coincidencia.',
+});
+
+/**
+ * Deriva la lectura operativa de una relación. NO prioriza y NO clasifica
+ * criticidad: solo nombra la consecuencia de dos hechos ya medidos.
+ */
+export function lecturaOperativa(rel) {
+  const e = estadoEspacial(rel), t = estadoTemporal(rel);
+  if (e === ESPACIAL.NO_EVALUABLE) return OPERATIVO.NO_EVALUABLE;
+  if (e === ESPACIAL.FUERA) return OPERATIVO.SIN_COINCIDENCIA;
+  // Comparten espacio. Falta saber si a la vez, y «no se sabe» no es «no».
+  if (t === TEMPORAL.NO_EVALUABLE) return OPERATIVO.NO_EVALUABLE;
+  return t === TEMPORAL.COINCIDE
+    ? OPERATIVO.ARTICULACION_REQUERIDA
+    : OPERATIVO.COINCIDENCIA_ESPACIAL;
+}
+
 /**
  * Aplana un registro del motor a la vista que usa la interfaz. Deja la
  * vigencia en campos planos para poder ordenar y filtrar sin rodeos, pero

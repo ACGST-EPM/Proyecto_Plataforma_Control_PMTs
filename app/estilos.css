@@ -218,6 +218,12 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 .p-parcial  { background: var(--naranja-suave); color: var(--naranja-oscuro); border-color: #eec9a0; }
 .p-fallo    { background: var(--rojo-suave); color: var(--rojo); border-color: #f3c2bd; }
 
+/* LECTURA OPERATIVA (provisional). Se distingue del resto de pastillas por el
+   BORDE grueso, no solo por el color: en blanco y negro, o con daltonismo,
+   sigue leyendose como una categoria aparte. */
+.p-articula      { background: var(--naranja-suave); color: var(--naranja-oscuro); border: 2px solid var(--epm-naranja); }
+.p-coincide-esp  { background: var(--azul-suave); color: var(--azul); border: 2px solid var(--azul); }
+
 /* ───────────────────────── Rejilla principal ───────────────────────── */
 
 .rejilla { display: grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: start; }
@@ -448,6 +454,22 @@ details.tecnico pre {
 .inf-kpi.rojo  { border-left-color: var(--rojo); background: var(--rojo-suave); } .inf-kpi.rojo .inf-kpi-n { color: var(--rojo); }
 .inf-kpi.azul  { border-left-color: var(--azul); } .inf-kpi.azul .inf-kpi-n { color: var(--azul); }
 .inf-kpi.gris  { border-left-color: var(--gris); background: var(--gris-suave); }
+
+/* SEGUNDA FILA DE CIFRAS: los HECHOS que sustentan la lectura operativa. Van
+   mas pequenas a proposito: se leen para sustentar, no para decidir. */
+.inf-kpis-hechos { grid-template-columns: repeat(6, 1fr); margin-bottom: 14px; }
+.inf-kpis-hechos .inf-kpi-n { font-size: 1.15rem; }
+.inf-kpis-hechos .inf-kpi-t { font-size: .68rem; }
+
+/* LECTURA OPERATIVA en las tablas. Cada una lleva forma propia ademas de
+   color: un borde marcado la distingue tambien impresa en blanco y negro. */
+.inf-op { display: inline-block; padding: 1px 7px; border-radius: 9px; font-size: .72rem;
+  font-weight: 700; white-space: nowrap; border: 1.5px solid var(--gris); }
+.inf-op-articulacion-requerida { border-color: var(--epm-naranja); background: var(--naranja-suave); color: var(--naranja-oscuro); }
+.inf-op-coincidencia-espacial  { border-color: var(--azul); color: var(--azul); }
+.inf-op-no-evaluable { border-style: dashed; border-color: var(--rojo); color: var(--rojo); }
+.inf-op-sin-coincidencia { color: var(--tenue); }
+.inf-pend { color: var(--tenue); font-style: italic; font-size: .78rem; }
 
 .inf-tabla { width: 100%; border-collapse: collapse; font-size: .8rem; margin-bottom: 6px; }
 .inf-tabla th, .inf-tabla td { border: 1px solid var(--borde); padding: 5px 8px; text-align: left; vertical-align: top; }

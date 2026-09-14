@@ -5,7 +5,8 @@
  * son DOS numeros distintos y nunca se suman. Todo lo que no se pudo evaluar
  * sale con su propio contador y su propio color.
  */
-import { estadoEspacial, estadoTemporal, ESPACIAL, TEMPORAL, LECTURA } from './modelo.js';
+import { estadoEspacial, estadoTemporal, lecturaOperativa, ESPACIAL, TEMPORAL, OPERATIVO, LECTURA } from './modelo.js';
+import { resumenDocumental } from '../../motor/src/modelo/documental.js';
 
 /**
  * MODELO DE RESUMEN ÚNICO.
@@ -53,6 +54,9 @@ export function resumir(analisis, filas, relaciones, noEvaluables = [], opciones
 
   let contacto = 0, cercania = 0, aLaVez = 0, contactoALaVez = 0;
   let espacialNoEval = 0, temporalNoEval = 0;
+  // LECTURA OPERATIVA: se cuenta aqui, junto a los hechos, para que nadie la
+  // recalcule por su cuenta en el informe. Es DERIVADA, no sustituye a nada.
+  let articulacion = 0, coincidenciaEspacial = 0;
   for (const r of relaciones) {
     const e = estadoEspacial(r), t = estadoTemporal(r);
     if (e === ESPACIAL.CONTACTO) contacto++;
@@ -61,6 +65,9 @@ export function resumir(analisis, filas, relaciones, noEvaluables = [], opciones
     if (t === TEMPORAL.COINCIDE) aLaVez++;
     if (t === TEMPORAL.NO_EVALUABLE) temporalNoEval++;
     if (e === ESPACIAL.CONTACTO && t === TEMPORAL.COINCIDE) contactoALaVez++;
+    const o = lecturaOperativa(r);
+    if (o === OPERATIVO.ARTICULACION_REQUERIDA) articulacion++;
+    if (o === OPERATIVO.COINCIDENCIA_ESPACIAL) coincidenciaEspacial++;
   }
 
   const cargados = Number.isInteger(opciones.total) ? opciones.total : filas.length;
@@ -75,6 +82,12 @@ export function resumir(analisis, filas, relaciones, noEvaluables = [], opciones
     municipios: new Set(filas.map((x) => x.municipio).filter(Boolean)).size,
     relaciones: relaciones.length,
     contacto, cercania, aLaVez, contactoALaVez,
+    // Consecuencia operativa (PROVISIONAL): derivada de los dos hechos de
+    // arriba. Siempre se ensena junto al criterio espacial con el que se saco.
+    articulacion, coincidenciaEspacial,
+    // Seguimiento documental del ALCANCE: cuantos PMT tienen cada documento y
+    // cuantos no tienen ninguno. El estado PENDIENTE es derivado, nunca un dato.
+    documental: resumenDocumental(filas),
     // Los pares no evaluables llegan en su propia colección: NO están en
     // `relaciones`. Se cuentan de ahí, que es la única fuente correcta.
     espacialNoEval: espacialNoEval + (noEvaluables?.length ?? 0),
