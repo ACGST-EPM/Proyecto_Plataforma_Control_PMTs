@@ -111,6 +111,42 @@ espacial, y eso está muy lejos de 10.000 PMT.
 
 ---
 
+## 4 bis · Qué le hace a la escala el modelo de zonas de influencia (Etapa 3)
+
+Pregunta concreta: si algún día se aprueba el modelo candidato —dos PMT coinciden cuando se
+superponen sus zonas de influencia de 120 m, lo que admite hasta **240 m** de separación—, ¿el
+análisis se vuelve más lento?
+
+**Medido, misma entrada y misma semilla, solo cambiando `modeloEspacial`:**
+
+| PMT | distancia mínima (120 m) | zonas de influencia (240 m) | distancias calculadas | relaciones |
+|---:|---:|---:|---:|---:|
+| 460 | 0,30 s · 36 rel | 0,26 s · 87 rel | **103.150 = 103.150** | ×2,4 |
+| 1.000 | 1,17 s · 72 rel | 1,16 s · 203 rel | **487.500 = 487.500** | ×2,8 |
+| 2.500 | 6,9 s · 190 rel | 6,9 s · 551 rel | **3.046.870 = 3.046.870** | ×2,9 |
+| 5.000 | 26,7 s · 377 rel | 26,0 s · 1.082 rel | **12.187.500 = 12.187.500** | ×2,9 |
+
+**El tiempo no cambia** (las diferencias son ruido de medición, ±3 %), y la razón es exacta, no
+casual: el motor **mide todos los pares de todas formas**. El umbral no decide qué se calcula, solo
+qué se publica. Con la poda por cajas desactivada (§2), cambiar el umbral no puede cambiar el coste.
+
+**Lo que sí crece, y mucho, es la SALIDA: casi el triple de relaciones.** Y ese es el coste real del
+modelo candidato, porque no lo paga la máquina: lo paga quien tiene que leerlas. Pasar de 36 a 87
+relaciones en los datos de hoy no es un problema; pasar de 377 a 1.082 con 5.000 PMT sí lo es, y no
+se arregla con un índice espacial.
+
+**Consecuencia para la decisión de §3 (modelo espacial):** la pregunta «¿120 m o zonas de 120+120?»
+**no es una pregunta de rendimiento**. No hay que elegir el modelo estrecho por miedo a que el ancho
+sea lento — no lo es. Hay que elegirlo por si 240 m es o no la distancia a la que dos PMT de verdad
+necesitan coordinarse, que es una decisión de EPM y sigue **pendiente de validación humana**.
+
+Lo que sí habría que hacer si se aprueba el modelo ancho: que el producto **ordene y agrupe** las
+relaciones, no que las liste todas. La lectura operativa de §4 ya va en esa dirección — separa las
+que exigen articular de las que solo comparten espacio — y con el modelo ancho pasaría de ser una
+comodidad a ser imprescindible.
+
+---
+
 ## 5 · Memoria
 
 No es el cuello de botella y no lo será antes que el tiempo: las geometrías de los 8 KMZ ocupan

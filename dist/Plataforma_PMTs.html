@@ -676,10 +676,21 @@ svg.leaflet-image-layer.leaflet-interactive path {
    ========================================================================== */
 
 :root {
-  /* Marca EPM */
+  /* Marca EPM. Son los colores corporativos y no se tocan. */
   --epm-verde:   #009300;
   --epm-lima:    #b7c200;
   --epm-naranja: #d56b00;
+
+  /* SUPERFICIES CON TEXTO BLANCO ENCIMA.
+     Medido en el navegador: blanco sobre #009300 da 4,06:1, y el minimo AA
+     para texto normal es 4,5:1. No es un detalle esteticista — es la barra de
+     cabecera, los botones verdes y las pastillas de recuento, o sea casi todo
+     lo que se lee en esta aplicacion.
+     La marca NO cambia: #009300 se sigue usando en bordes, iconos, rellenos y
+     graficos, donde el minimo es 3:1 y lo cumple de sobra. Lo que cambia es
+     UNICAMENTE el fondo cuando lleva letras blancas encima. */
+  --verde-texto:  #007000;   /* 6,33:1 con blanco */
+  --naranja-texto: #a35200;  /* 5,58:1 con blanco */
 
   /* Derivados con contraste suficiente sobre blanco (AA) */
   --verde-oscuro:   #006b00;
@@ -700,7 +711,7 @@ svg.leaflet-image-layer.leaflet-interactive path {
   /* Neutros */
   --tinta:    #1c1e21;
   --tinta-2:  #44474b;
-  --tenue:    #6b7075;
+  --tenue:    #5f6368;   /* 6,05:1 sobre blanco; antes #6b7075 caia a 4,46 sobre las tarjetas */
   --borde:    #dcdfe3;
   --fondo:    #f5f6f7;
   --papel:    #ffffff;
@@ -726,7 +737,7 @@ body {
 /* ───────────────────────── Cabecera ───────────────────────── */
 
 .cabecera {
-  background: var(--epm-verde);
+  background: var(--verde-texto);
   color: #fff;
   padding: 14px 24px;
   border-bottom: 4px solid var(--epm-lima);
@@ -741,7 +752,7 @@ body {
 
 .marca-epm {
   font-weight: 700; font-size: 1.4rem; letter-spacing: .06em;
-  background: #fff; color: var(--epm-verde);
+  background: #fff; color: var(--verde-oscuro);
   padding: 2px 10px; border-radius: 4px;
 }
 
@@ -765,7 +776,7 @@ body {
   display: flex; align-items: center; gap: 10px;
 }
 .panel > h2 .paso {
-  background: var(--epm-verde); color: #fff;
+  background: var(--verde-texto); color: #fff;
   width: 22px; height: 22px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
   font-size: .78rem; flex: 0 0 auto;
@@ -803,9 +814,9 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
   outline: 3px solid var(--epm-lima); outline-offset: 2px;
 }
 
-.b-verde  { background: var(--epm-verde); color: #fff; }
+.b-verde  { background: var(--verde-texto); color: #fff; }
 .b-lima   { background: var(--epm-lima); color: #23270a; }
-.b-nar    { background: var(--epm-naranja); color: #fff; }
+.b-nar    { background: var(--naranja-texto); color: #fff; }
 .b-suave  { background: var(--papel); color: var(--tinta-2); border-color: var(--borde); }
 .b-suave:hover:not(:disabled) { background: var(--gris-suave); }
 .b-mini   { padding: 5px 11px; font-size: .8rem; }
@@ -864,7 +875,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible
 .alcance b { color: var(--tinta); font-weight: 700; }
 .alcance .etq-alcance {
   font-size: .74rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
-  padding: 2px 9px; border-radius: 999px; background: var(--epm-verde); color: #fff;
+  padding: 2px 9px; border-radius: 999px; background: var(--verde-texto); color: #fff;
 }
 .alcance.filtrado .etq-alcance { background: var(--azul); }
 .alcance button.enlace {
@@ -914,7 +925,7 @@ select, input[type="text"], input[type="date"], input[type="number"] {
 }
 select[multiple] { padding: 3px; min-height: 92px; }
 select[multiple] option { padding: 3px 6px; border-radius: 3px; }
-select[multiple] option:checked { background: var(--epm-verde) linear-gradient(0deg, var(--epm-verde), var(--epm-verde)); color: #fff; }
+select[multiple] option:checked { background: var(--verde-texto) linear-gradient(0deg, var(--verde-texto), var(--verde-texto)); color: #fff; }
 
 .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 
@@ -1110,7 +1121,7 @@ details.tecnico pre {
 }
 .inf-portada > div:nth-child(2) { flex: 1; }
 .inf-marca {
-  background: var(--epm-verde); color: #fff; font-weight: 700; font-size: 1.5rem;
+  background: var(--verde-texto); color: #fff; font-weight: 700; font-size: 1.5rem;
   letter-spacing: .06em; padding: 8px 14px; border-radius: 5px;
 }
 .inf-sub { margin: 3px 0 0; font-size: .85rem; color: var(--tenue); }

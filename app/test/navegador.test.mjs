@@ -1685,3 +1685,160 @@ test('VOCABULARIO: la lectura operativa se deduce de los hechos, y se ve al lado
   assert.deepEqual(p.erroresJs, []);
   await p.close();
 });
+
+/* ═══════════════════ ACCESIBILIDAD Y CALIDAD VISUAL (Etapa 3, §25) ═══════════
+ *
+ * No se revisa «a ojo»: se MIDE en el navegador real, sobre los colores que el
+ * navegador calcula de verdad, con la aplicación cargada y con datos dentro.
+ * Una revisión de accesibilidad hecha leyendo el CSS se equivoca en cuanto hay
+ * un color heredado, una transparencia o una regla que gana por especificidad.
+ */
+
+/** Contraste WCAG entre dos colores `rgb(...)` tal como los da `getComputedStyle`. */
+const CONTRASTE = `(function(){
+  const canal = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const lum = (rgb) => {
+    const m = rgb.match(/[\\d.]+/g).map(Number);
+    return 0.2126 * canal(m[0]) + 0.7152 * canal(m[1]) + 0.0722 * canal(m[2]);
+  };
+  return (a, b) => { const l1 = lum(a), l2 = lum(b);
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
+})()`;
+
+test('A11Y: el texto tiene contraste suficiente sobre su fondo real', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B, KMZ_DOC]);
+  await p.waitForTimeout(600);
+
+  // SE ABRE TODO LO QUE ESTA ESCONDIDO. Un panel cerrado no se mide, y medir
+  // solo lo que se ve al arrancar dejaba fuera el editor, el informe, los
+  // filtros y las pastillas de lectura operativa: justo lo que se anadio
+  // despues, que es donde estaria el color sin revisar.
+  await abrirFiltros(p);
+  await p.click('[data-pest="rel"]').catch(() => {});
+  await p.waitForTimeout(200);
+  await p.click('#btnNuevoPmt').catch(() => {});
+  await p.waitForTimeout(300);
+  await p.click('#expInforme').catch(() => {});
+  await p.waitForSelector('#panelInforme:not(.oculto)', { timeout: 20000 }).catch(() => {});
+  await p.waitForTimeout(500);
+
+  const medidos = await p.evaluate(() => ({
+    informe: document.querySelectorAll('#informe *').length,
+    editor: document.querySelectorAll('#panelEditor .campo').length,
+    filtros: document.querySelectorAll('#panelFiltros *').length,
+    operativas: document.querySelectorAll('.p-articula, .p-coincide-esp, .inf-op').length,
+  }));
+  // Si un panel no se abrio, esta prueba estaria dando por buenos colores que
+  // no ha mirado. Se exige que haya contenido REAL en cada uno.
+  assert.ok(medidos.informe > 50, 'el informe no se abrió: ' + JSON.stringify(medidos));
+  assert.ok(medidos.editor > 5, 'el editor no se abrió: ' + JSON.stringify(medidos));
+  assert.ok(medidos.filtros > 5, 'los filtros no se abrieron: ' + JSON.stringify(medidos));
+  assert.ok(medidos.operativas > 0, 'no hay pastillas de lectura operativa que medir');
+
+  const malos = await p.evaluate((src) => {
+    const contraste = eval(src);
+    // Fondo REAL: se sube por los ancestros hasta encontrar uno opaco, que es
+    // lo que ve el ojo. Mirar solo el elemento da «transparent» y miente.
+    const fondoDe = (el) => {
+      for (let n = el; n; n = n.parentElement) {
+        const c = getComputedStyle(n).backgroundColor;
+        if (c && !/rgba\(0, 0, 0, 0\)|transparent/.test(c)) return c;
+      }
+      return 'rgb(255, 255, 255)';
+    };
+    const fallos = [];
+    for (const el of document.querySelectorAll('body *')) {
+      if (el.offsetParent === null && el.tagName !== 'BODY') continue;   // no visible
+      const propio = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+      if (!propio) continue;
+      const s = getComputedStyle(el);
+      const px = parseFloat(s.fontSize);
+      const grande = px >= 24 || (px >= 18.66 && +s.fontWeight >= 700);
+      const minimo = grande ? 3 : 4.5;
+      const c = contraste(s.color, fondoDe(el));
+      if (c < minimo) {
+        fallos.push({ etq: el.tagName + (el.id ? '#' + el.id : '') + '.' + el.className,
+          texto: el.textContent.trim().slice(0, 40), c: +c.toFixed(2), minimo, px });
+      }
+    }
+    return fallos;
+  }, CONTRASTE);
+
+  assert.deepEqual(malos, [], 'textos por debajo del contraste AA:\n' + JSON.stringify(malos, null, 1));
+  await p.close();
+});
+
+test('A11Y: se llega a todo con el teclado y el foco SE VE', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+
+  // 1. Ningún control interactivo puede quedar fuera del recorrido del tabulador.
+  const fuera = await p.$$eval(
+    'button:not([disabled]), select:not([disabled]), input:not([disabled]), a[href], summary, [role=tab]',
+    (n) => n.filter((e) => e.offsetParent !== null && e.tabIndex < 0)
+      .map((e) => e.tagName + (e.id ? '#' + e.id : '')));
+  assert.deepEqual(fuera, [], 'controles visibles que el tabulador no alcanza');
+
+  // 2. El foco se VE: un contorno propio, no el que quita un `outline:none`.
+  await p.focus('#btnEncuadrar');
+  const foco = await p.$eval('#btnEncuadrar', (e) => {
+    const s = getComputedStyle(e);
+    return { outline: s.outlineStyle, ancho: parseFloat(s.outlineWidth) || 0, sombra: s.boxShadow };
+  });
+  assert.ok((foco.outline !== 'none' && foco.ancho >= 2) || /rgb/.test(foco.sombra),
+    'el foco del teclado tiene que verse: ' + JSON.stringify(foco));
+
+  // 3. Cada control de formulario dice qué es: etiqueta, aria-label o título.
+  const sinNombre = await p.$$eval('select:not([disabled]), input:not([type=file])', (n) => n
+    .filter((e) => e.offsetParent !== null)
+    .filter((e) => !e.getAttribute('aria-label') && !e.title
+      && !e.closest('label') && !(e.id && document.querySelector(`label[for="${e.id}"]`)))
+    .map((e) => e.tagName + (e.id ? '#' + e.id : '')));
+  assert.deepEqual(sinNombre, [], 'controles sin nombre accesible');
+  await p.close();
+});
+
+test('A11Y: en pantalla estrecha no hay desbordamiento horizontal', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B, KMZ_DOC]);
+  await p.setViewportSize({ width: 420, height: 900 });
+  await p.waitForTimeout(700);
+
+  const desborde = await p.evaluate(() => {
+    const ancho = document.documentElement.clientWidth;
+    if (document.documentElement.scrollWidth <= ancho + 1) return null;
+    // Se nombra al culpable: «la página se desborda» no se puede arreglar.
+    const culpables = [];
+    for (const el of document.querySelectorAll('body *')) {
+      if (el.offsetParent === null) continue;
+      const r = el.getBoundingClientRect();
+      if (r.right > ancho + 1 && r.width > 8 && !el.closest('.tabla-caja')) {
+        culpables.push(el.tagName + (el.id ? '#' + el.id : '.' + el.className) + ' →' + Math.round(r.right));
+      }
+    }
+    return { scrollWidth: document.documentElement.scrollWidth, ancho, culpables: culpables.slice(0, 8) };
+  });
+  assert.equal(desborde, null, 'desbordamiento horizontal: ' + JSON.stringify(desborde, null, 1));
+  await p.close();
+});
+
+test('A11Y: un nombre larguísimo no rompe la tabla ni la ficha', saltar, async () => {
+  const LARGO = 'FRENTE_CON_UN_NOMBRE_ABSURDAMENTE_LARGO_QUE_NADIE_DEBERIA_ESCRIBIR_PERO_QUE_ALGUIEN_ESCRIBIRA_IGUAL_0123456789';
+  const kmz = escribir('largo.kmz', F.kmz([
+    F.placemark(LARGO, desc('CONTRATO_CON_NOMBRE_TAMBIEN_MUY_LARGO_PARA_PROBAR', { tipo: 'total' }),
+      F.linea([[-75.6000, 6.2000], [-75.5990, 6.2000]])),
+  ]));
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [kmz]);
+  await p.waitForTimeout(400);
+
+  const ancho = await p.evaluate(() => document.documentElement.clientWidth);
+  const scroll = await p.evaluate(() => document.documentElement.scrollWidth);
+  assert.ok(scroll <= ancho + 1, `un nombre largo desborda la página (${scroll} > ${ancho})`);
+
+  // Y el nombre sigue estando: recortarlo visualmente no puede perderlo.
+  assert.ok((await txt(p, '#pest_pmt')).includes(LARGO.slice(0, 30)));
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
