@@ -66,6 +66,7 @@
       <div id="progreso" class="frase oculto" style="margin-top:14px"></div>
       <input type="file" id="entradaAnadir" accept=".kmz,.kml" multiple hidden>
       <input type="file" id="entradaProyecto" accept=".json,.pmt.json" hidden>
+      <input type="file" id="entradaCatalogo" accept=".json" hidden>
     </div>
   </section>
 
@@ -136,6 +137,9 @@
               <span class="sep"></span>
               <button class="b-suave b-mini" id="btnEncuadrar">Ver todo</button>
               <button class="b-suave b-mini" id="btnComprobarCarto" title="Comprobar si un trazado cae donde debe">Comprobar cartografía</button>
+        <span class="sep"></span>
+        <button class="b-verde b-mini" id="btnNuevoPmt" title="Crear un PMT con los datos maestros de EPM">＋ Nuevo PMT</button>
+        <button class="b-suave b-mini oculto" id="btnEditarPmt">✎ Editar el seleccionado</button>
             </div>
             <div id="avisoMapa" class="frase atencion oculto" style="margin-bottom:10px;font-size:.86rem"></div>
             <div id="mapa"></div>
@@ -150,6 +154,12 @@
       </div>
 
     </div>
+
+    <!-- Editor de PMT: crear o corregir sin salir de la plataforma. -->
+    <section class="panel oculto no-imprimir" id="panelEditor" style="margin-top:16px">
+      <h2 id="tituloEditor">Nuevo PMT</h2>
+      <div class="cuerpo"></div>
+    </section>
 
     <!-- Panel de filtros completo: se despliega desde «Más filtros». -->
     <div class="panel oculto no-imprimir" id="panelFiltros" style="margin-top:16px">

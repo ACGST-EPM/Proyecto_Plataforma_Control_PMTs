@@ -687,3 +687,14 @@ details.tecnico pre {
   width: 100%; margin-top: 6px; padding: 5px; font: inherit; font-size: .8rem;
   border: 1px solid var(--borde); border-radius: 5px; background: var(--gris-suave); cursor: pointer;
 }
+
+/* ── Editor de PMT ── */
+.ed-rejilla { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 900px) { .ed-rejilla { grid-template-columns: 1fr; } }
+.ed-derivado { background: var(--gris-suave); border-radius: 6px; padding: 8px 10px; }
+.ed-derivado > div { display: flex; justify-content: space-between; gap: 10px; font-size: .86rem; padding: 2px 0; }
+.ed-derivado .k { color: var(--tinta-2); }
+.ed-aviso:empty { display: none; }
+.ed-linea { display: flex; gap: 7px; align-items: flex-start; font-size: .82rem; margin-top: 5px; line-height: 1.4; }
+.ed-linea small { display: block; color: var(--tenue); }
+.ed-linea .pastilla { flex: none; }

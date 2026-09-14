@@ -504,3 +504,81 @@ export function contarDibujados() {
     contexto,
   };
 }
+
+/* ═══════════════════ DIBUJO DE GEOMETRIAS (Etapa 3) ═══════════════════
+ *
+ * Lo minimo para capturar un PMT sin salir de la plataforma: pulsar en el mapa
+ * añade vertices, y segun el tipo de cierre elegido sale un punto o una linea.
+ *
+ * NO se usa ninguna libreria de dibujo. Leaflet ya da el evento de clic y la
+ * polilinea; una dependencia mas romperia la propiedad que sostiene el producto
+ * —un archivo que se abre con doble clic, sin internet— a cambio de unas
+ * cuantas lineas de codigo.
+ */
+let dibujo = null;
+
+/**
+ * Entra en modo dibujo.
+ * @param {'punto'|'linea'} tipo
+ * @param {Function} onCambio  recibe la geometria GeoJSON en cada cambio
+ */
+export function empezarDibujo(tipo, onCambio) {
+  if (!mapa) return;
+  terminarDibujo();
+  dibujo = { tipo, vertices: [], capa: L.layerGroup().addTo(mapa), onCambio };
+  mapa.getContainer().style.cursor = 'crosshair';
+  mapa.on('click', alPulsarDibujando);
+}
+
+function alPulsarDibujando(e) {
+  if (!dibujo) return;
+  const v = [e.latlng.lng, e.latlng.lat];
+  if (dibujo.tipo === 'punto') dibujo.vertices = [v];
+  else dibujo.vertices.push(v);
+  repintarDibujo();
+  dibujo.onCambio?.(geometriaDelDibujo());
+}
+
+/** Quita el ultimo vertice. Deshacer tiene que estar: se falla al pulsar. */
+export function deshacerVertice() {
+  if (!dibujo || !dibujo.vertices.length) return;
+  dibujo.vertices.pop();
+  repintarDibujo();
+  dibujo.onCambio?.(geometriaDelDibujo());
+}
+
+function repintarDibujo() {
+  if (!dibujo) return;
+  dibujo.capa.clearLayers();
+  const pts = dibujo.vertices.map((c) => [c[1], c[0]]);
+  if (pts.length > 1) {
+    L.polyline(pts, { color: '#009300', weight: 5, opacity: .9, dashArray: '8 6' }).addTo(dibujo.capa);
+  }
+  for (const [i, p] of pts.entries()) {
+    L.circleMarker(p, {
+      radius: 5, color: '#fff', weight: 2,
+      fillColor: i === pts.length - 1 ? '#d56b00' : '#009300', fillOpacity: 1,
+    }).addTo(dibujo.capa);
+  }
+}
+
+/** Geometria GeoJSON de lo dibujado, o `null` si todavia no vale. */
+export function geometriaDelDibujo() {
+  if (!dibujo || !dibujo.vertices.length) return null;
+  if (dibujo.tipo === 'punto') return { type: 'Point', coordinates: dibujo.vertices[0] };
+  // Una linea necesita dos puntos. Con uno solo NO se devuelve un punto
+  // disfrazado: se devuelve null y la validacion lo dice.
+  if (dibujo.vertices.length < 2) return null;
+  return { type: 'LineString', coordinates: dibujo.vertices.map((v) => [...v]) };
+}
+
+export function terminarDibujo() {
+  if (!mapa) return;
+  mapa.off('click', alPulsarDibujando);
+  mapa.getContainer().style.cursor = '';
+  if (dibujo?.capa) mapa.removeLayer(dibujo.capa);
+  dibujo = null;
+}
+
+export const dibujando = () => !!dibujo;
+export const verticesDibujados = () => (dibujo ? dibujo.vertices.length : 0);

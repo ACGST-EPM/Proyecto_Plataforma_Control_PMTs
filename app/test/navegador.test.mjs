@@ -1475,3 +1475,113 @@ test('SIMBOLOGIA: los tres tipos se distinguen por más que el color', saltar, a
   assert.deepEqual(p.erroresJs, []);
   await p.close();
 });
+
+/* ═══════════════════ CREAR Y EDITAR UN PMT (Etapa 3) ═══════════════════
+ *
+ * El editor es la primera parte de la aplicacion que ESCRIBE datos, no solo
+ * los lee. Tres cosas tienen que ser ciertas al abrirlo de verdad:
+ *
+ *   1. El catalogo manda: elegir el contrato DERIVA contratista y proyecto, y
+ *      limita los municipios. No se teclean, asi que no pueden divergir.
+ *   2. «Pendiente» NO es un codigo: se avisa y el dato se queda vacio.
+ *   3. Mientras falte un dato obligatorio no se puede guardar, y cuando ya no
+ *      falta, guardar recalcula TODO el analisis (no se anade "a un lado").
+ */
+
+/** Pulsa en el mapa midiendo su caja ANTES de cada clic: el editor cambia el alto. */
+async function clicMapa(p, dx, dy) {
+  // El mapa tiene que estar A LA VISTA: `mouse.click` usa coordenadas de la
+  // ventana, y abrir el editor desplaza la pagina. Se vuelve a medir en cada
+  // clic porque el alto cambia segun los avisos de validacion.
+  const caja = await p.$eval('#mapa', (m) => {
+    m.scrollIntoView({ block: 'center' });
+    const r = m.getBoundingClientRect();
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  });
+  await p.waitForTimeout(150);
+  const c2 = await p.$eval('#mapa', (m) => {
+    const r = m.getBoundingClientRect();
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  });
+  await p.mouse.click(c2.x + c2.w * dx, c2.y + c2.h * dy);
+  await p.waitForTimeout(250);
+  return caja;
+}
+
+test('EDITOR: el catalogo manda y crear un PMT recalcula todo el analisis', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  assert.equal(await txt(p, '#cuentaPmt'), '4');
+
+  await p.click('#btnNuevoPmt');
+  await p.waitForSelector('#panelEditor:not(.oculto)', { timeout: 15000 });
+
+  // 1. El contrato DERIVA contratista y proyecto, y acota los municipios.
+  await p.selectOption('#edContrato', 'CW322377');
+  await p.waitForTimeout(300);
+  const derivado = await txt(p, '.ed-derivado');
+  assert.ok(/Consorcio AMT24/.test(derivado), derivado);
+  assert.ok(/AMPLIACION_TANQUES/.test(derivado), derivado);
+  const municipios = await p.$$eval('#edMunicipio option',
+    (n) => n.map((o) => o.value).filter(Boolean));
+  assert.deepEqual(municipios, ['Medellín', 'Envigado'],
+    'solo los municipios declarados para ese contrato');
+
+  // Mientras falten datos obligatorios, guardar esta bloqueado.
+  assert.equal(await p.isDisabled('#edGuardar'), true, 'no se puede guardar a medias');
+
+  await p.selectOption('#edMunicipio', 'Medellín');
+  await p.fill('#edFrente', 'FRENTE NUEVO');
+  await p.fill('#edDireccion', 'Calle 30 con Carrera 65');
+  await p.selectOption('#edTipo', 'total');
+  await p.fill('#edInicio', '2026-03-05T07:00');
+  await p.fill('#edFin', '2026-03-25T17:00');
+  await p.waitForTimeout(250);
+
+  // 2. Sin trazado sigue sin poder guardarse: un PMT sin geometria no se ubica.
+  assert.equal(await p.isDisabled('#edGuardar'), true, 'sin trazado tampoco');
+
+  await p.click('#edDibujar');
+  await clicMapa(p, 0.45, 0.45);
+  await clicMapa(p, 0.55, 0.55);
+  const estadoGeom = await txt(p, '#edEstadoGeom');
+  assert.ok(/2/.test(estadoGeom), estadoGeom);
+
+  await p.waitForFunction(() => !document.querySelector('#edGuardar').disabled,
+    null, { timeout: 15000 });
+  assert.ok(/Todo correcto/.test(await txt(p, '#edResumenValidacion')),
+    await txt(p, '#edResumenValidacion'));
+
+  // 3. Guardar RECALCULA: el PMT nuevo entra en el analisis, no a un lado.
+  await p.click('#edGuardar');
+  await p.waitForFunction(() => document.querySelector('#cuentaPmt').textContent === '5',
+    null, { timeout: 30000 });
+  assert.ok((await txt(p, '#pest_pmt')).includes('FRENTE NUEVO'));
+  assert.ok((await txt(p, '#listaFuentes')).includes('FRENTE NUEVO')
+    || (await txt(p, '#listaFuentes')).toLowerCase().includes('plataforma'),
+  'el PMT creado aparece como una fuente mas: ' + (await txt(p, '#listaFuentes')));
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('EDITOR: «Pendiente» se avisa y NUNCA se guarda como si fuera el código', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A]);
+  await p.click('#btnNuevoPmt');
+  await p.waitForSelector('#panelEditor:not(.oculto)', { timeout: 15000 });
+
+  await p.fill('#ed_resolucionPmt', 'Pendiente');
+  await p.waitForTimeout(350);
+  const aviso = await txt(p, '[data-aviso="ed_resolucionPmt"]');
+  assert.ok(/Pendiente|no es un código|vacío/i.test(aviso),
+    'tiene que avisar de que «Pendiente» no es un código: ' + aviso);
+  assert.ok(/Atención|Revisar|Advertencia/i.test(aviso),
+    'y ser ADVERTENCIA, no error: se puede guardar igual. ' + aviso);
+
+  // Un codigo de verdad no genera ningun aviso.
+  await p.fill('#ed_resolucionPmt', 'RES-2026-0042');
+  await p.waitForTimeout(350);
+  assert.equal((await txt(p, '[data-aviso="ed_resolucionPmt"]')), '');
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});

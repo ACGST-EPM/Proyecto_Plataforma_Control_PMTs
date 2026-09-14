@@ -13,6 +13,11 @@ import * as Informe from './ui/informe.js';
 import * as Capas from './ui/capas.js';
 import * as Ficha from './ui/ficha.js';
 import * as Barra from './ui/barra.js';
+import * as Editor from './ui/editor.js';
+import * as Catalogos from './nucleo/catalogos.js';
+import { CATALOGO_EMBEBIDO } from './nucleo/catalogo-embebido.js';
+import { aplicarCatalogo } from './nucleo/validacion-pmt.js';
+import { estadoDocumental } from '../motor/src/modelo/documental.js';
 import * as Ingesta from './nucleo/ingesta.js';
 import * as Filtro from './nucleo/filtrado.js';
 import * as Export from './nucleo/exportar.js';
@@ -20,6 +25,7 @@ import * as Proyecto from './nucleo/proyecto.js';
 import * as Base from './nucleo/mapas-base.js';
 import { resumir, frasePrincipal } from './nucleo/resumen.js';
 import { diaDe } from './nucleo/tiempo.js';
+import * as Tiempo from './nucleo/tiempo.js';
 import { VERSION_APP, VERSION_MOTOR, selloProcedencia } from './nucleo/version.js';
 import { LECTURA, TIPOS_CIERRE, simbologiaDe, muestraSvg,
   SIMBOLOGIA_COORDINACION } from './nucleo/modelo.js';
@@ -622,6 +628,20 @@ function montarEspacioDeTrabajo() {
   // Panel de capas.
   Capas.montar(cuentasDeCapas(), () => aplicarFiltros());
 
+  const nuevo = $('btnNuevoPmt');
+  if (nuevo && !nuevo.dataset.listo) {
+    nuevo.dataset.listo = '1';
+    nuevo.onclick = () => abrirEditor(null);
+  }
+  const editar = $('btnEditarPmt');
+  if (editar && !editar.dataset.listo) {
+    editar.dataset.listo = '1';
+    editar.onclick = () => {
+      const pmt = estado.seleccionado ? estado.porId.get(estado.seleccionado) : null;
+      if (pmt) abrirEditor(pmt);
+    };
+  }
+
   const comprobar = $('btnComprobarCarto');
   if (comprobar && !comprobar.dataset.listo) {
     comprobar.dataset.listo = '1';
@@ -667,6 +687,92 @@ function abrirComprobacionCartografica() {
     `Si el trazado se mueve respecto de la vía <b>al cambiar de fondo</b>, el desfase es del mapa de fondo, ` +
     `no de su dato. Las coordenadas llegan al mapa exactamente como vienen en el KMZ: ` +
     `<b>no se corrigen geometrías para que cuadren con un fondo.</b>`, 'atencion');
+}
+
+/* ═══════════════ CREAR Y EDITAR UN PMT (Etapa 3) ═══════════════
+ *
+ * El catalogo maestro lo gobierna EPM. La aplicacion trae una copia embebida
+ * —la de `contratos_db.json`— para poder funcionar sin internet, y deja
+ * sustituirla por una mas nueva sin tocar codigo.
+ *
+ * Un PMT creado aqui entra como UNA FUENTE MAS, igual que un KMZ: pasa por el
+ * motor, se relaciona con el resto y sale en el informe. No hay un camino
+ * privilegiado para los datos que nacen dentro.
+ */
+let catalogo = null;
+
+function catalogoActual() {
+  if (catalogo) return catalogo;
+  const r = Catalogos.leerCatalogo(CATALOGO_EMBEBIDO);
+  catalogo = r.ok ? r.catalogo : { esquema: 1, contratos: [], tiposCierre: TIPOS_CIERRE };
+  return catalogo;
+}
+
+function abrirEditor(pmtExistente = null) {
+  const cat = catalogoActual();
+  if (!cat.contratos.length) {
+    return avisar('<b>No hay catálogo de contratos.</b> Para crear un PMT hace falta el catálogo ' +
+      'maestro de EPM, que es el que determina contratista y proyecto a partir del contrato.', 'atencion');
+  }
+  $('tituloEditor').textContent = pmtExistente ? 'Editar PMT' : 'Nuevo PMT';
+  Editor.abrir({
+    catalogo: cat,
+    existentes: estado.filas,
+    pmt: pmtExistente,
+    onGuardar: (pmt) => incorporarPmt(pmt, !!pmtExistente),
+    onCerrar: () => { /* nada que deshacer */ },
+  });
+}
+
+/**
+ * Incorpora un PMT creado o editado.
+ *
+ * Se construye la fila COMPLETA —con su vigencia normalizada y su estado
+ * documental derivado— y se recalcula todo. Un PMT nacido dentro pasa por las
+ * mismas reglas que uno que viene de un KMZ.
+ */
+async function incorporarPmt(pmt, editando) {
+  const completo = aplicarCatalogo(pmt, catalogoActual());
+  const vig = Tiempo.normalizarVigencia({ inicio: completo.inicio, fin: completo.fin });
+  const docs = {
+    resolucionPmt: completo.resolucionPmt || null,
+    permisoRotura: completo.permisoRotura || null,
+    cierrePermisoRotura: completo.cierrePermisoRotura || null,
+  };
+  const fila = {
+    id: completo.id ?? `pmt_local_${Date.now().toString(36)}`,
+    frente: completo.frente, contrato: completo.contrato, contratista: completo.contratista,
+    proyecto: completo.proyecto, municipio: completo.municipio || null, direccion: completo.direccion || null,
+    tipoCierre: completo.tipoCierre,
+    inicio: vig.inicio, fin: vig.fin, inicioMs: vig.inicioMs, finMs: vig.finMs,
+    vigenciaValida: vig.valida, vigenciaEstado: vig.estado,
+    geometria: completo.geometria, tipoGeometria: completo.geometria?.type ?? null,
+    tieneGeometria: !!completo.geometria,
+    analizable: !!completo.geometria && vig.valida && !!completo.contrato,
+    origenArchivo: 'creado en la plataforma', carpeta: null,
+    avisos: vig.avisos ?? [],
+    duplicadoExacto: false, idRepetidoEnOrigen: false,
+    ...docs,
+    documental: estadoDocumental(docs),
+  };
+
+  // Los PMT creados aqui viven en su propia FUENTE, para que se puedan quitar
+  // de golpe y para que el origen de cada dato siga siendo visible.
+  const idFuente = 'PMT creados en la plataforma';
+  const otras = estado.fuentes.filter((f) => f.nombre !== idFuente);
+  const propia = estado.fuentes.find((f) => f.nombre === idFuente);
+  const trazados = (propia?.trazados ?? []).filter((x) => x.id !== fila.id);
+  trazados.push(fila);
+
+  Editor.cerrar();
+  await reanalizar([...otras, {
+    clase: 'proyecto', nombre: idFuente, huella: 'local-' + trazados.length,
+    trazados, fuentesOriginales: [],
+  }], {
+    notas: [editando
+      ? `Se actualizó el PMT «${fila.frente}» y se recalculó todo.`
+      : `Se creó el PMT «${fila.frente}» (${fila.contrato}) y se recalculó todo.`],
+  });
 }
 
 /** Cuantos hay de cada cosa, para que el panel de capas se lea sin tocarlo. */
@@ -979,6 +1085,7 @@ function seleccionar(id) {
   if (pmt) Mapa.pintarZonas([pmt], CONFIG.radioInfluenciaMetros ?? 120);
   Mapa.irA(id);
   Tablas.pintarPmts(estado.visibles, { onFila: seleccionar, seleccionado: id, columnas: columnasPmt });
+  mostrar('btnEditarPmt', true);
   pintarFicha();
 }
 
