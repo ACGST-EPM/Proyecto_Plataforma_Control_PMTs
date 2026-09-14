@@ -731,3 +731,74 @@ details.tecnico pre {
 .ed-linea { display: flex; gap: 7px; align-items: flex-start; font-size: .82rem; margin-top: 5px; line-height: 1.4; }
 .ed-linea small { display: block; color: var(--tenue); }
 .ed-linea .pastilla { flex: none; }
+
+/* ═══════════ ALCANCE TEMPORAL: OPERATIVO / HISTORICO ═══════════
+ *
+ * El contexto NUNCA se señala solo con color: la banda lo dice con palabras y
+ * el color solo refuerza. Un informe impreso en blanco y negro, o alguien que
+ * no distinga el matiz, tiene que seguir sabiendo si mira hoy o 2025. */
+.banda-contexto {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 13px; margin-bottom: 12px; border-radius: var(--radio);
+  background: var(--verde-suave); border-left: 5px solid var(--verde-texto);
+  font-size: .9rem;
+}
+.banda-contexto.retrospectiva {
+  background: #f3eee4; border-left-color: #8a6d3b; color: #4a3b22;
+}
+.bc-icono { font-size: 1.1rem; }
+.bc-texto { flex: 1 1 auto; }
+.bc-cifras { color: var(--tinta-2); font-size: .82rem; }
+.banda-contexto.retrospectiva .bc-cifras { color: #5d4a2c; }
+
+.selector-periodo { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.periodo-grupo { display: flex; gap: 8px; flex-wrap: wrap; border: 0; padding: 0; margin: 0; }
+.periodo-leyenda { font-size: .74rem; color: var(--tenue); padding: 0 0 4px; font-weight: 600; }
+.periodo-op {
+  display: flex; flex-direction: column; gap: 1px; cursor: pointer;
+  padding: 6px 12px; border: 1px solid var(--borde); border-radius: var(--radio);
+  background: var(--papel); min-width: 130px;
+}
+.periodo-op:hover { border-color: var(--verde-texto); }
+.periodo-op.elegida { border-color: var(--verde-texto); border-width: 2px; padding: 5px 11px; background: var(--verde-suave); }
+/* EL RADIO SE OCULTA A LA VISTA, NO AL RESTO DEL MUNDO.
+ *
+ * Estaba en `width:0; height:0`, y eso lo saca de la capa de interaccion: no se
+ * puede pulsar directamente, ni con el raton ni con una herramienta de pruebas,
+ * porque un elemento sin superficie no recibe clics. Se descubrio porque las
+ * pruebas de navegador se quedaban esperando 30 segundos por cada intento.
+ *
+ * El patron correcto es recortarlo a 1x1 con `clip-path`: sigue teniendo
+ * superficie y sigue estando en el arbol de accesibilidad —el lector de
+ * pantalla lo anuncia, el tabulador lo alcanza— pero no se ve. */
+.periodo-op input {
+  position: absolute; width: 1px; height: 1px;
+  clip-path: inset(50%); overflow: hidden; white-space: nowrap;
+}
+.periodo-op:focus-within { outline: 2px solid var(--epm-verde); outline-offset: 2px; }
+.periodo-nombre { font-weight: 700; font-size: .86rem; }
+.periodo-ayuda { font-size: .72rem; color: var(--tenue); }
+
+/* Pastilla de situacion de un PMT respecto de la fecha de referencia. */
+.p-vigente  { background: var(--verde-suave); color: var(--verde-oscuro); border-color: #b5ddb5; }
+.p-futuro   { background: var(--azul-suave); color: var(--azul); border-color: #bcd6f2; }
+.p-historico{ background: #f3eee4; color: #6b5326; border-color: #ddcfb4; }
+
+/* Historial de activaciones de un PMT base. */
+.historial { margin-top: 10px; }
+.historial-fila {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: baseline;
+  padding: 5px 0; border-bottom: 1px solid var(--borde); font-size: .85rem;
+}
+.historial-fila:last-child { border-bottom: 0; }
+.historial-n {
+  display: inline-block; min-width: 22px; text-align: center; font-weight: 700;
+  background: var(--gris-suave); border-radius: 999px; padding: 1px 6px; font-size: .76rem;
+}
+.historial-fila.actual .historial-n { background: var(--verde-texto); color: #fff; }
+.historial-hueco { font-size: .76rem; color: var(--tenue); grid-column: 1 / -1; padding-left: 30px; }
+
+/* Nota de contexto historico en el informe. Fondo propio ADEMAS del texto: la
+   señal nunca es solo el color, pero el color ayuda a no confundirse de un
+   vistazo al pasar paginas. */
+.inf-nota-historica { background: #f3eee4; border-left-color: #8a6d3b; color: #4a3b22; }

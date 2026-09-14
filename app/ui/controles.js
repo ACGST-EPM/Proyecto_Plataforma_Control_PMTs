@@ -13,6 +13,7 @@
 import { $, $$, esc, num, crear, soloDia } from './dom.js';
 import * as Filtro from '../nucleo/filtrado.js';
 import { vigentesEnDia, rangoTemporal, limitesDelDia, dominioRecorrido } from '../nucleo/filtrado.js';
+import { ALCANCE } from '../nucleo/temporalidad.js';
 import { validarFechaCalendario } from '../nucleo/tiempo.js';
 
 const ETIQUETAS = {
@@ -48,7 +49,21 @@ export function fijarFiltros(f) {
     documental: lista(f.documental).filter((c) => Filtro.CLAVES_DOCUMENTAL.some(([k]) => k === c)),
     desde: fecha(f.desde), hasta: fecha(f.hasta),
     texto: typeof f.texto === 'string' ? f.texto : '',
+    // ══ ALCANCE TEMPORAL ════════════════════════════════════════════════
+    //
+    // Esta función RECONSTRUYE los filtros desde cero, y por eso todo lo que no
+    // se nombre aquí se pierde. El alcance y el año se perdían en silencio: el
+    // usuario pulsaba «Histórico» y la pantalla seguía en operativo, sin error
+    // y sin explicación, porque el valor nuevo se descartaba a la entrada.
+    //
+    // Se valida contra la lista cerrada: un alcance inventado volvería a
+    // operativo en vez de dejar un estado que ningún control puede representar.
+    alcance: Object.values(ALCANCE).includes(f.alcance) ? f.alcance : base.alcance,
+    anio: Number.isInteger(f.anio) ? f.anio : null,
   };
+  // Un año sin alcance histórico sería un filtro activo que su control no
+  // enseña: el selector de año solo existe dentro del alcance histórico.
+  if (filtros.alcance !== ALCANCE.HISTORICO) filtros.anio = null;
   // Rango invertido: no se aplica a medias.
   if (filtros.desde && filtros.hasta && filtros.desde > filtros.hasta) {
     rechazados.push(`el rango de fechas estaba invertido (${filtros.desde} a ${filtros.hasta}); no se aplicó`);

@@ -252,6 +252,97 @@ await compuerta('L', 'La baseline se puede reproducir', () => {
   return 'npm run preparar · npm test · npm run construir · npm run test:navegador';
 });
 
+/* ── M · Reactivar reutiliza el trazado, sin excepción ── */
+await compuerta('M', 'Reactivar reutiliza el trazado exactamente', async () => {
+  const Id = await import('../app/nucleo/identidad-pmt.js');
+  const origen = {
+    id: 'x', contrato: 'CW1', frente: 'F', tipoCierre: 'total',
+    resolucionPmt: 'RES-1',
+    geometria: { type: 'LineString', coordinates: [[-75.612345678, 6.212345678], [-75.6, 6.2]] },
+  };
+  const r = Id.prepararReactivacion(origen, { inicio: '2026-01-01 00:00:00', fin: '2026-01-10 00:00:00' });
+  exigir(r.ok, 'no se pudo preparar la reactivación: ' + r.motivo);
+  exigir(Id.mismaGeometria(r.datos.geometria, origen.geometria),
+    'la reactivación NO reutiliza el trazado exacto');
+  // Ni un decimal: se compara el texto, que es lo más duro que se puede pedir.
+  exigir(JSON.stringify(r.datos.geometria) === JSON.stringify(origen.geometria),
+    'la geometría cambió de representación al reactivar');
+  // Y es una COPIA: tocar la nueva no puede alterar la anterior.
+  r.datos.geometria.coordinates[0][0] = -99;
+  exigir(origen.geometria.coordinates[0][0] === -75.612345678,
+    'reactivar comparte el objeto en vez de clonarlo: editar una activación tocaría la otra');
+  // Los documentos NO se heredan.
+  exigir(r.datos.resolucionPmt === null,
+    'una resolución ampara unas fechas: no puede heredarse a una vigencia nueva');
+  return 'trazado idéntico, clonado, y sin heredar documentos';
+});
+
+/* ── N · Un solo reloj: nadie clasifica con Date.now() por su cuenta ── */
+await compuerta('N', 'La clasificación temporal usa UNA sola fecha de referencia', () => {
+  // `Date.now()` solo puede aparecer donde se PRODUCE la referencia, o donde se
+  // sella un archivo (procedencia, nombre de exportación, marca de creación).
+  // En cualquier otro sitio significa que una parte de la pantalla clasifica
+  // contra hoy mientras otra clasifica contra la fecha del recorrido.
+  const permitidos = new Set([
+    'app/nucleo/temporalidad.js',   // la produce
+    'app/nucleo/version.js',        // sella procedencia
+    'app/nucleo/exportar.js',       // nombre de archivo
+    'app/nucleo/proyecto.js',       // fecha de creación del proyecto
+  ]);
+  // `= Date.now()` como VALOR POR DEFECTO de un parámetro está permitido en
+  // cualquier sitio, y es justamente el patrón que queremos: quien llama PUEDE
+  // inyectar la fecha, así que la función se puede probar y no impone su reloj.
+  // Lo que se persigue es lo contrario: un `Date.now()` incrustado en medio de
+  // una comparación, donde nadie puede sustituirlo.
+  const porDefecto = /=\s*Date\.now\(\)/;
+  const malos = [];
+  for (const f of listar('app', /\.js$/)) {
+    const rel = f.replace(/\\/g, '/');
+    if (permitidos.has(rel)) continue;
+    // El PROTOTIPO es una maqueta con su propio banco de pruebas: genera
+    // contenido falso con la hora, que no clasifica nada.
+    if (rel.startsWith('app/prototipo/')) continue;
+    soloCodigo(leer(f)).forEach((linea, i) => {
+      if (!/\bDate\.now\(\)|new Date\(\)\.getTime\(\)/.test(linea)) return;
+      if (porDefecto.test(linea)) return;
+      malos.push(`${f}:${i + 1}: ${linea.trim().slice(0, 70)}`);
+    });
+  }
+  // `app.js` puede usarlo UNA vez, dentro de `fechaReferencia()`, y esa llamada
+  // va a `Temporal.referencia()`, que tiene su propio `ahora` inyectable.
+  exigir(malos.length === 0,
+    'hay relojes sueltos fuera del único punto de referencia:\n  ' + malos.join('\n  '));
+  return 'la referencia se produce en un solo sitio; los demás la reciben inyectada';
+});
+
+/* ── O · El histórico no se borra: el alcance es una vista ── */
+await compuerta('O', 'Ocultar históricos nunca borra un hecho', async () => {
+  const T = await import('../app/nucleo/temporalidad.js');
+  const { filtrarPmts, filtrosVacios } = await import('../app/nucleo/filtrado.js');
+  const viejo = {
+    id: 'v', contrato: 'CW1', vigenciaValida: true,
+    inicioMs: Date.UTC(2020, 0, 1), finMs: Date.UTC(2020, 1, 1),
+    inicio: '2020-01-01 00:00:00', fin: '2020-02-01 00:00:00',
+  };
+  const filas = [viejo];
+  const hoy = T.referencia({ ahora: Date.UTC(2026, 8, 14) });
+
+  const operativo = filtrarPmts(filas, { ...filtrosVacios(), alcance: T.ALCANCE.OPERATIVO }, hoy);
+  exigir(operativo.length === 0, 'un PMT de 2020 no puede ser operativo en 2026');
+
+  const todo = filtrarPmts(filas, { ...filtrosVacios(), alcance: T.ALCANCE.TODO }, hoy);
+  exigir(todo.length === 1, 'el histórico tiene que seguir estando en «Todo»');
+
+  const entonces = T.referencia({ origen: T.ORIGEN.ELEGIDA, ms: Date.UTC(2020, 0, 15) });
+  const enSuFecha = filtrarPmts(filas, { ...filtrosVacios(), alcance: T.ALCANCE.OPERATIVO }, entonces);
+  exigir(enSuFecha.length === 1, 'volver a su fecha tiene que devolverlo entero');
+
+  // Y el objeto es EL MISMO: no se ha recortado ni reescrito nada.
+  exigir(enSuFecha[0].geometria === viejo.geometria || enSuFecha[0] === viejo,
+    'el alcance temporal no puede alterar el dato, solo decidir si se enseña');
+  return 'fuera de la vista operativa, intacto en el histórico, entero al volver a su fecha';
+});
+
 /* ── utilidades ── */
 function listar(dir, re, acc = []) {
   const raiz = path.join(RAIZ, dir);

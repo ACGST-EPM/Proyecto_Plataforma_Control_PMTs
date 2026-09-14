@@ -39,16 +39,27 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
   persistencia y flujo de automatización. Todo marcado CONFIRMADO / HIPÓTESIS / VALIDAR EPM.
 - `INVESTIGACION_MICROSOFT_EPM.md` — qué es posible con SharePoint, Graph, Power Automate, SPFx,
   Teams y Azure, con documentación oficial; cuatro arquitecturas comparadas y una recomendación.
-- `DESCUBRIMIENTO_EPM.md` — las 20 preguntas exactas para TI y para el área que gobierna la contratación, cada una con qué decisión desbloquea.
+- `DESCUBRIMIENTO_EPM.md` — las 22 preguntas exactas para TI y para el área que gobierna la contratación, cada una con qué decisión desbloquea.
 - `ESCALABILIDAD.md` — medida real de 460 a 10.000 PMT, a partir de cuándo hay que actuar, y
   (§4 bis) por qué el modelo de zonas **no** es más lento: lo que crece es la salida, no el cálculo.
 - `INFORME_ETAPA3.md` — qué se entregó en la Etapa 3, qué defectos se cerraron, qué NO se hizo y por
   qué, y un **resumen en lenguaje no técnico** al final.
+- `GUIA_LEYDI.md` — **la guía sin tecnicismos**: qué hace la plataforma, qué es un PMT base y una
+  activación, operativo vs histórico, y cómo probarla desde el PC corporativo.
 - `AUTOREVISION_ETAPA3.md` — el intento deliberado de romper lo construido en la Etapa 3: qué
   ataqué, qué encontré, y **dónde no he mirado**. Es el punto de partida de la auditoría independiente.
 - `SEGURIDAD_MODELO_AMENAZAS.md` — qué se protege, de quién, qué está cerrado y qué no.
 
 Repo publicado: `ACGST-EPM/Control-y-Articulacion-de-PMTs-EPM` (GitHub Pages).
+
+**RAMA PRINCIPAL: `Proyecto_Plataforma_Control_PMTs`** (no `main`). Es la que Leydi clona en el PC
+corporativo, así que **toda versión probada tiene que terminar ahí** antes de pedirle que pruebe.
+El PC de EPM no permite trabajar con ramas secundarias con comodidad.
+
+⚠️ **El repositorio es PÚBLICO** y la rama principal contiene `01_KMZ_Entrada.zip` (commit
+`4de5969`, «Subir KMZ para auditoria») con datos de obra reales. Se conserva a propósito —borrar
+historia exige autorización expresa y además no bastaría—. Está declarado como riesgo abierto en
+`INFORME_ETAPA3.md`.
 Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada`, `02_Proyecto_QGIS`, `Control-y-Articulacion-de-PMTs-EPM`).
 
 ## Estado (Etapa 2 CERRADA y congelada en `BASELINE.md`; Etapa 3 ENTREGADA, **no aprobada**:
@@ -152,10 +163,48 @@ Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada
 - El contraste se mide **sobre el fondo real** (subiendo por los ancestros hasta el primero opaco) y
   **con los paneles abiertos**, exigiendo antes que se hayan abierto de verdad.
 
+#### Identidad del PMT, reactivaciones y semántica temporal (complemento de la 3)
+- **PMT BASE ≠ ACTIVACIÓN.** La base es qué se cierra y dónde (geometría, contrato, frente, tipo,
+  municipio); la activación es una ejecución temporal (fechas, documentos de esa vez, motivo).
+- **CADA FILA ES UNA ACTIVACIÓN**, y lleva `idBase` encima. El «PMT base» es una VISTA DERIVADA
+  (`agruparPorBase`). Se descartó anidar activaciones dentro de un objeto PMT: la unidad de análisis
+  del motor es el par (geometría, vigencia), y anidar obligaría a desanidar en cada análisis, filtro,
+  tabla y exportación, manteniendo dos formas sincronizadas.
+- **REACTIVAR REUTILIZA EL TRAZADO, EXACTAMENTE.** `prepararReactivacion` clona y COMPRUEBA la
+  igualdad; el editor bloquea el dibujo; `guardar()` vuelve a comprobarla. Un trazado que se mueve
+  solo no lo ve nadie y cambia todas las distancias medidas.
+- **Los documentos NO se heredan al reactivar** (una resolución ampara unas fechas concretas). Si EPM
+  confirma que alguno ampara varias activaciones, se cambia entonces. **DECISIÓN PENDIENTE.**
+- **Nada de parentescos inventados.** Dos geometrías idénticas NO son el mismo PMT: puede haber dos
+  cierres distintos en el mismo sitio. Un KMZ sin identidad explícita es su propia base.
+- **El NÚMERO de activación se DERIVA**, nunca se lee del archivo, y se calcula **una sola vez sobre
+  el conjunto completo** (`numerarActivaciones` en `reanalizar`). Numerar fuente a fuente dejaría dos
+  «activación 1» de la misma base.
+- **FECHA DE REFERENCIA: un solo reloj** (`fechaReferencia()` en `app.js`). Vigente/programado/
+  histórico se derivan SIEMPRE de ella. Orden: día del recorrido → año consultado → hoy. Ninguna otra
+  parte puede llamar a `Date.now()` para clasificar.
+- **Ocultar históricos NO es borrarlos.** El alcance temporal es una VISTA. Volver a la fecha de un
+  PMT vencido lo devuelve entero, con sus relaciones. `enAlcance` y `filtrarRelaciones` solo deciden
+  qué se enseña; los hechos almacenados no se tocan jamás.
+- **Coincidencia vs articulación, alcance distinto y deliberado**: basta con que UNO siga operativo
+  para que la coincidencia sea útil; la articulación exige que **el traslape siga vivo**
+  (`traslapeFin >= ref.desde`), porque solo se puede coordinar un solape que no ha terminado. Una
+  articulación caducada **se degrada a coincidencia espacial**, no desaparece.
+- **Un PMT pertenece a TODO año que su vigencia toque** (`aniosDe`). Cualquier otra regla lo hace
+  desaparecer de una consulta legítima.
+- El selector de año se **puebla con los datos** (`inventarioDeAnios`), nunca con una lista fija: una
+  lista fija envejece sola y deja de cubrir el año en curso.
+- Se descartaron pestañas por año: se leen bien tres años y mal diez, y la del año en curso —la que
+  se usa el 95 % del tiempo— acabaría compitiendo con nueve que casi nadie abre.
+- **El contexto se dice CON PALABRAS** (`#bandaContexto`), nunca solo con color. El informe lo lleva
+  en el TÍTULO y habla en pasado cuando es retrospectivo.
+- `nucleo/temporalidad.js` es dueño de `MS_DIA` y `limitesDelDia`; `filtrado.js` los reexporta. Al
+  revés había ciclo de importaciones y el empaquetador de un solo archivo revienta.
+
 #### Compuertas de entrega
 - `npm run compuertas` ejecuta 12 comprobaciones (A..L) sobre el PRODUCTO, no sobre el código. Cada
   una se rompió a propósito una vez para comprobar que detecta su infracción: 12 de 12.
-- Pruebas: **259 motor + 200 app + 66 de navegador real + 12 compuertas**.
+- Pruebas: **259 motor + 245 app + 74 de navegador real + 15 compuertas**.
 
 ### Otras reglas de la 2.4
 - `motor/src/geo/plano-local.js` añade `desproyectar()` (inverso del plano ENU, iterando

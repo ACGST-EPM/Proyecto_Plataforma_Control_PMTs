@@ -17,6 +17,9 @@ import * as Editor from './ui/editor.js';
 import * as Catalogos from './nucleo/catalogos.js';
 import { CATALOGO_EMBEBIDO } from './nucleo/catalogo-embebido.js';
 import { filaDePmtCreado } from './nucleo/validacion-pmt.js';
+import * as Temporal from './nucleo/temporalidad.js';
+import * as Identidad from './nucleo/identidad-pmt.js';
+import * as Periodo from './ui/periodo.js';
 import { estadoDocumental } from '../motor/src/modelo/documental.js';
 import * as Ingesta from './nucleo/ingesta.js';
 import * as Filtro from './nucleo/filtrado.js';
@@ -55,7 +58,41 @@ const estado = {
   archivos: [], analisis: null,
   visibles: [], relVisibles: [], seleccionado: null, instanteRecorrido: null,
   nombreProyecto: '',
+  // Fecha desde la que se está mirando. La produce `fechaReferencia()`.
+  referencia: null,
+  // Lo visible con su SITUACION ya derivada, para que los tres repintados de la
+  // tabla enseñen exactamente lo mismo.
+  visiblesConSituacion: [],
 };
+
+/**
+ * FECHA DE REFERENCIA — el único reloj de la interfaz.
+ *
+ * ══ POR QUÉ ESTÁ AQUÍ, Y SOLO AQUÍ ════════════════════════════════════════
+ *
+ * «Vigente», «vencido» y «futuro» dependen de la fecha desde la que se mire. En
+ * cuanto una parte de la pantalla use `Date.now()` y otra el día del recorrido,
+ * la interfaz se contradice: el mapa enseña marzo de 2025 y la tarjeta dice
+ * «0 articulaciones» porque mide contra hoy.
+ *
+ * Se deriva, por orden:
+ *   1. el DÍA DEL RECORRIDO, si el usuario está recorriendo el tiempo;
+ *   2. el AÑO CONSULTADO, si está en una consulta histórica;
+ *   3. HOY, en cualquier otro caso.
+ *
+ * Ninguna otra parte del código puede llamar a `Date.now()` para clasificar.
+ * Hay una prueba que lo vigila.
+ */
+function fechaReferencia() {
+  if (estado.instanteRecorrido !== null) {
+    return Temporal.referencia({ origen: Temporal.ORIGEN.ELEGIDA, ms: estado.instanteRecorrido });
+  }
+  const f = Controles.actuales();
+  if (f.alcance === Temporal.ALCANCE.HISTORICO && f.anio !== null && f.anio !== undefined) {
+    return Temporal.referencia({ origen: Temporal.ORIGEN.PERIODO, ...Temporal.limitesDelAnio(f.anio) });
+  }
+  return Temporal.referencia();
+}
 
 /** Huella de contenido de un archivo, para reconocer el mismo dato con otro nombre. */
 function huellaBytes(datos) {
@@ -284,6 +321,19 @@ async function reanalizar(fuentes, opciones = {}) {
       return true;
     });
     if (repetidos) notas.push(`${repetidos} trazado(s) aparecían en más de una fuente; se conserva una sola copia.`);
+
+    // NUMERACIÓN DE ACTIVACIONES: aquí, sobre el conjunto COMPLETO y una sola
+    // vez. El número depende de cuántas hay, y eso solo se sabe con todas las
+    // fuentes ya juntas. Si cada fuente numerase lo suyo, abrir un proyecto con
+    // dos activaciones y añadir luego un KMZ con una tercera dejaría dos
+    // «activación 1» del mismo PMT.
+    filas = Identidad.numerarActivaciones(filas);
+
+    // COHERENCIA DE LAS BASES: `idBase` es entrada, y dos archivos pueden
+    // declarar la misma base con trazados o contratos distintos. Se AVISA, no
+    // se corrige: no sabemos cuál de las dos versiones es la buena, y elegir
+    // una por nuestra cuenta seria inventar.
+    for (const a of Identidad.revisarCoherenciaDeBases(filas)) notas.push(a);
 
     if (!filas.length) {
       Object.assign(estado, { filas: [], relaciones: [], noEvaluables: [], porId: new Map(),
@@ -565,7 +615,8 @@ function montarSelectorColumnas() {
       else columnasPmt = columnasPmt.filter((c) => c !== k);
       // Nunca cero columnas: una tabla sin columnas no es una tabla.
       if (!columnasPmt.length) { columnasPmt = ['frente']; inp.checked = inp.dataset.col === 'frente'; }
-      Tablas.pintarPmts(estado.visibles, { onFila: seleccionar, seleccionado: estado.seleccionado, columnas: columnasPmt });
+      Tablas.pintarPmts(estado.visiblesConSituacion ?? estado.visibles,
+        { onFila: seleccionar, seleccionado: estado.seleccionado, columnas: columnasPmt });
     };
   }
 }
@@ -596,6 +647,10 @@ function montarEspacioDeTrabajo() {
     Controles.montarFiltros(estado.filas, aplicarFiltros);
     aplicarFiltros();
   });
+
+  // ALCANCE TEMPORAL. Va aparte de los filtros rapidos a proposito: no es un
+  // filtro mas, es el punto de vista desde el que se mira todo lo demas.
+  montarSelectorDePeriodo();
 
   // Panel de filtros completo: se despliega, no ocupa sitio permanentemente.
   const mas = $('btnMasFiltros');
@@ -639,6 +694,16 @@ function montarEspacioDeTrabajo() {
     editar.onclick = () => {
       const pmt = estado.seleccionado ? estado.porId.get(estado.seleccionado) : null;
       if (pmt) abrirEditor(pmt);
+    };
+  }
+
+  // REACTIVAR: otra vigencia del MISMO PMT, sin volver a dibujar el trazado.
+  const reactivar = $('btnReactivarPmt');
+  if (reactivar && !reactivar.dataset.listo) {
+    reactivar.dataset.listo = '1';
+    reactivar.onclick = () => {
+      const pmt = estado.seleccionado ? estado.porId.get(estado.seleccionado) : null;
+      if (pmt) abrirEditor(pmt, 'reactivar');
     };
   }
 
@@ -708,18 +773,20 @@ function catalogoActual() {
   return catalogo;
 }
 
-function abrirEditor(pmtExistente = null) {
+function abrirEditor(pmtExistente = null, modo = null) {
   const cat = catalogoActual();
   if (!cat.contratos.length) {
     return avisar('<b>No hay catálogo de contratos.</b> Para crear un PMT hace falta el catálogo ' +
       'maestro de EPM, que es el que determina contratista y proyecto a partir del contrato.', 'atencion');
   }
-  $('tituloEditor').textContent = pmtExistente ? 'Editar PMT' : 'Nuevo PMT';
+  $('tituloEditor').textContent = modo === 'reactivar' ? 'Nueva vigencia del mismo PMT'
+    : pmtExistente ? 'Editar PMT' : 'Nuevo PMT';
   Editor.abrir({
     catalogo: cat,
     existentes: estado.filas,
     pmt: pmtExistente,
-    onGuardar: (pmt) => incorporarPmt(pmt, !!pmtExistente),
+    modo,
+    onGuardar: (pmt) => incorporarPmt(pmt, !!pmtExistente && modo !== 'reactivar'),
     onCerrar: () => { /* nada que deshacer */ },
   });
 }
@@ -737,7 +804,29 @@ async function incorporarPmt(pmt, editando) {
   const base = filaDePmtCreado(pmt, catalogoActual(), {
     normalizarVigencia: Tiempo.normalizarVigencia,
   });
-  const fila = { ...base, documental: estadoDocumental(base) };
+
+  // ══ IDENTIDAD DEL PMT BASE ═════════════════════════════════════════════
+  //
+  // Si viene `idBase`, esto es otra ACTIVACIÓN de un PMT que ya existe: se
+  // conserva la identidad y se numera contando las que ya hay. Si no viene, es
+  // un PMT nuevo y su base es él mismo.
+  //
+  // La numeración se calcula AQUÍ y no en el editor porque solo aquí se conoce
+  // el conjunto completo cargado; el editor no puede saber cuántas activaciones
+  // hay si alguien añadió una fuente mientras tenía el formulario abierto.
+  const idBase = pmt.idBase ?? base.id;
+  const numero = Identidad.numeroDeActivacion(idBase, estado.filas, base.id);
+  const fila = {
+    ...base,
+    idBase,
+    activacion: {
+      numero,
+      motivo: pmt.activacion?.motivo ?? null,
+      creada: pmt.activacion?.creada ?? new Date().toISOString(),
+      reactivacionDe: pmt.reactivacionDe ?? null,
+    },
+    documental: estadoDocumental(base),
+  };
 
   // Los PMT creados aqui viven en su propia FUENTE, para que se puedan quitar
   // de golpe y para que el origen de cada dato siga siendo visible.
@@ -754,7 +843,10 @@ async function incorporarPmt(pmt, editando) {
   }], {
     notas: [editando
       ? `Se actualizó el PMT «${fila.frente}» y se recalculó todo.`
-      : `Se creó el PMT «${fila.frente}» (${fila.contrato}) y se recalculó todo.`],
+      : fila.activacion.numero > 1
+        ? `Se creó la activación ${fila.activacion.numero} del PMT «${fila.frente}» ` +
+          `(${fila.contrato}), reutilizando su trazado. Se recalculó todo.`
+        : `Se creó el PMT «${fila.frente}» (${fila.contrato}) y se recalculó todo.`],
   });
 }
 
@@ -793,7 +885,13 @@ function pintarFicha() {
   }
   const pmt = estado.seleccionado ? estado.porId.get(estado.seleccionado) : null;
   if (titulo) titulo.textContent = pmt ? 'PMT seleccionado' : 'Selección';
-  caja.innerHTML = Ficha.fichaPmt(pmt, { relaciones: estado.relVisibles ?? [], porId: estado.porId });
+  // `todas` es TODO lo cargado, no lo visible: el historial de un PMT no puede
+  // depender de si sus otras activaciones pasan el filtro de hoy. Con la vista
+  // operativa puesta, las activaciones anteriores son historicas por definicion
+  // y no estarian en `visibles` — y entonces el historial diria «1 activacion».
+  caja.innerHTML = Ficha.fichaPmt(pmt, {
+    relaciones: estado.relVisibles ?? [], porId: estado.porId, todas: estado.filas,
+  });
 }
 
 /* ═════════════════════ RESUMEN: UN MODELO, DOS ALCANCES ═════════════════════
@@ -974,14 +1072,43 @@ function pedirServidorCorporativo() {
 
 /* ───────────────────────── Filtrado y sincronia ───────────────────────── */
 
+/**
+ * Monta el selector de alcance temporal.
+ *
+ * Se vuelve a montar a si mismo tras cada cambio porque el control del AÑO solo
+ * existe cuando el alcance es historico: no es un control que se oculta, es uno
+ * que aparece. `arguments.callee` no existe en un modulo, asi que la funcion
+ * tiene nombre y se llama por el.
+ */
+function montarSelectorDePeriodo() {
+  Periodo.montar(Controles.actuales(), Temporal.inventarioDeAnios(estado.filas), (cambio) => {
+    const antes = Controles.actuales();
+    if (cambio.alcance !== undefined && cambio.alcance !== antes.alcance) {
+      // Cambiar de alcance SACA DEL RECORRIDO. Si no, la fecha del recorrido
+      // mandaria sobre el año elegido —porque es la primera que se consulta— y
+      // la pantalla diria «histórico 2025» mientras mide contra marzo de 2026.
+      Controles.volverATodo();
+      estado.instanteRecorrido = null;
+    }
+    Controles.fijarFiltros({ ...antes, ...cambio });
+    montarSelectorDePeriodo();
+    aplicarFiltros();
+  });
+}
+
 function aplicarFiltros() {
   const f = Controles.actuales();
-  let visibles = Filtro.filtrarPmts(estado.filas, f);
+  const ref = fechaReferencia();
+  estado.referencia = ref;
+  let visibles = Filtro.filtrarPmts(estado.filas, f, ref);
   // DIA COMPLETO, no un instante: ver `vigentesEnDia` en nucleo/filtrado.js.
   if (estado.instanteRecorrido !== null) visibles = Filtro.vigentesEnDia(visibles, estado.instanteRecorrido);
 
   const ids = new Set(visibles.map((x) => x.id));
-  const relVisibles = Filtro.filtrarRelaciones(estado.relaciones, f, ids);
+  // Se marca la vigencia de la articulación ANTES de filtrar y de contar, para
+  // que tarjetas, tablas, informe y exportaciones lean todas lo mismo.
+  const marcadas = Filtro.marcarVigenciaDeRelaciones(estado.relaciones, ref);
+  const relVisibles = Filtro.filtrarRelaciones(marcadas, f, ids, ref, estado.porId);
   // Los pares que NO se pudieron evaluar siguen el mismo filtro: si desaparecen
   // en silencio, el usuario cree que no hay nada que revisar.
   const noEvalVisibles = estado.noEvaluables.filter((h) => ids.has(h.idA) || ids.has(h.idB));
@@ -1006,7 +1133,16 @@ function aplicarFiltros() {
   const capas = Capas.capasActivas();
   Mapa.pintarRelaciones(relVisibles, capas.medicion, capas);
 
-  Tablas.pintarPmts(visibles, { onFila: seleccionar, seleccionado: estado.seleccionado, columnas: columnasPmt });
+  // La SITUACIÓN (vigente / programado / histórico) es DERIVADA de la fecha de
+  // referencia, no un campo del PMT. Se calcula aquí, una vez, y viaja con la
+  // fila que se pinta: así la tabla no tiene que conocer la referencia y no
+  // puede usar una distinta de la del resto de la pantalla.
+  // Se guarda en el estado porque la tabla se repinta tambien al seleccionar y
+  // al cambiar de columnas: si esos dos caminos usaran `estado.visibles` a
+  // secas, la columna de situacion se vaciaria sola al pulsar una fila.
+  estado.visiblesConSituacion = visibles.map((x) => ({ ...x, _situacion: Temporal.situacionDe(x, ref) }));
+  Tablas.pintarPmts(estado.visiblesConSituacion,
+    { onFila: seleccionar, seleccionado: estado.seleccionado, columnas: columnasPmt });
   Tablas.pintarDocumental(visibles, { onFila: seleccionar });
   Tablas.pintarRelaciones(relVisibles, { onFila: (r) => inspeccionar(r) });
 
@@ -1029,6 +1165,23 @@ function aplicarFiltros() {
   Tablas.pintarNoEvaluables(noEvalVisibles, estado.porId);
 
   // LAS TARJETAS SIGUEN AL ALCANCE VISIBLE: se repintan con cada filtro.
+  // BANDA DE CONTEXTO: lo primero que se repinta, porque decide como hay que
+  // leer todo lo que viene debajo. El reparto se cuenta sobre TODO lo cargado,
+  // no sobre lo visible: la pregunta que responde es «¿y los otros 460?».
+  Periodo.pintarBanda(
+    Temporal.describirContexto(ref, f.alcance ?? Temporal.ALCANCE.OPERATIVO, f.anio ?? null),
+    Temporal.repartirPorSituacion(estado.filas, ref));
+
+  // Si el alcance operativo ha escondido TODO lo cargado, se dice y se ofrece
+  // el histórico de un clic. Una pantalla vacia sin explicacion se lee como un
+  // fallo de la herramienta, no como «no hay nada que coordinar».
+  Periodo.avisarVistaVacia(estado.filas.length, visibles.length,
+    f.alcance ?? Temporal.ALCANCE.OPERATIVO, () => {
+      Controles.fijarFiltros({ ...Controles.actuales(), alcance: Temporal.ALCANCE.TODO, anio: null });
+      montarSelectorDePeriodo();
+      aplicarFiltros();
+    });
+
   pintarTarjetas();
   pintarAlcancePestana();
   pintarAlcanceExportar();
@@ -1073,8 +1226,13 @@ function seleccionar(id) {
   const pmt = estado.porId.get(id);
   if (pmt) Mapa.pintarZonas([pmt], CONFIG.radioInfluenciaMetros ?? 120);
   Mapa.irA(id);
-  Tablas.pintarPmts(estado.visibles, { onFila: seleccionar, seleccionado: id, columnas: columnasPmt });
+  Tablas.pintarPmts(estado.visiblesConSituacion ?? estado.visibles,
+    { onFila: seleccionar, seleccionado: id, columnas: columnasPmt });
   mostrar('btnEditarPmt', true);
+  // Solo se puede reactivar lo que tiene trazado que reutilizar. Ofrecerlo sin
+  // geometria abriria un editor que obliga a redibujar, que es lo contrario de
+  // lo que «reactivar» significa.
+  mostrar('btnReactivarPmt', !!pmt?.geometria);
   pintarFicha();
 }
 
@@ -1129,7 +1287,29 @@ function pintarAlcancePestana() {
 
 /* ───────────────────────── Exportaciones e informe ───────────────────────── */
 
-const marca = () => new Date().toISOString().slice(0, 10);
+/**
+ * NOMBRE DE UN ARCHIVO EXPORTADO.
+ *
+ * ══ DOS COSAS QUE FALTABAN ════════════════════════════════════════════════
+ *
+ * 1. La PROCEDENCIA. `nombreConProcedencia()` existía y estaba probada, pero
+ *    los botones de exportar no la usaban: ponían solo la fecha. Un CSV con
+ *    fecha y sin versión no permite responder «¿qué versión produjo esto?»,
+ *    que es justamente para lo que se escribió esa función.
+ *
+ * 2. El CONTEXTO TEMPORAL. Dos exportaciones del mismo día —una operativa y
+ *    otra del histórico 2025— se llamaban igual y se pisaban en la carpeta de
+ *    descargas. Y una vez fuera de la aplicación no había forma de distinguir
+ *    cuál era cuál: un CSV histórico abierto en Excel parece exactamente igual
+ *    que uno operativo.
+ */
+function nombreExportado(base, ext) {
+  const f = Controles.actuales();
+  const ref = estado.referencia ?? fechaReferencia();
+  return Export.nombreConProcedencia(base, ext, {
+    contexto: Temporal.describirContexto(ref, f.alcance ?? Temporal.ALCANCE.OPERATIVO, f.anio ?? null),
+  });
+}
 
 /**
  * LO QUE PROMETE EL PANEL DE EXPORTACION TIENE QUE SER LO QUE ENTREGA.
@@ -1150,11 +1330,18 @@ function pintarAlcanceExportar() {
 }
 
 function conectarExportaciones() {
-  $('expPmtCsv').onclick = () => descargar(`PMT_${marca()}.csv`, Export.pmtsACsv(estado.visibles), 'text/csv;charset=utf-8');
-  $('expRelCsv').onclick = () => descargar(`Relaciones_PMT_${marca()}.csv`, Export.relacionesACsv(estado.relVisibles, estado.porId), 'text/csv;charset=utf-8');
-  $('expGeoJson').onclick = () => descargar(`PMT_${marca()}.geojson`, JSON.stringify(Export.aGeoJson(estado.visibles), null, 1), 'application/geo+json');
-  $('expKml').onclick = () => descargar(`PMT_${marca()}.kml`, Export.aKml(estado.visibles), 'application/vnd.google-earth.kml+xml');
-  $('expLegado').onclick = () => descargar(`reporte_dinamico_${marca()}.csv`, Export.csvCompatibleLegado(estado.visibles, estado.relVisibles), 'text/csv;charset=utf-8');
+  $('expPmtCsv').onclick = () => descargar(nombreExportado('PMT', 'csv'),
+    Export.pmtsACsv(estado.visibles), 'text/csv;charset=utf-8');
+  $('expRelCsv').onclick = () => descargar(nombreExportado('Relaciones_PMT', 'csv'),
+    Export.relacionesACsv(estado.relVisibles, estado.porId), 'text/csv;charset=utf-8');
+  $('expGeoJson').onclick = () => descargar(nombreExportado('PMT', 'geojson'),
+    JSON.stringify(Export.aGeoJson(estado.visibles), null, 1), 'application/geo+json');
+  $('expKml').onclick = () => descargar(nombreExportado('PMT', 'kml'),
+    Export.aKml(estado.visibles), 'application/vnd.google-earth.kml+xml');
+  // EL LEGADO conserva su nombre EXACTO: si algo aguas abajo lo busca por
+  // nombre, cambiarselo lo rompe. Es un invariante del proyecto.
+  $('expLegado').onclick = () => descargar(`reporte_dinamico_${new Date().toISOString().slice(0, 10)}.csv`,
+    Export.csvCompatibleLegado(estado.visibles, estado.relVisibles), 'text/csv;charset=utf-8');
   $('expInforme').onclick = () => verInforme();
   $('btnImprimirInforme').onclick = () => Informe.imprimir();
   $('btnCerrarInforme').onclick = () => { mostrar('panelInforme', false); mostrar('panelExportar', true); };
@@ -1194,6 +1381,11 @@ export function verInforme() {
   // exportaciones: el visible. `totalCargado` lo acompaña para que el informe
   // pueda decir de cuántos PMT sale lo que enseña.
   const resumen = resumenVisible();
+  // MISMA fecha de referencia que la pantalla. Si el informe llamara a
+  // `fechaReferencia()` por su cuenta daria lo mismo hoy, pero cualquier cambio
+  // futuro en el orden de las llamadas los separaria en silencio.
+  const ref = estado.referencia ?? fechaReferencia();
+  const f = Controles.actuales();
   Informe.generar({
     filas: estado.visibles, relaciones: estado.relVisibles, porId: estado.porId,
     noEvaluables: estado.noEvalVisibles ?? estado.noEvaluables,
@@ -1201,6 +1393,11 @@ export function verInforme() {
     resumen,
     filtros: Controles.actuales(), config: CONFIG,
     versionReglas: VERSION_REGLAS,
+    // CONTEXTO TEMPORAL: el informe tiene que decir si habla del presente o del
+    // pasado, y en el titulo, no en letra pequeña al final.
+    referencia: ref,
+    contexto: Temporal.describirContexto(ref, f.alcance ?? Temporal.ALCANCE.OPERATIVO, f.anio ?? null),
+    todas: estado.filas,
     // PROCEDENCIA: lo que hay que saber para reproducir este informe.
     procedencia: selloProcedencia(CONFIG, {
       alcance: estado.visibles.length === estado.filas.length

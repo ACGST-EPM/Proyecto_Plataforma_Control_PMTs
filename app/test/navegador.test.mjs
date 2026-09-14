@@ -46,10 +46,27 @@ try {
 const hayNavegador = !!chromium && fs.existsSync(APP);
 const saltar = { skip: !hayNavegador ? 'requiere playwright, un Chromium y dist/ construido' : false };
 
-/* ── Fixtures sinteticos: ningun dato real de EPM ── */
+/* ── Fixtures sinteticos: ningun dato real de EPM ──
+ *
+ * ══ LAS FECHAS SON RELATIVAS A HOY, A PROPOSITO ══════════════════════════
+ *
+ * Estaban escritas a mano («2026-03-01»). Mientras esa fecha fue futura, todo
+ * funciono; en cuanto paso, TODOS los fixtures se volvieron historicos y la
+ * vista operativa —que es la de por defecto— dejo de enseñarlos. Media suite
+ * empezo a fallar sin que nada se hubiera roto.
+ *
+ * La clase de error es «una prueba cuyo significado cambia con el calendario».
+ * Se elimina anclando las fechas al reloj: la vigencia base va de ayer a dentro
+ * de un mes, asi que es VIGENTE hoy, mañana y dentro de tres años. */
 const F = await import('../../motor/fixtures/index.mjs');
+const D = 86400000;
+const selloFecha = (ms, hora) => new Date(ms).toISOString().slice(0, 10) + ' ' + hora;
+const AHORA = Date.now();
+/** Vigencia base: empezo ayer y termina dentro de 30 dias. VIGENTE siempre. */
+export const INICIO_BASE = selloFecha(AHORA - D, '06:00:00');
+export const FIN_BASE = selloFecha(AHORA + 30 * D, '18:00:00');
 const desc = (c, o = {}) => F.descripcion({
-  inicio: '2026-03-01 06:00:00', fin: '2026-03-30 18:00:00',
+  inicio: INICIO_BASE, fin: FIN_BASE,
   contrato: c, municipio: 'Medellin', ...o,
 });
 
@@ -452,7 +469,15 @@ test('TABLA: pagina, ordena y deja cambiar el tamano de pagina', saltar, async (
   // Ordenacion
   await p.selectOption('#pagPmt [data-tam]', '50');
   await p.waitForTimeout(300);
-  const primero = () => p.textContent('#tablaPmt tbody tr:first-child td:first-child');
+  // Se lee la celda de FRENTE por su cabecera, no por posicion: una columna
+  // nueva delante hacia que esta prueba comparase otra cosa —y como todas las
+  // filas comparten situacion, no cambiaba nunca y la prueba fallaba sin que
+  // la ordenacion estuviera rota.
+  const iFrente = await p.$$eval('#tablaPmt thead th',
+    (n) => n.findIndex((x) => /Frente/i.test(x.textContent)));
+  assert.ok(iFrente >= 0, 'la tabla tiene que tener columna de Frente');
+  const primero = () => p.$eval('#tablaPmt tbody tr:first-child',
+    (tr, i) => tr.querySelectorAll('td')[i].textContent, iFrente);
   const asc = (await primero()).trim();
   await p.click('#tablaPmt thead th[data-col="frente"]');
   await p.waitForTimeout(300);
@@ -490,7 +515,13 @@ test('INFORME: se genera con mapa propio, cifras y sin criticidad inventada', sa
   await p.waitForSelector('#panelInforme:not(.oculto)', { timeout: 20000 });
   const inf = await txt(p, '#informe');
 
-  for (const parte of ['Informe de control y articulación de PMTs', 'Grupo EPM', 'Qué se analizó',
+  // El TÍTULO ahora declara el contexto temporal («Informe operativo de PMTs —
+  // al …» o «Consulta histórica de PMTs — Año …»), que es deliberado: un
+  // informe histórico titulado igual que uno operativo se lee como si
+  // describiera la situación de hoy. Se exige que nombre los PMT y el contexto.
+  assert.match(inf, /(Informe operativo|Consulta histórica) de PMTs/,
+    'el título tiene que decir de qué habla: ' + inf.slice(0, 150));
+  for (const parte of ['Grupo EPM', 'Qué se analizó',
     'Mapa de los trazados', 'Calidad de los datos', 'Trazabilidad', 'Regla invariante']) {
     assert.ok(inf.includes(parte), `falta en el informe: "${parte}"`);
   }
@@ -614,8 +645,8 @@ test('tambien funciona servida por HTTP, no solo desde file://', saltar, async (
 
 /** KMZ con dos trazados muy separados en el tiempo, para el recorrido diario. */
 const KMZ_HORAS = escribir('horas.kmz', F.kmz([
-  F.placemark('MANANA', desc('CW7', { inicio: '2026-03-10 06:00:00', fin: '2026-03-10 08:00:00' }), F.punto([-75.6000, 6.2000])),
-  F.placemark('MEDIODIA', desc('CW8', { inicio: '2026-03-10 10:00:00', fin: '2026-03-10 12:00:00' }), F.punto([-75.6000, 6.2004])),
+  F.placemark('MANANA', desc('CW7', { inicio: selloFecha(AHORA + D, '06:00:00'), fin: selloFecha(AHORA + D, '08:00:00') }), F.punto([-75.6000, 6.2000])),
+  F.placemark('MEDIODIA', desc('CW8', { inicio: selloFecha(AHORA + D, '10:00:00'), fin: selloFecha(AHORA + D, '12:00:00') }), F.punto([-75.6000, 6.2004])),
 ]));
 
 test('2.2 · ABRIR PROYECTO + AÑADIR KMZ no pierde nada', saltar, async () => {
@@ -719,8 +750,8 @@ test('2.2 · los filtros de un proyecto se restauran TAMBIÉN en sus controles',
   await cargar(p, [KMZ_A, KMZ_B]);
   await abrirFiltros(p);
   await p.selectOption('#f_contrato', ['CW1']);
-  await p.fill('#fDesde', '2026-03-01');
-  await p.fill('#fHasta', '2026-03-30');
+  await p.fill('#fDesde', diaRel(-1));
+  await p.fill('#fHasta', diaRel(30));
   await p.dispatchEvent('#fDesde', 'change');
   await p.dispatchEvent('#fHasta', 'change');
   await p.waitForTimeout(400);
@@ -737,8 +768,8 @@ test('2.2 · los filtros de un proyecto se restauran TAMBIÉN en sus controles',
   await q.waitForTimeout(800);
   // El estado interno y el control visual tienen que decir lo mismo.
   assert.deepEqual(await q.$$eval('#f_contrato option', (o) => o.filter((x) => x.selected).map((x) => x.value)), ['CW1']);
-  assert.equal(await q.inputValue('#fDesde'), '2026-03-01');
-  assert.equal(await q.inputValue('#fHasta'), '2026-03-30');
+  assert.equal(await q.inputValue('#fDesde'), diaRel(-1));
+  assert.equal(await q.inputValue('#fHasta'), diaRel(30));
   await q.close();
 });
 
@@ -937,7 +968,7 @@ test('2.3 · una fecha imposible restaurada no deja un filtro invisible', saltar
 
 test('2.3 · el último día con actividad es seleccionable en el recorrido', saltar, async () => {
   const cruce = escribir('cruce23.kmz', F.kmz([
-    F.placemark('NOCTURNO', desc('CW30', { inicio: '2026-03-01 23:00:00', fin: '2026-03-03 01:00:00' }), F.punto([-75.6000, 6.2000])),
+    F.placemark('NOCTURNO', desc('CW30', { inicio: selloFecha(AHORA + D, '23:00:00'), fin: selloFecha(AHORA + 3 * D, '01:00:00') }), F.punto([-75.6000, 6.2000])),
   ]));
   const p = await abrir({ sinRed: true });
   await cargar(p, [cruce]);
@@ -945,7 +976,7 @@ test('2.3 · el último día con actividad es seleccionable en el recorrido', sa
   assert.equal(max, 2, 'el deslizador llega hasta el tercer día');
   await p.evaluate(() => { const b = document.getElementById('barraTiempo'); b.value = b.max; b.dispatchEvent(new Event('input')); });
   await p.waitForTimeout(500);
-  assert.match(await txt(p, '#fechaViva'), /2026-03-03/);
+  assert.match(await txt(p, '#fechaViva'), new RegExp(diaRel(3)));
   assert.equal(await txt(p, '#cuentaPmt'), '1', 'y ese día sigue mostrando el PMT');
   await p.close();
 });
@@ -1064,7 +1095,13 @@ test('2.4 · INFORME CADUCADO: quitar una fuente lo marca y bloquea la impresió
     const b = bs.find((x) => /quitar/i.test(x.textContent) && x.closest('.fuente').textContent.includes('beta.kmz'));
     if (b) b.click();
   });
-  await p.waitForTimeout(1200);
+  // SE ESPERA LA CONDICION, NO EL RELOJ. Con una espera fija de 1,2 s esta
+  // prueba pasaba sola y fallaba dentro de la suite completa: con el equipo
+  // cargado, recalcular y repintar tarda mas. Una espera fija convierte una
+  // diferencia de carga en un fallo que parece un defecto del producto.
+  await p.waitForFunction(
+    () => !document.getElementById('avisoInforme').classList.contains('oculto'),
+    null, { timeout: 30000 });
 
   assert.ok(await p.isVisible('#avisoInforme'), 'el informe queda marcado como caducado');
   assert.ok(/ya no corresponde/i.test(await txt(p, '#avisoInforme')), await txt(p, '#avisoInforme'));
@@ -1074,7 +1111,9 @@ test('2.4 · INFORME CADUCADO: quitar una fuente lo marca y bloquea la impresió
 
   // Actualizarlo lo deja otra vez al día.
   await p.click('#btnActualizarInforme');
-  await p.waitForTimeout(800);
+  await p.waitForFunction(
+    () => document.getElementById('avisoInforme').classList.contains('oculto'),
+    null, { timeout: 30000 });
   assert.ok(await p.isHidden('#avisoInforme'), 'tras actualizar deja de estar caducado');
   assert.equal(await p.$eval('#btnImprimirInforme', (b) => b.disabled), false);
   assert.ok(!(await txt(p, '#informe')).includes('beta.kmz'), 'y ya no nombra la fuente retirada');
@@ -1257,18 +1296,24 @@ test('VISTA PREVIA: el ciclo completo de sincronización funciona en un navegado
  * contando los pasos que le cuesta.
  */
 
+// Fechas RELATIVAS: los tres estan vigentes hoy, y siguen estandolo mañana.
+const dd = (n) => selloFecha(AHORA + n * D, '07:00:00');
+const df = (n) => selloFecha(AHORA + n * D, '18:00:00');
+/** Dia (AAAA-MM-DD) a `n` dias de hoy, para escribirlo en un control de fecha. */
+const diaRel = (n) => new Date(AHORA + n * D).toISOString().slice(0, 10);
+
 const KMZ_DOC = escribir('condocs.kmz', F.kmz([
   F.placemark('DOC-COMPLETO', F.descripcion({
-    inicio: '2026-06-01 07:00:00', fin: '2026-06-20 18:00:00', contrato: 'CW50',
+    inicio: dd(-1), fin: df(19), contrato: 'CW50',
     municipio: 'Medellin', tipo: 'total',
     resolucionPmt: 'RES-1001-2026', permisoRotura: 'PR-2002', cierrePermisoRotura: 'CR-3003',
   }), F.linea([[-75.6000, 6.2000], [-75.5990, 6.2000]])),
   F.placemark('DOC-A-MEDIAS', F.descripcion({
-    inicio: '2026-06-05 07:00:00', fin: '2026-06-25 18:00:00', contrato: 'CW50',
+    inicio: dd(3), fin: df(24), contrato: 'CW50',
     municipio: 'Medellin', tipo: 'parcial', resolucionPmt: 'RES-1002-2026',
   }), F.linea([[-75.5985, 6.2000], [-75.5975, 6.2000]])),
   F.placemark('DOC-SIN-NADA', F.descripcion({
-    inicio: '2026-06-10 07:00:00', fin: '2026-06-30 18:00:00', contrato: 'CW51',
+    inicio: dd(8), fin: df(29), contrato: 'CW51',
     municipio: 'Envigado', tipo: 'parcial',
   }), F.linea([[-75.5988, 6.2003], [-75.5978, 6.2003]])),
 ]));
@@ -1351,7 +1396,7 @@ test('TAREA D: «los cierres de un municipio en un mes», desde la barra', salta
   await p.waitForTimeout(600);
   assert.equal(await txt(p, '#cuentaPmt'), '2');
   // Y el periodo, también desde la barra.
-  await p.fill('#rapDesde', '2026-06-08');
+  await p.fill('#rapDesde', diaRel(7));
   await p.waitForTimeout(600);
   assert.ok(+(await txt(p, '#cuentaPmt')) <= 2);
   const chips = await txt(p, '#chipsFiltros');
@@ -1424,8 +1469,8 @@ test('RECORRIDO: se puede acotar el tramo que se recorre', saltar, async () => {
   const p = await abrir({ sinRed: true });
   await cargar(p, [KMZ_DOC]);
   const maxAntes = await p.$eval('#barraTiempo', (b) => +b.max);
-  await p.fill('#recorridoDesde', '2026-06-10');
-  await p.fill('#recorridoHasta', '2026-06-20');
+  await p.fill('#recorridoDesde', diaRel(9));
+  await p.fill('#recorridoHasta', diaRel(19));
   await p.waitForTimeout(500);
   const max = await p.$eval('#barraTiempo', (b) => +b.max);
   const min = await p.$eval('#barraTiempo', (b) => +b.min);
@@ -1433,7 +1478,7 @@ test('RECORRIDO: se puede acotar el tramo que se recorre', saltar, async () => {
   assert.ok(/Se recorren \d+ día/.test(await txt(p, '#avisoRecorte')), await txt(p, '#avisoRecorte'));
 
   // Un rango invertido NO se aplica a medias: se dice y se deja como estaba.
-  await p.fill('#recorridoDesde', '2026-06-25');
+  await p.fill('#recorridoDesde', diaRel(24));
   await p.waitForTimeout(400);
   assert.ok(/posterior a la de fin/.test(await txt(p, '#avisoRecorte')), await txt(p, '#avisoRecorte'));
   await p.close();
@@ -1534,8 +1579,8 @@ test('EDITOR: el catalogo manda y crear un PMT recalcula todo el analisis', salt
   await p.fill('#edFrente', 'FRENTE NUEVO');
   await p.fill('#edDireccion', 'Calle 30 con Carrera 65');
   await p.selectOption('#edTipo', 'total');
-  await p.fill('#edInicio', '2026-03-05T07:00');
-  await p.fill('#edFin', '2026-03-25T17:00');
+  await p.fill('#edInicio', `${diaRel(1)}T07:00`);
+  await p.fill('#edFin', `${diaRel(21)}T17:00`);
   await p.waitForTimeout(250);
 
   // 2. Sin trazado sigue sin poder guardarse: un PMT sin geometria no se ubica.
@@ -1593,10 +1638,10 @@ test('TAREA B: «qué está abierto un día concreto», escribiendo la fecha', s
   await cargar(p, [KMZ_DOC]);
 
   // Paso unico: escribir el dia. No hay que arrastrar la barra hasta acertar.
-  await p.fill('#irAFecha', '2026-06-28');
+  await p.fill('#irAFecha', diaRel(27));
   await p.waitForTimeout(600);
   const viva = await txt(p, '#fechaViva');
-  assert.ok(viva.includes('2026-06-28'), 'la fecha viva se ve en grande: ' + viva);
+  assert.ok(viva.includes(diaRel(27)), 'la fecha viva se ve en grande: ' + viva);
 
   // Ese dia solo esta vigente DOC-SIN-NADA (del 10 al 30); los otros ya cerraron.
   assert.equal(await txt(p, '#cuentaPmt'), '1', 'el día filtra de verdad, no solo pinta');
@@ -1839,6 +1884,279 @@ test('A11Y: un nombre larguísimo no rompe la tabla ni la ficha', saltar, async 
 
   // Y el nombre sigue estando: recortarlo visualmente no puede perderlo.
   assert.ok((await txt(p, '#pest_pmt')).includes(LARGO.slice(0, 30)));
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+/* ═══════════ REACTIVACIONES, OPERATIVO E HISTÓRICO (Etapa 3, complemento) ═══════
+ *
+ * Se conduce la aplicación empaquetada como lo haría una persona: cargar datos
+ * con PMT de varios años, cambiar de alcance, consultar un año, reactivar un
+ * PMT sin redibujarlo, y comprobar que el histórico nunca se pierde.
+ *
+ * Las fechas de los fixtures se calculan RESPECTO DEL RELOJ DEL EQUIPO, no
+ * escritas a mano: una prueba con «2025» escrito dentro deja de significar lo
+ * mismo en cuanto pasa el tiempo, y empieza a fallar sola sin que nada se haya
+ * roto.
+ */
+const HOY = new Date();
+const ANIO = HOY.getUTCFullYear();
+const f2 = (n) => String(n).padStart(2, '0');
+const fecha = (anio, mes, dia, hora = '07:00:00') => `${anio}-${f2(mes)}-${f2(dia)} ${hora}`;
+
+const KMZ_ANIOS = escribir('anios.kmz', F.kmz([
+  // Dos de hace dos años, de contratos distintos y MUY cerca: en su momento
+  // fueron una articulación, hoy son historia.
+  F.placemark('VIEJO-A', F.descripcion({
+    inicio: fecha(ANIO - 2, 3, 1), fin: fecha(ANIO - 2, 3, 20, '18:00:00'),
+    contrato: 'CWV1', municipio: 'Medellin', tipo: 'total',
+  }), F.linea([[-75.6000, 6.2000], [-75.5990, 6.2000]])),
+  F.placemark('VIEJO-B', F.descripcion({
+    inicio: fecha(ANIO - 2, 3, 5), fin: fecha(ANIO - 2, 3, 25, '18:00:00'),
+    contrato: 'CWV2', municipio: 'Medellin', tipo: 'parcial',
+  }), F.linea([[-75.5995, 6.2002], [-75.5985, 6.2002]])),
+  // Uno del año pasado.
+  F.placemark('ANTERIOR', F.descripcion({
+    inicio: fecha(ANIO - 1, 6, 1), fin: fecha(ANIO - 1, 6, 30, '18:00:00'),
+    contrato: 'CWA1', municipio: 'Envigado', tipo: 'total',
+  }), F.linea([[-75.5900, 6.1800], [-75.5890, 6.1800]])),
+  // Uno claramente FUTURO: dentro de dos años.
+  F.placemark('FUTURO', F.descripcion({
+    inicio: fecha(ANIO + 2, 1, 10), fin: fecha(ANIO + 2, 2, 10, '18:00:00'),
+    contrato: 'CWF1', municipio: 'Medellin', tipo: 'total',
+  }), F.linea([[-75.5800, 6.2500], [-75.5790, 6.2500]])),
+  // Uno que CRUZA el 31 de diciembre.
+  F.placemark('CRUZA-ANIO', F.descripcion({
+    inicio: fecha(ANIO - 1, 12, 20), fin: fecha(ANIO, 1, 15, '18:00:00'),
+    contrato: 'CWC1', municipio: 'Medellin', tipo: 'parcial',
+  }), F.linea([[-75.5700, 6.2600], [-75.5690, 6.2600]])),
+]));
+
+/** Elige el alcance temporal por su control de radio. */
+async function elegirAlcance(p, valor) {
+  // Se pulsa la ETIQUETA, que es lo que pulsa una persona: el radio esta
+  // recortado a 1x1 para que no se vea, y aunque ahora si tiene superficie, la
+  // etiqueta es el objetivo real y el que sigue funcionando si el estilo cambia.
+  await p.click(`#lab_alc_${valor}`);
+  await p.waitForTimeout(700);
+}
+
+test('CONTEXTO: la banda dice con PALABRAS qué se está viendo', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_ANIOS]);
+  await p.waitForTimeout(500);
+
+  const banda = await txt(p, '#bandaContexto');
+  assert.ok(/Operativo/.test(banda), 'la banda nombra el contexto: ' + banda);
+  assert.ok(/5 PMT cargados/.test(banda), 'y dice SIEMPRE de cuántos habla: ' + banda);
+  assert.ok(/hist[oó]rico/i.test(banda), 'incluido el número que no se ve: ' + banda);
+
+  // Y no es solo un color: el texto cambia al cambiar de alcance.
+  await elegirAlcance(p, 'historico');
+  const banda2 = await txt(p, '#bandaContexto');
+  assert.ok(/Consulta histórica|Año/.test(banda2), banda2);
+  assert.notEqual(banda, banda2);
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('OPERATIVO: los PMT vencidos no hacen ruido, y se dice cuántos son', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_ANIOS]);
+  await p.waitForTimeout(500);
+
+  // Por defecto, vista operativa: los tres viejos quedan fuera.
+  const visibles = +(await txt(p, '#cuentaPmt'));
+  assert.ok(visibles < 5, `la vista operativa tiene que recortar: ${visibles} de 5`);
+  const tabla = await txt(p, '#pest_pmt');
+  assert.ok(!tabla.includes('VIEJO-A'), 'un PMT de hace dos años no es operativo');
+  assert.ok(tabla.includes('FUTURO'), 'lo programado SÍ es operativo: todavía se puede coordinar');
+
+  // Pero el histórico NO se ha borrado: «Todo» lo devuelve entero.
+  await elegirAlcance(p, 'todo');
+  assert.equal(await txt(p, '#cuentaPmt'), '5', 'nada se ha perdido');
+  assert.ok((await txt(p, '#pest_pmt')).includes('VIEJO-A'));
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('HISTÓRICO: consultar un año devuelve sus PMT enteros', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_ANIOS]);
+  await elegirAlcance(p, 'historico');
+
+  // El selector de año se pobló CON LOS DATOS, no con una lista fija.
+  const anios = await p.$$eval('#selAnio option', (n) => n.map((o) => o.value).filter(Boolean));
+  assert.ok(anios.includes(String(ANIO - 2)), `falta el año ${ANIO - 2}: ${anios}`);
+  assert.ok(anios.includes(String(ANIO - 1)), `falta el año ${ANIO - 1}: ${anios}`);
+
+  await p.selectOption('#selAnio', String(ANIO - 2));
+  await p.waitForTimeout(800);
+  const tabla = await txt(p, '#pest_pmt');
+  assert.ok(tabla.includes('VIEJO-A') && tabla.includes('VIEJO-B'),
+    `el año ${ANIO - 2} tiene que devolver sus dos PMT: ` + tabla.slice(0, 200));
+  assert.ok(!tabla.includes('ANTERIOR'), 'y no los de otro año');
+
+  // Y la relación entre ellos vuelve: ocultar históricos no es borrarlos.
+  assert.ok(+(await txt(p, '#cuentaRel')) > 0,
+    'en su año, aquellos dos PMT vuelven a estar relacionados');
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('CRUZA AÑO: un PMT de diciembre a enero sale en los DOS años', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_ANIOS]);
+  await elegirAlcance(p, 'historico');
+
+  for (const anio of [ANIO - 1, ANIO]) {
+    const hay = await p.$$eval('#selAnio option', (n, a) => n.some((o) => o.value === a), String(anio));
+    if (!hay) continue;
+    await p.selectOption('#selAnio', String(anio));
+    await p.waitForTimeout(700);
+    assert.ok((await txt(p, '#pest_pmt')).includes('CRUZA-ANIO'),
+      `el PMT que cruza el 31 de diciembre no sale al consultar ${anio}`);
+  }
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('RECORRIDO: volver a una fecha pasada devuelve lo que pasaba entonces', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_ANIOS]);
+  await p.waitForTimeout(400);
+
+  // En «Todo», para que el recorrido cubra todo el periodo.
+  await elegirAlcance(p, 'todo');
+  await p.fill('#irAFecha', `${ANIO - 2}-03-10`);
+  await p.waitForTimeout(900);
+
+  assert.ok((await txt(p, '#fechaViva')).includes(`${ANIO - 2}-03-10`), await txt(p, '#fechaViva'));
+  const tabla = await txt(p, '#pest_pmt');
+  assert.ok(tabla.includes('VIEJO-A') && tabla.includes('VIEJO-B'),
+    'aquel día los dos estaban vivos: ' + tabla.slice(0, 200));
+  assert.ok(+(await txt(p, '#cuentaRel')) > 0,
+    'y su relación vuelve: la semántica depende de la fecha que se analiza');
+
+  // La banda tiene que decir que se está mirando otra fecha, no hoy.
+  const banda = await txt(p, '#bandaContexto');
+  assert.ok(/Recorrido temporal|Situación al/.test(banda), banda);
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('REACTIVAR: nueva vigencia SIN redibujar, y el historial queda a la vista', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  await p.waitForTimeout(400);
+
+  // Se selecciona un PMT: aparece el botón de nueva vigencia.
+  await p.click('#tablaPmt tbody tr');
+  await p.waitForTimeout(500);
+  assert.ok(await p.isVisible('#btnReactivarPmt'), 'se puede reactivar lo que tiene trazado');
+
+  await p.click('#btnReactivarPmt');
+  await p.waitForSelector('#panelEditor:not(.oculto)', { timeout: 15000 });
+  assert.equal(await txt(p, '#tituloEditor'), 'Nueva vigencia del mismo PMT');
+
+  const cuerpo = await txt(p, '#panelEditor');
+  assert.ok(/No es un PMT nuevo/.test(cuerpo), 'dice que no es un PMT nuevo: ' + cuerpo.slice(0, 200));
+  assert.ok(/trazado se reutiliza exactamente/i.test(cuerpo), cuerpo.slice(0, 300));
+
+  // El trazado NO se puede tocar: es el punto de la función.
+  assert.equal(await p.isDisabled('#edDibujar'), true, 'no se puede redibujar al reactivar');
+  assert.equal(await p.isDisabled('#edBorrarGeom'), true);
+  // Ni la identidad: contrato, frente y tipo son del PMT base.
+  assert.equal(await p.isDisabled('#edContrato'), true);
+  assert.equal(await p.isDisabled('#edTipo'), true);
+
+  // Solo hay que poner las fechas nuevas.
+  await p.fill('#edInicio', `${diaRel(40)}T07:00`);
+  await p.fill('#edFin', `${diaRel(60)}T18:00`);
+  await p.waitForTimeout(400);
+  await p.waitForFunction(() => !document.querySelector('#edGuardar').disabled, null, { timeout: 15000 });
+  assert.equal(await txt(p, '#edGuardar'), 'Crear la nueva vigencia');
+
+  await p.click('#edGuardar');
+  await p.waitForFunction(() => document.querySelector('#cuentaPmt').textContent === '5',
+    null, { timeout: 30000 });
+
+  // La nota dice que es una ACTIVACIÓN, no un PMT nuevo.
+  const siguiente = await txt(p, '#siguientePaso');
+  assert.ok(/activación 2|activacion 2/i.test(siguiente),
+    'tiene que decir que es la activación 2, no un PMT nuevo: ' + siguiente);
+
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('REACTIVAR: la geometría de la nueva activación es IDÉNTICA', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  await p.waitForTimeout(400);
+  await p.click('#tablaPmt tbody tr');
+  await p.waitForTimeout(400);
+
+  await p.click('#btnReactivarPmt');
+  await p.waitForSelector('#panelEditor:not(.oculto)', { timeout: 15000 });
+  await p.fill('#edInicio', `${diaRel(40)}T07:00`);
+  await p.fill('#edFin', `${diaRel(60)}T18:00`);
+  await p.waitForFunction(() => !document.querySelector('#edGuardar').disabled, null, { timeout: 15000 });
+  await p.click('#edGuardar');
+  await p.waitForFunction(() => document.querySelector('#cuentaPmt').textContent === '5',
+    null, { timeout: 30000 });
+
+  // Se exporta a GeoJSON y se comparan las DOS geometrías de la misma base,
+  // coordenada a coordenada. Es la comprobación más dura disponible desde
+  // fuera: lo que sale del producto tiene que llevar el mismo trazado.
+  await elegirAlcance(p, 'todo');
+  const descarga = p.waitForEvent('download', { timeout: 30000 });
+  await p.click('#expGeoJson');
+  const d = await descarga;
+  const ruta = path.join(TMP, 'reactivado.geojson');
+  await d.saveAs(ruta);
+  const gj = JSON.parse(fs.readFileSync(ruta, 'utf8'));
+
+  const porFrente = new Map();
+  for (const f of gj.features) {
+    const k = f.properties.frente;
+    if (!porFrente.has(k)) porFrente.set(k, []);
+    porFrente.get(k).push(f.geometry);
+  }
+  const conDos = [...porFrente.entries()].find(([, g]) => g.length === 2);
+  assert.ok(conDos, 'tiene que haber un frente con dos activaciones: ' +
+    JSON.stringify([...porFrente.keys()]));
+  assert.deepEqual(conDos[1][0], conDos[1][1],
+    'las dos activaciones del mismo PMT tienen que llevar EXACTAMENTE el mismo trazado');
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('INFORME: un informe histórico se titula y se lee en pasado', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_ANIOS]);
+  await elegirAlcance(p, 'historico');
+  await p.selectOption('#selAnio', String(ANIO - 2));
+  await p.waitForTimeout(800);
+
+  await p.click('#expInforme');
+  await p.waitForSelector('#panelInforme:not(.oculto)', { timeout: 20000 });
+  const inf = await txt(p, '#informe');
+
+  assert.ok(/Consulta histórica de PMTs/.test(inf), 'el TÍTULO dice que es histórico: ' + inf.slice(0, 200));
+  assert.ok(inf.includes(String(ANIO - 2)), 'y de qué año');
+  assert.ok(/Esto es una consulta del pasado/.test(inf), 'lo dice sin que haya que deducirlo');
+  assert.ok(/Fecha de referencia/.test(inf), 'y declara la fecha desde la que se juzgó');
+  assert.ok(!/Informe operativo/.test(inf), 'no puede titularse como operativo');
+
+  // Y un informe operativo NO puede llamarse histórico.
+  await p.click('#btnCerrarInforme').catch(() => {});
+  await elegirAlcance(p, 'operativo');
+  await p.click('#expInforme');
+  await p.waitForSelector('#panelInforme:not(.oculto)', { timeout: 20000 });
+  const inf2 = await txt(p, '#informe');
+  assert.ok(/Informe operativo de PMTs/.test(inf2), inf2.slice(0, 200));
+  assert.ok(!/consulta del pasado/.test(inf2));
   assert.deepEqual(p.erroresJs, []);
   await p.close();
 });

@@ -25,6 +25,7 @@
  * atravesar el resto.
  */
 import { esc, num, fechaLegible } from './dom.js';
+import { agruparPorBase, baseDe, historialDeBase } from '../nucleo/identidad-pmt.js';
 import { simbologiaDe, muestraSvg, estadoEspacial, estadoTemporal,
   ESPACIAL, TEMPORAL, ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL } from '../nucleo/modelo.js';
 import { DOCUMENTOS } from '../../motor/src/modelo/documental.js';
@@ -63,6 +64,42 @@ function detalleDocumental(pmt) {
  * @param {object} pmt
  * @param {{relaciones?:Array, porId?:Map}} [contexto]
  */
+/**
+ * Historial de activaciones del PMT base al que pertenece este PMT.
+ *
+ * Solo aparece si hay MÁS DE UNA. Un bloque que dice «1 activación» en todos
+ * los PMT que vienen de un KMZ sería ruido puro, y además daría a entender que
+ * la plataforma sabe algo que no sabe: un KMZ no declara identidad de base.
+ *
+ * No hay ninguna valoración. Reactivar diez veces puede ser una obra compleja
+ * bien gestionada o una mal planeada, y desde aquí no se puede distinguir.
+ */
+function historialBloque(pmt, contexto) {
+  const todas = contexto.todas ?? [];
+  if (!todas.length) return '';
+  const bases = agruparPorBase(todas);
+  const base = bases.get(baseDe(pmt));
+  if (!base || base.veces <= 1) return '';
+  const h = historialDeBase(base);
+
+  return bloque(`Activaciones de este PMT <span class="pastilla p-cerca">${num(h.veces)}</span>`,
+    `<div class="pista-campo" style="margin-bottom:6px">Es el <b>mismo cierre</b>, con el
+       <b>mismo trazado</b>, ejecutado en ${num(h.veces)} periodos distintos.</div>
+     <div class="historial">
+       ${h.activaciones.map((a) => `
+         ${a.diasDesdeLaAnterior !== null && a.diasDesdeLaAnterior !== undefined
+    ? `<div class="historial-hueco">↕ ${num(a.diasDesdeLaAnterior)} día(s) sin actividad</div>` : ''}
+         <div class="historial-fila${a.id === pmt.id ? ' actual' : ''}">
+           <span class="historial-n">${esc(a.numero)}</span>
+           <span>${esc(a.inicio ? a.inicio.slice(0, 10) : '—')} → ${esc(a.fin ? a.fin.slice(0, 10) : '—')}
+             ${a.id === pmt.id ? '<b>(la que está viendo)</b>' : ''}</span>
+           <span>${a.dias === null ? '—' : `${num(a.dias)} día(s)`}</span>
+         </div>`).join('')}
+     </div>
+     ${h.diasTotales !== null ? `<div class="pista-campo">En total, <b>${num(h.diasTotales)} día(s)</b>
+       de cierre en ${esc(h.anios.join(', '))}.</div>` : ''}`);
+}
+
 export function fichaPmt(pmt, contexto = {}) {
   if (!pmt) return '<p class="ficha-vacia">Seleccione un PMT en el mapa o en la tabla para ver su ficha.</p>';
   const s = simbologiaDe(pmt.tipoCierre);
@@ -100,6 +137,8 @@ export function fichaPmt(pmt, contexto = {}) {
         filaKV('Y además a la vez', `<b>${num(aLaVez)}</b>`) +
         filaKV('Contratos implicados', esc([...otros].sort().join(', ')))
       : '<div class="ficha-dato" style="color:var(--tenue)">Ninguna relación con otros contratos en el alcance actual.</div>')}
+
+    ${historialBloque(pmt, contexto)}
 
     ${bloque('Origen y trazabilidad',
       filaKV('Archivo', `<small class="mono">${oNada(pmt.origenArchivo)}</small>`) +

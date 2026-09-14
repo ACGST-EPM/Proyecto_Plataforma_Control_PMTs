@@ -54,8 +54,28 @@ export function validarPmt(pmt, catalogo, contexto = {}) {
   } else {
     const d = derivarDeContrato(catalogo, contrato);
     if (!d) {
-      a.push(aviso(NIVEL.ERROR, 'contrato', `El contrato «${contrato}» no está en el catálogo de EPM.`,
-        'El catálogo lo mantiene EPM. Si el contrato es nuevo, hay que añadirlo allí primero.'));
+      // ══ CREAR NO ES LO MISMO QUE REACTIVAR O EDITAR ═══════════════════════
+      //
+      // Al CREAR, el contrato se ELIGE de una lista: que no esté en el catálogo
+      // significa que se ha escrito algo que EPM no reconoce, y eso es un error
+      // que hay que atajar en el origen. Ahí sí bloquea.
+      //
+      // Al REACTIVAR o EDITAR, el contrato YA ES UN HECHO: vino dentro de un
+      // KMZ y el PMT existe. Bloquear aquí no impide un dato malo —el dato ya
+      // está— sino una operación legítima. Medido: con el catálogo actual (3
+      // contratos) y los KMZ reales, NINGÚN PMT sería reactivable. La
+      // herramienta quedaría inservible para lo que se acaba de construir.
+      //
+      // Así que se avisa, con el mismo texto, y se deja seguir. Es exactamente
+      // la diferencia entre ERROR y ADVERTENCIA: «no se puede trabajar con
+      // esto» frente a «esto conviene arreglarlo, y usted sabe cosas que yo no».
+      const preexistente = contexto.reactivando || contexto.editando;
+      a.push(aviso(preexistente ? NIVEL.ADVERTENCIA : NIVEL.ERROR, 'contrato',
+        `El contrato «${contrato}» no está en el catálogo de EPM.`,
+        preexistente
+          ? 'Este PMT ya existía con ese contrato, así que se puede continuar. Conviene añadirlo al ' +
+            'catálogo maestro para que contratista y proyecto se deriven solos en adelante.'
+          : 'El catálogo lo mantiene EPM. Si el contrato es nuevo, hay que añadirlo allí primero.'));
     } else {
       // Contratista y proyecto NO se piden: se derivan. Si llegan escritos y no
       // coinciden, manda el catálogo, y se dice.

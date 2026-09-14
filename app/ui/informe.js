@@ -26,6 +26,8 @@ import { estadoEspacial, estadoTemporal, lecturaOperativa, ESPACIAL, TEMPORAL, O
   simbologiaDe, TIPOS_CIERRE, LECTURA } from '../nucleo/modelo.js';
 import { describirModeloEspacial } from '../../motor/src/nucleo/config.js';
 import { DOCUMENTOS, estadoDocumental } from '../../motor/src/modelo/documental.js';
+import { ETIQUETA_SITUACION, situacionDe, repartirPorSituacion } from '../nucleo/temporalidad.js';
+import { resumenDeReactivaciones, agruparPorBase, historialDeBase } from '../nucleo/identidad-pmt.js';
 import { rangoTemporal, limitesDelDia } from '../nucleo/filtrado.js';
 import { centroDe } from './mapa.js';
 import { puntosMasCercanos } from '../../motor/src/geo/acercamiento.js';
@@ -310,7 +312,11 @@ export function revisarVigencia(sello, motivo, onActualizar) {
  * Devuelve el HTML generado, para poder comprobarlo en las pruebas.
  */
 export function generar({ filas, relaciones, porId, noEvaluables, archivos, resumen, filtros,
-  config, versionReglas, diaRecorrido, totalCargado, sello = null, procedencia = null }) {
+  config, versionReglas, diaRecorrido, totalCargado, sello = null, procedencia = null,
+  referencia = null, contexto = null, todas = null }) {
+  // ¿Hay que hablar en pasado? Lo decide el CONTEXTO, no una suposición sobre
+  // las fechas: consultar 2025 es retrospectivo aunque algún PMT siga vivo.
+  const retro = !!contexto?.retrospectivo;
   const rango = rangoTemporal(filas);
   const contratos = [...new Set(filas.map((x) => x.contrato).filter(Boolean))].sort();
   const municipios = [...new Set(filas.map((x) => x.municipio).filter(Boolean))].sort();
@@ -399,19 +405,41 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
   <div class="inf-portada">
     <div class="inf-marca">EPM</div>
     <div>
-      <h1>Informe de control y articulación de PMTs</h1>
+      <!-- EL TÍTULO DICE EL CONTEXTO. Un informe histórico que se titula igual
+           que uno operativo se lee como si describiera la situación de hoy, y
+           entonces alguien convoca una reunión por una obra que terminó en
+           2025. El contexto no puede ir en letra pequeña al final. -->
+      <h1>${esc(contexto
+    ? (contexto.retrospectivo
+      ? `Consulta histórica de PMTs — ${contexto.detalle}`
+      : `Informe operativo de PMTs — ${contexto.detalle}`)
+    : 'Informe de control y articulación de PMTs')}</h1>
       <p class="inf-sub">Centro de Gestión Servicios Técnicos · Grupo EPM</p>
     </div>
     <div class="inf-fecha">${esc(new Date().toLocaleString('es-CO'))}</div>
   </div>
+
+  ${contexto ? `<div class="inf-nota ${contexto.retrospectivo ? 'inf-nota-historica' : ''}">
+    <b>${esc(contexto.retrospectivo ? '🕘 Esto es una consulta del pasado.' : '📍 Esto es la situación operativa.')}</b>
+    ${esc(contexto.retrospectivo
+    ? 'Describe lo que ocurrió, no lo que hay que coordinar ahora. Lo que aquí aparece como ' +
+        'coincidencia o articulación se refiere a aquel momento, en pasado.'
+    : 'Describe lo que todavía se puede atender desde la fecha de referencia. ' +
+        'Los PMT que ya terminaron no aparecen como pendientes de coordinar; siguen en el histórico.')}
+    ${referencia ? `<br><small>Fecha de referencia del análisis:
+      <b>${esc(new Date(referencia.ms).toISOString().slice(0, 10))}</b>
+      (${esc(referencia.origen)}).</small>` : ''}
+  </div>` : ''}
 
   <!-- PRIMERO LA CONSECUENCIA, DESPUES LOS HECHOS. Quien lee el informe decide
        a quien convocar; los metros y los dias los necesita despues, para
        sustentar esa decision. El orden no es una clasificacion de criticidad:
        las dos lecturas son excluyentes, no una mas grave que la otra. -->
   <div class="inf-kpis">
-    ${tarjeta(resumen.articulacion, 'articulación requerida', resumen.articulacion ? 'nar' : 'gris')}
-    ${tarjeta(resumen.coincidenciaEspacial, 'coincidencia espacial', resumen.coincidenciaEspacial ? 'azul' : 'gris')}
+    ${tarjeta(resumen.articulacion, retro ? 'articulaciones que hubo' : 'articulación requerida',
+    resumen.articulacion ? 'nar' : 'gris')}
+    ${tarjeta(resumen.coincidenciaEspacial, retro ? 'coincidencias espaciales' : 'coincidencia espacial',
+    resumen.coincidenciaEspacial ? 'azul' : 'gris')}
     ${tarjeta(resumen.espacialNoEval + resumen.temporalNoEval, 'no se pudieron analizar',
       (resumen.espacialNoEval + resumen.temporalNoEval) ? 'rojo' : 'gris')}
     ${tarjeta(resumen.pmts, 'PMT analizados', 'verde')}
@@ -427,6 +455,8 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
 
   <div class="inf-nota">
     <b>Cómo leer las dos primeras cifras.</b>
+    ${retro ? '<b>Van en pasado:</b> este informe describe un periodo que ya terminó, así que ' +
+    'ninguna de estas cifras es una tarea pendiente de hoy. ' : ''}
     <b>${esc(ETIQUETA_OPERATIVO[OPERATIVO.ARTICULACION_REQUERIDA])}</b>:
     ${esc(EXPLICACION_OPERATIVO[OPERATIVO.ARTICULACION_REQUERIDA])}
     <b>${esc(ETIQUETA_OPERATIVO[OPERATIVO.COINCIDENCIA_ESPACIAL])}</b>:
@@ -452,6 +482,11 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
     <tr><th>Regla invariante</th><td>dos frentes del <b>mismo contrato</b> nunca se consideran interferencia entre contratos</td></tr>
     <tr><th>Filtros aplicados</th><td>${esc(textoFiltros(filtros, diaRecorrido))}</td></tr>
     <tr><th>Alcance del informe</th><td>${alcance}</td></tr>
+    ${contexto ? `<tr><th>Contexto temporal</th><td><b>${esc(contexto.etiqueta)}</b> · ${esc(contexto.detalle)}
+      ${retro ? '— las cifras describen <b>lo que ocurrió</b>, no lo que hay que coordinar hoy.'
+    : '— las cifras describen <b>lo que todavía se puede atender</b>.'}</td></tr>` : ''}
+    ${referencia ? `<tr><th>Fecha de referencia</th><td><span class="mono">${esc(new Date(referencia.ms).toISOString().slice(0, 10))}</span>
+      · origen: ${esc(referencia.origen)}. De ella se derivan «vigente», «programado» e «histórico».</td></tr>` : ''}
     <tr><th>Contratistas</th><td>${esc(contratistas.join(', ')) || '—'}</td></tr>
     <!-- PROCEDENCIA: para poder responder, dentro de seis meses, «que version
          produjo este PDF y con que reglas». Las tres versiones van juntas
@@ -516,6 +551,38 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
       <td><small>${esc((h.avisos ?? h.errores ?? []).join(' · ') || 'sin motivo registrado')}</small></td>
     </tr>`).join('')}</tbody>
   </table>` : ''}
+
+  ${(() => {
+    // ══ REACTIVACIONES ════════════════════════════════════════════════════
+    //
+    // Solo sale si hay alguna. Un bloque que dice «0 PMT reactivados» en cada
+    // informe es ruido, y además da a entender que la plataforma sabe algo que
+    // no sabe: un KMZ no declara identidad de base, así que un cero puede
+    // significar «no se reactivó nada» o «nadie lo declaró».
+    const rr = resumenDeReactivaciones(filas);
+    if (!rr.basesReactivadas) return '';
+    const bases = agruparPorBase(filas);
+    const conVarias = [...bases.values()].filter((b) => b.veces > 1)
+      .map(historialDeBase)
+      .sort((p, q) => q.veces - p.veces || String(p.frente).localeCompare(String(q.frente)));
+    return `<h2>PMT reutilizados (reactivaciones)</h2>
+    <p class="inf-p">Un mismo cierre físico puede ejecutarse varias veces durante un contrato. Aquí
+      <b>${num(rr.basesReactivadas)}</b> de <b>${num(rr.bases)}</b> PMT se activaron más de una vez,
+      sumando <b>${num(rr.activacionesExtra)}</b> activación(es) adicional(es).
+      <b>Esto no es una valoración</b>: reutilizar un esquema de cierre puede responder a una obra
+      compleja bien planeada o a imprevistos, y con estos datos no se puede distinguir. Se conserva
+      el hecho; interpretarlo corresponde a EPM.</p>
+    <table class="inf-tabla">
+      <thead><tr><th>Frente</th><th>Contrato</th><th>Veces</th><th>Años</th><th>Días en total</th><th>Activaciones</th></tr></thead>
+      <tbody>${conVarias.slice(0, 40).map((h) => `<tr>
+        <td>${esc(h.frente ?? '—')}</td><td class="mono">${esc(h.contrato ?? '—')}</td>
+        <td class="num"><b>${num(h.veces)}</b></td>
+        <td>${esc(h.anios.join(', '))}</td>
+        <td class="num">${h.diasTotales === null ? '—' : num(h.diasTotales)}</td>
+        <td><small>${h.activaciones.map((a) => `${esc(a.inicio ? a.inicio.slice(0, 10) : '—')} → ${esc(a.fin ? a.fin.slice(0, 10) : '—')}`).join('<br>')}</small></td>
+      </tr>`).join('')}</tbody>
+    </table>`;
+  })()}
 
   <h2>Seguimiento documental</h2>
   <!-- EL ESTADO ES DERIVADO. En ningun sitio se guarda la palabra «Pendiente»:

@@ -205,3 +205,97 @@ resumen cuenta exactamente lo mismo que la lectura fila a fila.
 
 Es decir: el vocabulario **no depende del modelo espacial**, se apoya en el criterio vigente sea cual
 sea. Eso era una suposición y ahora es una prueba.
+
+
+---
+
+# Complemento: reactivaciones, histórico y semántica temporal
+
+> Segunda ronda de ataque, sobre lo añadido en el cierre operativo de la Etapa 3.
+
+## 6 · Lo que ataqué en esta ronda
+
+### 6.1 · Las tres compuertas nuevas, rotas a propósito
+
+| Compuerta | Cómo la rompí | ¿La detectó? |
+|---|---|---|
+| M · reactivar reutiliza el trazado | `prepararReactivacion` compartiendo el objeto en vez de clonarlo | **sí** |
+| N · un solo reloj | `export const ESTA_VENCIDO = (x) => x.finMs < Date.now()` en `ui/capas.js` | **sí** |
+| O · el histórico no se borra | el alcance «Todo» recortando históricos | **sí** |
+
+**Un defecto de la propia compuerta N, encontrado y corregido:** su primera versión marcaba
+`ahora = Date.now()` como **valor por defecto de un parámetro**, que es exactamente el patrón
+correcto —quien llama puede inyectar la fecha, así que la función se puede probar y no impone su
+reloj—. También marcaba el banco de pruebas del prototipo, que genera contenido falso con la hora y
+no clasifica nada. Una compuerta que castiga el patrón bueno se acaba desactivando «porque siempre
+falla». Ahora persigue lo que de verdad duele: un `Date.now()` incrustado en medio de una
+comparación, donde nadie puede sustituirlo.
+
+## 7 · Defectos encontrados mientras construía esto
+
+| # | Defecto | Clase de error |
+|---|---|---|
+| 10 | **Ciclo de importaciones** `filtrado → temporalidad → filtrado`. El empaquetador de un solo archivo no lo resuelve: revienta la construcción. | dependencia circular entre un módulo y su ladrillo |
+| 11 | `arguments.callee` para remontar el selector de periodo. **No existe en un módulo ES**: habría lanzado en cuanto alguien cambiara de alcance. | copiar un patrón de otro lenguaje/época |
+| 12 | Un `return` para no reconectar campos al reactivar dejaba **sin conectar los botones Guardar y Cancelar**: el editor se abría muerto. | salida temprana en una función que hace dos cosas |
+| 13 | La columna de situación **se vaciaba sola al pulsar una fila**: dos de los tres repintados de la tabla usaban `estado.visibles` sin la situación derivada. | el mismo dato calculado en un camino y no en los otros |
+| 14 | El historial en la ficha usaba `relVisibles`, así que **con la vista operativa puesta decía «1 activación»**: las anteriores son históricas por definición y no estaban en lo visible. | confundir «lo que se ve» con «lo que hay» |
+| 15 | **Las exportaciones no usaban `nombreConProcedencia`.** La función existía y estaba probada, pero los botones ponían solo la fecha: un CSV sin versión no permite responder «¿qué versión produjo esto?». | una función correcta que nadie llama |
+| 16 | **`fijarFiltros()` descartaba `alcance` y `anio` en silencio.** Reconstruye los filtros desde cero, así que todo lo que no se nombre se pierde. El usuario pulsaba «Histórico» y la pantalla seguía en operativo, sin error y sin explicación. | una función que reconstruye y una lista que no se actualizó con ella |
+| 17 | **Los radios del selector medían 0×0.** Un elemento sin superficie no recibe clics: ni el ratón ni una herramienta de pruebas pueden pulsarlo. Se descubrió porque la suite de navegador se quedaba 30 s por intento. | ocultar algo sacándolo de la capa de interacción en vez de recortarlo |
+| 18 | **Reactivar quedaba BLOQUEADO** si el contrato del PMT no estaba en el catálogo. Medido: con el catálogo real (3 contratos) y los KMZ reales, **ningún PMT sería reactivable**. | aplicar la regla de «crear» a una operación que no crea |
+| 19 | **Los fixtures de prueba tenían fechas escritas a mano.** Al pasar esa fecha, todos se volvieron históricos y la vista operativa —la de por defecto— dejó de enseñarlos: media suite empezó a fallar sin que nada se hubiera roto. | una prueba cuyo significado cambia con el calendario |
+| 20 | **La vista operativa podía dejar la pantalla vacía sin explicar nada.** Es lo que le habría pasado a la usuaria al abrir la herramienta con los PMT del año pasado: se lee como «no cargó mis archivos», no como «no hay nada que coordinar». | un estado vacío legítimo indistinguible de un fallo |
+
+El 15 es especialmente instructivo: **la compuerta J pasaba** porque probaba la función, no su uso.
+Una prueba que verifica una capacidad no verifica que el producto la ejerza.
+
+## 8 · Decisiones que tomé y por qué (revisables)
+
+1. **La fila sigue siendo la unidad, no un árbol.** Anidar activaciones dentro de un objeto PMT
+   obligaría a desanidarlas en cada análisis, filtro, tabla y exportación, y a mantener dos formas
+   sincronizadas. La unidad de análisis del motor es el par (geometría, vigencia): dos activaciones
+   son dos hechos espacio-temporales distintos y tienen que poder compararse por separado.
+2. **Coincidencia y articulación tienen alcances distintos.** Para la coincidencia basta con que UNO
+   siga operativo (es lo que pidió la operación, y es útil: que donde hoy trabaja alguien hubo otra
+   intervención es contexto). Para la articulación exijo que **el traslape siga vivo**, porque solo
+   se puede coordinar un solape que no ha terminado. Una articulación caducada **se degrada a
+   coincidencia espacial**, no desaparece: los dos siguen compartiendo sitio.
+3. **Los documentos no se heredan al reactivar.** Una resolución ampara unas fechas concretas.
+   Copiar el número haría pasar por tramitado algo que no lo está. **DECISIÓN PENDIENTE**: si EPM
+   confirma que alguno ampara varias activaciones, se cambia.
+4. **Un selector, no pestañas por año.** Se leen bien tres años y mal diez, y la pestaña del año en
+   curso —la que se usa casi siempre— acabaría compitiendo con nueve que nadie abre.
+
+## 8 bis · Ataques directos a los módulos nuevos
+
+Ataqué `identidad-pmt.js` y `temporalidad.js` con entradas que nadie escribe a mano pero que un
+archivo editado, una combinación de fuentes o un error de programación sí pueden producir. **Dos
+defectos reales:**
+
+| # | Defecto | Por qué importaba |
+|---|---|---|
+| 21 | `prepararReactivacion` **lanzaba** con una geometría circular en vez de devolver `{ok:false}` | Una función que promete un objeto de fallo y en su lugar revienta convierte un caso previsto en un error inesperado a mitad de la interfaz |
+| 22 | `referencia({ms: NaN})` producía una referencia **con NaN dentro** | Con NaN, `fin < NaN` y `inicio > NaN` son los dos `false`, así que **absolutamente todo pasaría por VIGENTE**. Sin ningún error: la pantalla mentiría entera, en silencio. Ahora se cae a hoy y **lo declara** en `degradada` |
+
+Lo que aguantó bien: vigencias invertidas, rangos de 200 años, activaciones sin fechas (dan `null`,
+no `NaN`), `traslapeFin` ilegible (nunca oculta), conjuntos vacíos y filas sin `idBase`.
+
+**Rendimiento con 5.000 activaciones**, que es lo que se repinta en cada cambio de filtro:
+`inventarioDeAnios` 6 ms · `agruparPorBase` 13 ms · `revisarCoherenciaDeBases` 6 ms. Hay prueba que
+vigila que no se derrumbe.
+
+## 9 · Dónde NO he mirado en esta ronda
+
+1. ~~Volumen real de histórico.~~ **MEDIDO** (ver §8 bis): 25 ms en total con 5.000 activaciones, y
+   con prueba que lo vigila. Lo que sigue sin medir es el **repintado del DOM** con esos volúmenes,
+   que es otra cosa.
+2. **Reactivar un PMT venido de un proyecto que a su vez venía de otro proyecto.** La cadena de dos
+   saltos no está probada.
+3. ~~Dos fuentes con la misma `idBase` y geometrías distintas.~~ **CERRADO antes de entregar.**
+   `revisarCoherenciaDeBases()` lo detecta y lo dice, tanto para trazados distintos como para
+   contratos distintos. **Avisa, no corrige**: no sabemos cuál de las dos versiones es la buena, y
+   elegir una por nuestra cuenta sería inventar. Cuatro pruebas.
+4. **La búsqueda espacial histórica** («qué había en este punto») se puede hacer hoy filtrando por
+   año y municipio, pero **no hay consulta por proximidad a un punto**. La arquitectura no lo impide;
+   simplemente no está.

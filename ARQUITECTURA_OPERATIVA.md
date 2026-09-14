@@ -339,3 +339,105 @@ lado: **hace falta un sitio común donde escribir**, y ese sitio es corporativo.
 la postura es la de siempre: se construye lo que funciona sin él, y se deja el hueco con su forma
 —`listar()` / `leer()` para entrada; un `escribir()` simétrico el día que haya dónde— en vez de
 inventar un servidor propio que nadie ha aprobado.
+
+
+---
+
+## 11 · Identidad del PMT, histórico y semántica temporal (cierre operativo de la Etapa 3)
+
+### 11.1 · Por qué el modelo tenía que evolucionar
+
+Hasta aquí, **una fila era un PMT**. Eso funcionó mientras cada PMT ocurriera una sola vez. La
+operación real no es así: un mismo cierre físico se ejecuta varias veces durante un contrato.
+
+Con el modelo plano eso obligaba a **redibujar la misma geometría**, con dos consecuencias:
+
+- el trazado nuevo nunca sale idéntico, así que **las distancias medidas cambian sin que haya
+  cambiado nada en la calle**;
+- el sistema veía dos PMT distintos donde la operación ve uno reactivado, y no se podía responder
+  «¿cuántas veces hemos cerrado aquí?».
+
+### 11.2 · El modelo: base + activación, en una sola representación
+
+```
+PMT BASE  (identidad)          ACTIVACIÓN  (vigencia)
+  geometría                      fechas
+  contrato                       documentos de esa vez
+  frente                         motivo
+  tipo de cierre                 procedencia
+  municipio · dirección
+```
+
+**Cada fila es una ACTIVACIÓN** y lleva `idBase` encima. El PMT base es una **vista derivada**
+(`agruparPorBase`). No hay dos representaciones que puedan divergir, porque solo hay una.
+
+**Se descartó anidar** (un objeto PMT con una lista de activaciones dentro). La razón es concreta:
+la unidad de análisis del motor es el par **(geometría, vigencia)**. Dos activaciones del mismo
+cierre en fechas distintas son **dos hechos espacio-temporales distintos** y tienen que poder
+compararse por separado con los PMT de otros contratos. Anidarlas obligaría a desanidarlas en cada
+análisis, filtro, tabla y exportación, y a mantener las dos formas sincronizadas.
+
+### 11.3 · Compatibilidad: lo que no se puede deducir, no se deduce
+
+Los KMZ existentes no traen identidad de base. La tentación era agrupar por geometría idéntica, y
+**sería un error**: puede haber dos cierres distintos exactamente en el mismo sitio.
+
+> **Regla:** un trazado sin identidad explícita es **su propia base, con una sola activación**.
+> Vincular dos a posteriori es una acción del usuario, nunca una deducción del programa.
+
+Los PMT creados dentro de la plataforma **sí** adquieren identidad explícita desde su creación.
+
+### 11.4 · La fecha de referencia: un solo reloj
+
+«Vigente», «vencido» y «futuro» **no son propiedades de un PMT**: son propiedades de un PMT
+**respecto de una fecha**. En cuanto dos partes de la interfaz usan fechas distintas, la pantalla se
+contradice.
+
+Un solo concepto, con tres orígenes explícitos:
+
+| Origen | Cuándo | Qué es la referencia |
+|---|---|---|
+| `hoy` | vista operativa | el día de hoy |
+| `elegida` | recorrido temporal | el día que se recorre |
+| `periodo` | consulta histórica | el último instante del tramo |
+
+De ella se derivan **todas** las clasificaciones. Una compuerta (N) vigila que nadie más llame a
+`Date.now()` para clasificar.
+
+### 11.5 · Operativo e histórico: dos preguntas, una sola base
+
+| Vista | Pregunta que responde |
+|---|---|
+| **Operativa** | ¿Qué necesita atención ahora o en el futuro? |
+| **Histórica** | ¿Qué ocurrió aquí anteriormente? |
+
+**El alcance es una VISTA, nunca un borrado.** Volver a la fecha de un PMT vencido lo devuelve
+entero, con sus relaciones. Una compuerta (O) lo vigila.
+
+**Coincidencia y articulación tienen alcances distintos, y es deliberado:**
+
+- **Coincidencia espacial** — basta con que UNO de los dos siga operativo. Que donde hoy trabaja
+  alguien hubo otra intervención es contexto útil.
+- **Articulación requerida** — exige que **el traslape siga vivo** (`traslapeFin ≥ referencia`).
+  Articular es acordar sobre un tramo compartido; si ese tramo ya pasó entero, no queda nada que
+  acordar. Una articulación caducada **se degrada a coincidencia espacial**, no desaparece.
+
+### 11.6 · Años
+
+Un PMT pertenece a **todo año con el que su vigencia se superponga**. Cualquier otra regla lo hace
+desaparecer de una consulta legítima: por año de inicio, no sale al consultar el año en que aún
+estaba abierto; por año de fin, no sale en el año en que empezó.
+
+El selector se **puebla con los datos**, nunca con una lista fija: una lista fija envejece sola.
+
+**Se descartaron pestañas por año**: se leen bien tres años y mal diez, y la del año en curso —la que
+se usa casi siempre— acabaría compitiendo con nueve que nadie abre.
+
+### 11.7 · Lo que esto NO resuelve
+
+- **Consulta espacial por proximidad a un punto** («¿qué había exactamente aquí?»). Hoy se llega
+  filtrando por año y municipio sobre el mapa. La arquitectura no lo impide; simplemente no está.
+- **Volumen**: todo lo medido son conjuntos pequeños. `inventarioDeAnios` y `agruparPorBase`
+  recorren el conjunto entero en cada repintado. Con 5.000 PMT de cinco años **no está medido**.
+- **A qué nivel pertenece cada documento** (base o activación). Se modela en la activación y **no se
+  pierde información**, pero la regla jurídica no la tenemos. **DECISIÓN PENDIENTE** (pregunta P20).

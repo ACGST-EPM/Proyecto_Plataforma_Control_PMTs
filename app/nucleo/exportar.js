@@ -202,7 +202,20 @@ export function aKml(filas, nombreDoc = 'PMT exportados', config = null, extra =
  * @param {string} base   por ejemplo 'PMT' o 'Relaciones_PMT'
  * @param {string} ext    extension sin punto
  */
-export function nombreConProcedencia(base, ext, { fecha = new Date() } = {}) {
+export function nombreConProcedencia(base, ext, { fecha = new Date(), contexto = null } = {}) {
   const dia = fecha.toISOString().slice(0, 10);
-  return `${base}_${dia}_app-${VERSION_APP}_reglas-${VERSION_REGLAS}.${ext}`;
+  // ══ EL CONTEXTO TEMPORAL VA EN EL NOMBRE ════════════════════════════════
+  //
+  // Dos exportaciones del mismo día —una operativa y otra del histórico 2025—
+  // se llamaban igual y se pisaban en la carpeta de descargas. Peor: una vez
+  // fuera de la aplicación no había forma de saber cuál era cuál, y un CSV
+  // histórico abierto en Excel parece exactamente igual que uno operativo.
+  //
+  // Se normaliza a algo que sobreviva a cualquier sistema de archivos.
+  const marca = contexto
+    ? '_' + `${contexto.etiqueta}-${contexto.detalle}`
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase()
+    : '';
+  return `${base}_${dia}${marca}_app-${VERSION_APP}_reglas-${VERSION_REGLAS}.${ext}`;
 }

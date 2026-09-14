@@ -120,9 +120,9 @@ cd motor && node herramientas/comparar.mjs <carpeta-con-los-8-KMZ>
 
 ```
 Motor ......................  259   (1 omitida: depende de una referencia externa opcional)
-Aplicación (lógica pura) ...  200
-Navegador real .............   66   (file:// y HTTP)
-Compuertas de entrega ......   12   (A..L, ejecutables)
+Aplicación (lógica pura) ...  245
+Navegador real .............   74   (file:// y HTTP)
+Compuertas de entrega ......   15   (A..O, ejecutables)
 ```
 
 ```bash
@@ -154,7 +154,8 @@ documentado en `AUTOREVISION_ETAPA3.md` §1.1.
 | `app/test/fuentes.test.mjs` | el modelo de fuentes y versiones, con un origen simulado |
 | `app/test/gobierno.test.mjs` | el catálogo maestro manda, y la captura resiste datos hostiles |
 | `app/test/vocabulario.test.mjs` | la lectura operativa se deriva de los hechos y no cuela criticidad |
-| `herramientas/compuertas.mjs` | las 12 compuertas de entrega, ejecutables |
+| `app/test/reactivacion.test.mjs` | identidad PMT base/activación, reactivaciones, operativo vs histórico |
+| `herramientas/compuertas.mjs` | las 15 compuertas de entrega, ejecutables |
 
 ---
 
@@ -243,6 +244,8 @@ Cada cosa que sale de la plataforma se puede identificar sin preguntarle a nadie
 | Etapa 3 · gobierno y captura | `e2f0234` | 1.2.0 | sin cambios: el catálogo no altera el cálculo |
 | Etapa 3 · vocabulario e informe | `fe46ec1` | 1.2.0 | sin cambios: la lectura operativa es DERIVADA |
 | Etapa 3 · accesibilidad | `baae53d` | 1.2.0 | sin cambios: solo color y contraste |
+| Etapa 3 · compuertas y autorevisión | `e289bae` | 1.2.0 | sin cambios |
+| Etapa 3 · reactivaciones e histórico | en curso | 1.2.0 | **sin cambios en el cálculo**: el alcance temporal es una VISTA, no un criterio |
 | 2.3 | `16c3730` | 1.2.0 | sin cambios |
 | 2.2 | `9f801a0` | 1.2.0 | sin cambios |
 | 2.1 | `5689f6b` | 1.2.0 | sin cambios |

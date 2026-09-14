@@ -28,6 +28,8 @@ import { NIVEL, validarPmt, aplicarCatalogo } from '../nucleo/validacion-pmt.js'
 import { derivarDeContrato, opcionesDeCatalogo } from '../nucleo/catalogos.js';
 import { DOCUMENTOS } from '../../motor/src/modelo/documental.js';
 import * as Mapa from './mapa.js';
+import { prepararReactivacion, baseDe, agruparPorBase, historialDeBase,
+  mismaGeometria } from '../nucleo/identidad-pmt.js';
 
 let estado = null;
 
@@ -46,19 +48,52 @@ const ETIQUETA_NIVEL = {
  * Abre el editor.
  * @param {object} cfg {catalogo, existentes, pmt, onGuardar, onCerrar}
  */
-export function abrir({ catalogo, existentes = [], pmt = null, onGuardar, onCerrar }) {
-  estado = {
-    catalogo, existentes, onGuardar, onCerrar,
-    editando: !!pmt,
-    datos: pmt ? { ...pmt } : {
+export function abrir({ catalogo, existentes = [], pmt = null, modo = null, onGuardar, onCerrar }) {
+  const reactivando = modo === 'reactivar';
+  let datos, fallo = null;
+
+  if (reactivando) {
+    // REACTIVAR: la identidad se hereda entera y el trazado se reutiliza tal
+    // cual. Lo único que se pide son las fechas nuevas.
+    const r = prepararReactivacion(pmt, {});
+    if (!r.ok) { fallo = r.motivo; datos = null; } else { datos = r.datos; }
+  } else if (pmt) {
+    datos = { ...pmt };
+  } else {
+    datos = {
       contrato: '', frente: '', municipio: '', direccion: '', tipoCierre: '',
       inicio: '', fin: '', geometria: null,
       resolucionPmt: '', permisoRotura: '', cierrePermisoRotura: '',
-    },
+    };
+  }
+
+  if (fallo) {
+    // Un fallo al reactivar NO abre un editor a medias: se dice y no se abre.
+    // Abrirlo vacío invitaría a redibujar el trazado, que es exactamente lo que
+    // esta función existe para evitar.
+    const aviso = $('avisoGlobal');
+    if (aviso) {
+      aviso.classList.remove('oculto');
+      aviso.innerHTML = `<b>No se puede reactivar este PMT:</b> ${esc(fallo)}.`;
+    }
+    return false;
+  }
+
+  estado = {
+    catalogo, existentes, onGuardar, onCerrar,
+    editando: !!pmt && !reactivando,
+    reactivando,
+    origen: reactivando ? pmt : null,
+    // Trazado de origen, GUARDADO APARTE, para poder comprobar al guardar que
+    // sigue siendo el mismo. No basta con copiarlo bien al abrir: entre abrir y
+    // guardar hay una interfaz por medio.
+    geometriaOriginal: reactivando ? pmt.geometria : null,
+    datos,
   };
   pintar();
   mostrar('panelEditor', true);
   $('panelEditor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  return true;
 }
 
 export function cerrar() {
@@ -67,6 +102,45 @@ export function cerrar() {
   const cb = estado?.onCerrar;
   estado = null;
   cb?.();
+}
+
+/**
+ * Cabecera del editor cuando se está REACTIVANDO.
+ *
+ * Dice tres cosas, y las tres importan:
+ *   · que esto NO es un PMT nuevo, sino otra vigencia del mismo;
+ *   · que el trazado es el de siempre y no hay que volver a dibujarlo;
+ *   · cuántas veces se ha activado ya, y cuándo.
+ *
+ * Sin la tercera, quien reactiva no sabe si es la segunda vez o la séptima, y
+ * ese dato es justamente el que EPM quiere poder observar.
+ */
+function cabeceraReactivacion() {
+  const o = estado.origen;
+  const bases = agruparPorBase(estado.existentes ?? []);
+  const base = bases.get(baseDe(o));
+  const h = base ? historialDeBase(base) : null;
+
+  return `<div class="frase" style="margin-top:0">
+      <b>Nueva vigencia del mismo PMT.</b> No es un PMT nuevo: es otra activación de
+      <b>${esc(o.frente ?? 'este cierre')}</b>, del contrato <b>${esc(o.contrato ?? '—')}</b>.
+      <b>El trazado se reutiliza exactamente</b>, no hay que volver a dibujarlo — y por eso
+      las distancias medidas seguirán siendo las mismas.
+      Si lo que hace falta es <i>otro</i> cierre en el mismo sitio, cierre esto y use
+      «Nuevo PMT»: serían dos PMT distintos, no uno reactivado.
+    </div>
+    ${h && h.veces ? `<div class="historial">
+      <label>Activaciones anteriores de este PMT</label>
+      ${h.activaciones.map((a) => `
+        ${a.diasDesdeLaAnterior !== null && a.diasDesdeLaAnterior !== undefined
+    ? `<div class="historial-hueco">↕ ${num(a.diasDesdeLaAnterior)} día(s) sin actividad</div>` : ''}
+        <div class="historial-fila">
+          <span class="historial-n">${esc(a.numero)}</span>
+          <span>${esc(a.inicio ? a.inicio.slice(0, 10) : '—')} → ${esc(a.fin ? a.fin.slice(0, 10) : '—')}</span>
+          <span>${a.dias === null ? '—' : `${num(a.dias)} día(s)`}</span>
+        </div>`).join('')}
+      <div class="pista-campo">Esta sería la activación <b>${num(h.veces + 1)}</b>.</div>
+    </div>` : ''}`;
 }
 
 function campo(id, etiqueta, control, ayuda = '') {
@@ -84,12 +158,14 @@ function pintar() {
   const derivado = derivarDeContrato(estado.catalogo, d.contrato);
   const municipios = derivado?.municipios ?? [];
 
+  const rea = estado.reactivando;
+
   $('panelEditor').querySelector('.cuerpo').innerHTML = `
-    <div class="frase" style="margin-top:0">
+    ${rea ? cabeceraReactivacion() : `<div class="frase" style="margin-top:0">
       <b>Lo que EPM gobierna no se escribe: se elige.</b> Al elegir el contrato, el
       <b>contratista</b> y el <b>proyecto</b> quedan determinados. Así «MEXICHEM», «Mexichem S.A.»
       y «MEXICHEM SAS» no pueden acabar siendo tres organizaciones distintas.
-    </div>
+    </div>`}
 
     <div class="ed-rejilla">
       <div>
@@ -133,10 +209,13 @@ function pintar() {
         <div class="campo">
           <label>Trazado en el mapa</label>
           <div class="barra-acciones">
-            <button type="button" class="b-verde b-mini" id="edDibujar">✎ Dibujar en el mapa</button>
-            <button type="button" class="b-suave b-mini" id="edDeshacer">Deshacer punto</button>
-            <button type="button" class="b-suave b-mini" id="edBorrarGeom">Borrar</button>
+            <button type="button" class="b-verde b-mini" id="edDibujar"${rea ? ' disabled' : ''}>✎ Dibujar en el mapa</button>
+            <button type="button" class="b-suave b-mini" id="edDeshacer"${rea ? ' disabled' : ''}>Deshacer punto</button>
+            <button type="button" class="b-suave b-mini" id="edBorrarGeom"${rea ? ' disabled' : ''}>Borrar</button>
           </div>
+          ${rea ? `<div class="pista-campo"><b>El trazado no se puede tocar aquí.</b> Reactivar sirve
+            precisamente para no volver a dibujarlo: redibujarlo cambiaría las distancias medidas sin
+            que nada haya cambiado en la calle. Si el cierre es distinto, es otro PMT.</div>` : ''}
           <div id="edEstadoGeom" class="pista-campo"></div>
           <div class="ed-aviso" data-aviso="edGeometria"></div>
         </div>
@@ -155,7 +234,8 @@ function pintar() {
 
     <div id="edResumenValidacion" class="frase" style="margin-top:14px"></div>
     <div class="barra-acciones">
-      <button class="b-verde" id="edGuardar">${estado.editando ? 'Guardar los cambios' : 'Crear el PMT'}</button>
+      <button class="b-verde" id="edGuardar">${rea ? 'Crear la nueva vigencia'
+    : estado.editando ? 'Guardar los cambios' : 'Crear el PMT'}</button>
       <button class="b-suave" id="edCancelar">Cancelar</button>
     </div>`;
 
@@ -180,6 +260,18 @@ function conectar() {
   liga('edInicio', 'inicio', deLocal);
   liga('edFin', 'fin', deLocal);
   for (const doc of DOCUMENTOS) liga('ed_' + doc.clave, doc.clave);
+
+  // ══ LA IDENTIDAD NO SE EDITA AL REACTIVAR ══════════════════════════════
+  //
+  // Contrato y tipo de cierre son del PMT BASE, no de la activación. Cambiarlos
+  // aquí convertiría la reactivación en otro PMT disfrazado de activación, y el
+  // historial pasaría a mentir. Si hace falta cambiarlos, es un PMT nuevo.
+  if (estado.reactivando) {
+    for (const id of ['edContrato', 'edMunicipio', 'edTipo', 'edFrente', 'edDireccion']) {
+      const e = $(id);
+      if (e) { e.disabled = true; e.title = 'Pertenece al PMT base: no cambia entre activaciones.'; }
+    }
+  }
 
   // Cambiar el contrato REPINTA: los municipios disponibles dependen de él.
   $('edContrato').onchange = (e) => {
@@ -209,7 +301,13 @@ function empezarDibujo() {
 }
 
 function revalidar() {
-  const r = validarPmt(estado.datos, estado.catalogo, { existentes: estado.existentes });
+  const r = validarPmt(estado.datos, estado.catalogo, {
+    existentes: estado.existentes,
+    // El modo cambia la severidad de una cosa: un contrato fuera del catálogo
+    // bloquea al CREAR (se está eligiendo) y solo avisa al reactivar o editar
+    // (ya es un hecho que vino en el archivo).
+    reactivando: estado.reactivando, editando: estado.editando,
+  });
 
   for (const e of $('panelEditor').querySelectorAll('[data-aviso]')) e.innerHTML = '';
   const mapaCampos = {
@@ -244,8 +342,23 @@ function revalidar() {
 }
 
 function guardar() {
-  const r = validarPmt(estado.datos, estado.catalogo, { existentes: estado.existentes });
+  const r = validarPmt(estado.datos, estado.catalogo, {
+    existentes: estado.existentes, reactivando: estado.reactivando, editando: estado.editando,
+  });
   if (!r.sePuedeGuardar) return;
+
+  // ══ EL TRAZADO NO SE HA MOVIDO ═════════════════════════════════════════
+  //
+  // Se comprueba AL GUARDAR, no solo al abrir: entre abrir y guardar hay una
+  // interfaz por medio, y un trazado que se desplaza solo no lo ve nadie y
+  // cambia todas las distancias medidas. Si no cuadra, no se guarda.
+  if (estado.reactivando && !mismaGeometria(estado.datos.geometria, estado.geometriaOriginal)) {
+    $('edResumenValidacion').className = 'frase error';
+    $('edResumenValidacion').innerHTML =
+      '<b>El trazado ha cambiado respecto del PMT original.</b> Una reactivación tiene que ' +
+      'reutilizarlo exactamente. No se ha guardado nada.';
+    return;
+  }
   // El catálogo manda: contratista y proyecto se ponen AL GUARDAR, no según lo
   // que hubiera en el formulario.
   const pmt = aplicarCatalogo(estado.datos, estado.catalogo);

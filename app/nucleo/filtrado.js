@@ -9,6 +9,12 @@
  * de una tabla vacia sin saber por que.
  */
 import { estadoEspacial, estadoTemporal, ESPACIAL, TEMPORAL } from './modelo.js';
+import { ALCANCE, SITUACION, situacionDe, tocaAnio, MS_DIA, limitesDelDia,
+  coincidenciaAccionable, articulacionCoordinable } from './temporalidad.js';
+
+// Las primitivas de dia calendario viven en `temporalidad.js` (ver alli el
+// motivo). Se reexportan para que nadie tenga que cambiar su importacion.
+export { MS_DIA, limitesDelDia };
 
 /** Filtros en blanco: no descartan nada. */
 export function filtrosVacios() {
@@ -16,12 +22,31 @@ export function filtrosVacios() {
     contratista: [], contrato: [], proyecto: [], municipio: [],
     frente: [], tipoCierre: [], relacion: [], documental: [],
     desde: null, hasta: null, texto: '',
+    // ALCANCE TEMPORAL. No es «un filtro más»: decide desde qué fecha se mira,
+    // y de ahí se derivan vigente / futuro / histórico en TODA la interfaz.
+    //   'operativo'  lo que todavía se puede atender, respecto de la referencia
+    //   'historico'  un año concreto, para consultar qué ocurrió
+    //   'todo'       sin recorte: la base entera
+    alcance: ALCANCE.OPERATIVO,
+    anio: null,
   };
 }
 
 export function hayFiltrosActivos(f) {
   return ['contratista', 'contrato', 'proyecto', 'municipio', 'frente', 'tipoCierre', 'relacion', 'documental']
     .some((k) => f[k]?.length) || !!f.desde || !!f.hasta || !!(f.texto ?? '').trim();
+}
+
+/**
+ * ¿Recorta el ALCANCE TEMPORAL lo que se ve?
+ *
+ * Va aparte de `hayFiltrosActivos` a propósito. Un filtro de contrato es una
+ * elección del usuario sobre un conjunto; el alcance temporal es el PUNTO DE
+ * VISTA desde el que se mira todo. Mezclarlos haría que «quitar los filtros»
+ * devolviera al usuario a un alcance que no eligió, o al revés.
+ */
+export function alcanceRecorta(f) {
+  return (f?.alcance ?? ALCANCE.OPERATIVO) !== ALCANCE.TODO;
 }
 
 const enLista = (lista, valor) => !lista?.length || lista.includes(valor ?? '(sin dato)');
@@ -54,9 +79,37 @@ function coincideTexto(fila, texto) {
     .some((v) => norm(v).includes(t));
 }
 
-/** Aplica los filtros a la lista de PMT. */
-export function filtrarPmts(filas, f) {
-  return filas.filter((x) =>
+/**
+ * ¿Entra este PMT en el alcance temporal pedido?
+ *
+ * NO BORRA NADA. Un PMT histórico sigue existiendo, con su geometría, sus
+ * fechas y sus relaciones; lo único que decide esto es si aparece en la vista
+ * que el usuario está mirando ahora mismo. Cambiar la fecha de referencia lo
+ * devuelve entero.
+ */
+export function enAlcance(fila, f, ref) {
+  const alcance = f?.alcance ?? ALCANCE.OPERATIVO;
+  if (alcance === ALCANCE.TODO) return true;
+  if (alcance === ALCANCE.HISTORICO) {
+    // Consulta histórica de un año: lo que tuviera actividad ESE año. Un PMT
+    // que cruza el 31 de diciembre toca los dos años y sale en los dos.
+    return f.anio === null || f.anio === undefined ? true : tocaAnio(fila, f.anio);
+  }
+  // Operativo: todo lo que no haya terminado antes de la referencia. Lo que no
+  // se puede situar en el tiempo SE CONSERVA, con su etiqueta.
+  return situacionDe(fila, ref) !== SITUACION.HISTORICO;
+}
+
+/**
+ * Aplica los filtros a la lista de PMT.
+ *
+ * `ref` es la FECHA DE REFERENCIA. Es opcional para no romper a ningún llamador
+ * anterior: sin ella, el alcance temporal no recorta nada y el comportamiento
+ * es exactamente el de antes.
+ */
+export function filtrarPmts(filas, f, ref = null) {
+  const conAlcance = ref ? filas.filter((x) => enAlcance(x, f, ref)) : filas;
+  return conAlcance.filter((x) =>
     enLista(f.contratista, x.contratista) &&
     enLista(f.contrato, x.contrato) &&
     enLista(f.proyecto, x.proyecto) &&
@@ -132,12 +185,33 @@ function cumpleClave(rel, clave) {
  * pasa el filtro de PMT: si el usuario mira un contrato, quiere ver con quien
  * choca ese contrato, no solo las parejas donde ambos lados coinciden.
  */
-export function filtrarRelaciones(relaciones, f, idsVisibles) {
+export function filtrarRelaciones(relaciones, f, idsVisibles, ref = null, porId = null) {
+  const alcance = f?.alcance ?? ALCANCE.OPERATIVO;
   return relaciones.filter((r) => {
     if (idsVisibles && !(idsVisibles.has(r.idA) || idsVisibles.has(r.idB))) return false;
     if (f.relacion?.length && !f.relacion.some((c) => cumpleClave(r, c))) return false;
+    // RELEVANCIA OPERATIVA. Solo en la vista operativa, y solo para decidir si
+    // esto pide atención AHORA. En histórico y en «todo» no se recorta nada,
+    // porque ahí la pregunta es otra: qué ocurrió, no qué hay que hacer.
+    if (ref && porId && alcance === ALCANCE.OPERATIVO) {
+      if (!coincidenciaAccionable(r, porId, ref)) return false;
+      // Una articulación cuyo traslape ya pasó entero deja de presentarse como
+      // articulación, pero la relación NO desaparece: sigue ahí como
+      // coincidencia espacial, que es lo que de verdad es hoy. Esconderla del
+      // todo perdería el hecho de que los dos comparten sitio.
+    }
     return true;
   });
+}
+
+/**
+ * Marca cada relación con si su articulación sigue siendo coordinable desde la
+ * referencia. Es un dato DERIVADO que se añade a la vista; el hecho almacenado
+ * (`hayTraslapeTemporal`, `traslapeInicio`, `traslapeFin`) no se toca jamás.
+ */
+export function marcarVigenciaDeRelaciones(relaciones, ref) {
+  if (!ref) return relaciones;
+  return relaciones.map((r) => ({ ...r, articulacionVigente: articulacionCoordinable(r, ref) }));
 }
 
 /** Valores disponibles para poblar un desplegable, ya ordenados. */
@@ -219,13 +293,7 @@ export function opcionesFacetadas(todas, f, origen = null) {
  * Si alguna vez hace falta consultar un instante exacto, sera un modo aparte y
  * con su propia etiqueta: nunca las dos cosas bajo el mismo nombre.
  */
-export const MS_DIA = 86400000;
 
-/** Primer y ultimo milisegundo del dia calendario (UTC) que contiene a `ms`. */
-export function limitesDelDia(ms) {
-  const inicio = Math.floor(ms / MS_DIA) * MS_DIA;
-  return { inicio, fin: inicio + MS_DIA - 1 };
-}
 
 /**
  * DOMINIO DEL RECORRIDO, en DIAS CALENDARIO.

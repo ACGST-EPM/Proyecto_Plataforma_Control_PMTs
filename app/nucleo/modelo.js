@@ -266,9 +266,25 @@ export function lecturaOperativa(rel) {
   if (e === ESPACIAL.FUERA) return OPERATIVO.SIN_COINCIDENCIA;
   // Comparten espacio. Falta saber si a la vez, y «no se sabe» no es «no».
   if (t === TEMPORAL.NO_EVALUABLE) return OPERATIVO.NO_EVALUABLE;
-  return t === TEMPORAL.COINCIDE
-    ? OPERATIVO.ARTICULACION_REQUERIDA
-    : OPERATIVO.COINCIDENCIA_ESPACIAL;
+  if (t !== TEMPORAL.COINCIDE) return OPERATIVO.COINCIDENCIA_ESPACIAL;
+
+  // ══ EL TRASLAPE TIENE QUE SEGUIR VIVO ═══════════════════════════════════
+  //
+  // Articular es ponerse de acuerdo sobre un tramo de tiempo compartido. Si ese
+  // tramo YA PASÓ ENTERO, no queda nada que acordar: la coincidencia ocurrió.
+  //
+  // Ojo con lo que NO se hace aquí: la relación no se borra ni se degrada a
+  // «sin coincidencia». Los dos siguen compartiendo espacio, y eso sigue siendo
+  // cierto hoy. Lo único que caduca es la posibilidad de coordinar aquel
+  // solape. El hecho —que coincidieron, cuándo y cuántos días— está intacto en
+  // `hayTraslapeTemporal`, `traslapeInicio` y `traslapeFin`, y volver a mirar
+  // aquella fecha devuelve la articulación entera.
+  //
+  // `articulacionVigente` lo pone la vista (`marcarVigenciaDeRelaciones`) a
+  // partir de la FECHA DE REFERENCIA. Si no viene, no se supone nada: se
+  // mantiene la lectura de los hechos, que es lo que hacía antes.
+  if (rel.articulacionVigente === false) return OPERATIVO.COINCIDENCIA_ESPACIAL;
+  return OPERATIVO.ARTICULACION_REQUERIDA;
 }
 
 /**
@@ -310,5 +326,16 @@ export function aFilaPmt(reg) {
     documental: reg.documental ?? estadoDocumental(reg),
     avisos: reg.avisos ?? [],
     geometria: reg.geometria,
+    // ══ IDENTIDAD DEL PMT BASE ═══════════════════════════════════════════
+    //
+    // Un trazado venido de un KMZ es SU PROPIA BASE, con una sola activación.
+    // No se deduce parentesco por geometría idéntica: puede haber dos cierres
+    // distintos exactamente en el mismo sitio, y afirmar que uno es la
+    // reactivación del otro sería inventarlo.
+    //
+    // `reg.idBase` solo llega cuando el registro viene de un proyecto guardado
+    // que SÍ declaraba identidad. Un KMZ nunca la trae.
+    idBase: reg.idBase ?? reg.id,
+    activacion: reg.activacion ?? { numero: 1, de: 1, motivo: null, creada: null, reactivacionDe: null },
   };
 }

@@ -158,6 +158,26 @@ export function crearProyecto({ filas, relaciones, noEvaluables, archivos, confi
       // guardar y volver a abrir.
       duplicadoExacto: x.duplicadoExacto === true,
       idRepetidoEnOrigen: x.idRepetidoEnOrigen === true,
+      // ══ IDENTIDAD DEL PMT BASE ═══════════════════════════════════════════
+      //
+      // `idBase` dice de qué PMT es esta ACTIVACIÓN. Es ENTRADA, igual que la
+      // geometría: no se deriva de nada y no se puede recalcular al abrir, así
+      // que tiene que guardarse o se pierde el historial de reactivaciones.
+      //
+      // Se guarda solo cuando es DISTINTO del propio `id`. Un trazado venido de
+      // un KMZ es su propia base, y escribir `idBase: x.id` en cada uno haría
+      // crecer el archivo sin decir nada nuevo — y, peor, daría a entender que
+      // alguien declaró esa identidad cuando nadie lo hizo.
+      ...(x.idBase && x.idBase !== x.id ? { idBase: x.idBase } : {}),
+      // La activación NO lleva número guardado: el número se DERIVA contando
+      // las activaciones de la base al abrir. Guardarlo permitiría un archivo
+      // editado que dijera «activación 7» con una sola activación dentro.
+      ...(x.activacion?.motivo || x.activacion?.creada || x.activacion?.reactivacionDe
+        ? { activacion: {
+          motivo: x.activacion.motivo ?? null,
+          creada: x.activacion.creada ?? null,
+          reactivacionDe: x.activacion.reactivacionDe ?? null,
+        } } : {}),
       // SEGUIMIENTO DOCUMENTAL: se guardan LOS CODIGOS, que son entrada.
       // El estado («2/3», «pendiente») NO se guarda: es derivado y se recalcula
       // al abrir, igual que las relaciones. Guardarlo permitiria que un archivo
@@ -342,6 +362,40 @@ export function leerProyecto(texto) {
       analizable: !!geometria && vig.valida && !!t.contrato,
       origenArchivo: t.origenArchivo ?? null, carpeta: t.carpeta ?? null,
       avisos: avisosUnicos,
+      // ══ IDENTIDAD DEL PMT BASE ═══════════════════════════════════════════
+      //
+      // Se acepta solo si es un TEXTO: un `idBase` numérico o un objeto
+      // agruparía mal en silencio. Sin `idBase`, el trazado es su propia base,
+      // que es lo que era antes de que este campo existiera.
+      idBase: (typeof t.idBase === 'string' && t.idBase.trim()) ? t.idBase : t.id,
+      // El NÚMERO de activación NO se lee del archivo: se deriva más abajo
+      // contando las activaciones de cada base. Un archivo editado no puede
+      // decir «activación 7» teniendo una sola.
+      activacion: esObjeto(t.activacion) ? {
+        motivo: esTextoONulo(t.activacion.motivo) ? (t.activacion.motivo ?? null) : null,
+        creada: esTextoONulo(t.activacion.creada) ? (t.activacion.creada ?? null) : null,
+        reactivacionDe: esTextoONulo(t.activacion.reactivacionDe) ? (t.activacion.reactivacionDe ?? null) : null,
+      } : null,
+    });
+  }
+
+  // ══ NUMERACIÓN DE ACTIVACIONES: DERIVADA, NUNCA LEÍDA ═════════════════
+  //
+  // Se cuenta por base y en orden de inicio, que es el orden en que ocurrieron.
+  // Así el número que se ve siempre corresponde con lo que hay en el archivo:
+  // si alguien borra a mano la activación 2, la 3 pasa a ser la 2 y no queda un
+  // hueco que nadie pueda explicar.
+  const porBase = new Map();
+  for (const t of trazados) {
+    if (!porBase.has(t.idBase)) porBase.set(t.idBase, []);
+    porBase.get(t.idBase).push(t);
+  }
+  for (const grupo of porBase.values()) {
+    grupo.sort((p, q) => (p.inicioMs ?? Infinity) - (q.inicioMs ?? Infinity)
+      || String(p.id).localeCompare(String(q.id)));
+    grupo.forEach((t, i) => {
+      t.activacion = { ...(t.activacion ?? { motivo: null, creada: null, reactivacionDe: null }),
+        numero: i + 1, de: grupo.length };
     });
   }
 

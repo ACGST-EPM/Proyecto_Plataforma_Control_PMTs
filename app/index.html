@@ -88,6 +88,23 @@
   <section class="panel oculto" id="panelResumen">
     <h2><span class="paso">2</span> Esto es lo que se encontró</h2>
     <div class="cuerpo">
+
+      <!-- BANDA DE CONTEXTO. Confundir «esto ocurrio en 2025» con «esto hay que
+           coordinarlo» es el error mas caro de esta pantalla, asi que el
+           contexto se dice CON PALABRAS y siempre encima de las cifras, no con
+           un matiz de color que puede no distinguirse o imprimirse en gris. -->
+      <div id="bandaContexto" class="banda-contexto"></div>
+
+      <!-- Que estoy viendo: operativo, historico de un año, o todo. NO es un
+           filtro mas: es el punto de vista desde el que se mira todo lo demas. -->
+      <div id="selectorPeriodo" class="selector-periodo no-imprimir"></div>
+
+      <!-- LA VISTA OPERATIVA PUEDE ESCONDERLO TODO. Con datos de hace unos
+           meses la pantalla queda vacia, y sin explicacion eso no se lee como
+           «no hay nada que coordinar» sino como «no cargo mis archivos». -->
+      <div id="avisoVistaVacia" class="frase atencion oculto no-imprimir"
+        style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"></div>
+
       <div id="fraseResumen" class="frase"></div>
 
       <!-- ALCANCE: dice SIEMPRE de que conjunto hablan las tarjetas de abajo.
@@ -150,6 +167,8 @@
         <span class="sep"></span>
         <button class="b-verde b-mini" id="btnNuevoPmt" title="Crear un PMT con los datos maestros de EPM">＋ Nuevo PMT</button>
         <button class="b-suave b-mini oculto" id="btnEditarPmt">✎ Editar el seleccionado</button>
+        <button class="b-suave b-mini oculto" id="btnReactivarPmt"
+          title="Volver a usar este mismo PMT en otras fechas, sin redibujar el trazado">↻ Nueva vigencia</button>
             </div>
             <div id="avisoMapa" class="frase atencion oculto" style="margin-bottom:10px;font-size:.86rem"></div>
             <div id="mapa"></div>

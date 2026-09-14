@@ -280,3 +280,23 @@ test('ATAQUE: el catálogo MANDA aunque el formulario traiga otra cosa', () => {
   assert.equal(p.contratista, 'Consorcio Uno');
   assert.equal(p.proyecto, 'PROY UNO');
 });
+
+test('ATAQUE: un contrato fuera del catálogo bloquea al CREAR, pero no al reactivar', () => {
+  const fuera = { ...VALIDO, contrato: 'CW-QUE-NO-EXISTE' };
+
+  // Crear: se está ELIGIENDO el contrato. Que no exista es un error a atajar.
+  const creando = validarPmt(fuera, CATALOGO);
+  assert.equal(creando.sePuedeGuardar, false);
+  assert.equal(creando.avisos.find((x) => x.campo === 'contrato').nivel, NIVEL.ERROR);
+
+  // Reactivar o editar: el contrato YA ES UN HECHO, vino en el KMZ. Bloquear no
+  // impide un dato malo —ya está— sino una operación legítima. Con el catálogo
+  // real (3 contratos) y los KMZ reales, NINGÚN PMT sería reactivable.
+  for (const modo of [{ reactivando: true }, { editando: true }]) {
+    const r = validarPmt(fuera, CATALOGO, modo);
+    const av = r.avisos.find((x) => x.campo === 'contrato');
+    assert.equal(av.nivel, NIVEL.ADVERTENCIA, JSON.stringify(modo));
+    assert.match(av.ayuda, /ya existía|catálogo maestro/);
+    assert.equal(r.sePuedeGuardar, true, 'reactivar tiene que poder completarse: ' + JSON.stringify(modo));
+  }
+});

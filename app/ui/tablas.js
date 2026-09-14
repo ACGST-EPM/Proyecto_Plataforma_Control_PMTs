@@ -11,6 +11,7 @@ import { $, esc, num, fechaLegible } from './dom.js';
 import { estadoEspacial, estadoTemporal, lecturaOperativa, ESPACIAL, TEMPORAL, OPERATIVO,
   ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL, ETIQUETA_OPERATIVO, EXPLICACION_OPERATIVO,
   LECTURA, simbologiaDe } from '../nucleo/modelo.js';
+import { ETIQUETA_SITUACION } from '../nucleo/temporalidad.js';
 
 const CLASE_ESPACIAL = {
   [ESPACIAL.CONTACTO]: 'p-contacto', [ESPACIAL.CERCANIA]: 'p-cerca',
@@ -126,7 +127,12 @@ function conectarOrden(tabla, clave, repintar) {
  * «que es, de quien, donde, cuando y como va» sin desplazamiento horizontal.
  */
 const COLS_PMT = [
+  // EL NOMBRE VA PRIMERO. La situación es útil, pero en la vista operativa es
+  // la misma en casi todas las filas, y la primera columna es la que se usa
+  // para ENCONTRAR la fila que se busca. Gastarla en una pastilla repetida
+  // empuja el identificador a segundo plano por nada.
   ['frente', 'Frente', { basica: true }],
+  ['situacion', 'Situación', { basica: true }],
   ['contrato', 'Contrato', { basica: true }],
   ['municipio', 'Municipio', { basica: true }],
   ['tipoCierre', 'Tipo', { basica: true }],
@@ -139,6 +145,7 @@ const COLS_PMT = [
   ['resolucionPmt', 'Resolucion PMT', {}],
   ['permisoRotura', 'Permiso rotura', {}],
   ['cierrePermisoRotura', 'Cierre rotura', {}],
+  ['activacion', 'Activacion', {}],
   ['tipoGeometria', 'Geometria', {}],
   ['origenArchivo', 'Archivo', {}],
 ];
@@ -149,6 +156,19 @@ export const COLUMNAS_PMT_TODAS = Object.freeze(COLS_PMT.map(([k, t]) => ({ clav
 /** Celda de cada columna. Una sola definicion: cabecera y celda no pueden separarse. */
 function celdaPmt(x, clave) {
   switch (clave) {
+    case 'situacion': {
+      // La situacion es DERIVADA de la fecha de referencia, y la pone quien
+      // pinta la tabla (`x._situacion`). Si no viene, no se inventa ninguna.
+      const sit = x._situacion;
+      if (!sit) return '<td>—</td>';
+      return `<td><span class="pastilla p-${esc(sit)}">${esc(ETIQUETA_SITUACION[sit] ?? sit)}</span></td>`;
+    }
+    case 'activacion': {
+      const a = x.activacion;
+      if (!a || !a.de || a.de <= 1) return '<td><small style="color:var(--tenue)">única</small></td>';
+      return `<td><span class="pastilla p-cerca" title="Este PMT se ha activado ${esc(a.de)} veces">` +
+        `${esc(a.numero)} de ${esc(a.de)}</span></td>`;
+    }
     case 'frente': {
       const problema = !x.vigenciaValida || !x.tieneGeometria;
       const marca = problema

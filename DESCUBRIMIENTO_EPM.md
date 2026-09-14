@@ -183,6 +183,25 @@ no hay.
   registrarse antes que el permiso), y con qué fundamento.
 - **Respuesta mínima:** si existe un procedimiento escrito, y de qué municipio o autoridad depende.
 
+### P21. Cuando un mismo PMT se vuelve a ejecutar, ¿los documentos se renuevan o se conservan?
+- **Por qué importa:** la plataforma ya permite **reactivar** un PMT —volver a usar el mismo cierre,
+  con el mismo trazado, en otras fechas—. Hoy **no se heredan** los códigos de resolución y permisos
+  a la nueva vigencia, porque una resolución ampara unas fechas concretas y copiar el número haría
+  pasar por tramitado algo que no lo está. Puede que en algún caso sí amparen varias ejecuciones.
+- **Desbloquea:** si «Resolución PMT», «Permiso de rotura» y «Cierre del permiso» pertenecen al PMT
+  base, a cada activación, o unos a cada nivel.
+- **Respuesta mínima:** para cada uno de los tres, si se tramita otra vez al repetir el cierre.
+
+### P22. ¿Hace falta registrar POR QUÉ se reactiva un PMT?
+- **Por qué importa:** la plataforma conserva el dato de cuántas veces y cuándo se reactivó cada PMT,
+  y deja escribir un motivo libre. **No lo interpreta**: reutilizar un esquema de cierre puede
+  responder a una obra compleja bien planeada o a imprevistos, y con estos datos no se distingue.
+  Si EPM quiere poder analizarlo, el motivo tendría que ser una **lista cerrada**, no texto libre.
+- **Desbloquea:** si se define un catálogo de causas y, más adelante, si eso alimenta algún indicador.
+- **Respuesta mínima:** si interesa o no, y quién definiría las causas.
+- **Aviso:** convertir esto en un indicador de desempeño del contratista es una **decisión
+  operativa** que la herramienta no va a tomar sola.
+
 ---
 
 ## Lo que NO estamos pidiendo
