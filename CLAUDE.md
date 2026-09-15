@@ -34,6 +34,10 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
   confundirse con la aplicación.
 
 ### Documentos de referencia (leer antes de decidir algo grande)
+- `TRASPASO_A_COPILOT_COWORK.md` — **LÉELO PRIMERO SI ESTÁS RETOMANDO EL PROYECTO EN OTRA
+  HERRAMIENTA.** Qué es la plataforma, en qué estado quedó, qué falta, qué archivos hacen falta de
+  verdad (3,8 MB sin `node_modules` ni `.git`), qué puede salir mal y cómo seguir. Incluye el prompt
+  de arranque y la comprobación del primer día.
 - `BASELINE.md` — qué versión produjo qué, con qué reglas, y cómo reproducirlo desde un clon limpio.
 - `ARQUITECTURA_OPERATIVA.md` — proceso AS-IS y TO-BE, modelo de fuentes, estrategia incremental,
   persistencia y flujo de automatización. Todo marcado CONFIRMADO / HIPÓTESIS / VALIDAR EPM.
