@@ -1448,6 +1448,115 @@ test('TAREA F: la ficha de una relación explica el motivo sin jerga', saltar, a
   await p.close();
 });
 
+/* ═══════════════════ SEGUIMIENTO DOCUMENTAL Y BUSQUEDA ═══════════════════ */
+
+test('DOCUMENTAL: las dos caras de cada documento filtran, y no se confunden', saltar, async () => {
+  // Hasta ahora solo se podia preguntar «¿a quien le FALTA?». La otra mitad de
+  // la pregunta —«¿quien lo tiene YA?»— es la que se usa para comprobar que un
+  // tramite entro, y no existia.
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_DOC]);
+  assert.equal(await txt(p, '#cuentaPmt'), '3');
+  await abrirFiltros(p);
+
+  const marcar = async (clave) => {
+    await p.check(`#d_${clave}`);
+    await p.waitForTimeout(400);
+    return txt(p, '#cuentaPmt');
+  };
+  const desmarcar = async (clave) => {
+    await p.uncheck(`#d_${clave}`);
+    await p.waitForTimeout(400);
+  };
+
+  // DOC-COMPLETO y DOC-A-MEDIAS tienen resolucion; DOC-SIN-NADA no.
+  assert.equal(await marcar('tiene-resolucion'), '2', 'los que YA la tienen');
+  await desmarcar('tiene-resolucion');
+  assert.equal(await marcar('falta-resolucion'), '1', 'y los que NO');
+  await desmarcar('falta-resolucion');
+
+  // Solo DOC-COMPLETO tiene el cierre de rotura.
+  assert.equal(await marcar('tiene-cierre'), '1');
+  await desmarcar('tiene-cierre');
+
+  // Las dos caras del mismo documento suman el total: son complementarias.
+  assert.equal(await marcar('completa'), '1');
+  await desmarcar('completa');
+  assert.equal(await marcar('incompleta'), '2');
+  await desmarcar('incompleta');
+
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('BUSQUEDA: se llega a un PMT por cualquiera de sus tres codigos', saltar, async () => {
+  // Cuando llega una consulta, lo que se tiene a mano es el numero del tramite,
+  // no el nombre del frente. Los tres codigos tienen que encontrar.
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_DOC]);
+  const buscar = async (t) => {
+    await p.fill('#buscarGlobal', t);
+    await p.waitForTimeout(500);
+    return txt(p, '#cuentaPmt');
+  };
+  assert.equal(await buscar('RES-1001-2026'), '1', 'por la resolucion de PMT');
+  assert.equal(await buscar('PR-2002'), '1', 'por el permiso de rotura');
+  assert.equal(await buscar('CR-3003'), '1', 'por el cierre de rotura');
+  assert.equal(await buscar('res-1002'), '1', 'y sin importar mayusculas ni el codigo entero');
+  assert.equal(await buscar(''), '3', 'vaciar la busqueda devuelve todo');
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+/* ═══════════════════ ESCAPADO ═══════════════════ */
+
+// Un KMZ cuyos textos llevan marcado y comillas. No es un ataque: es un
+// contratista que escribio «TRAMO <NORTE>» en el nombre del frente.
+const KMZ_MARCADO = escribir('marcado.kmz', F.kmz([
+  F.placemark('<b>TRAMO</b> "NORTE" & SUR', F.descripcion({
+    inicio: dd(-1), fin: df(19), contrato: 'CW<99>', municipio: 'Medellin', tipo: 'total',
+    direccion: '<img src=x onerror=alert(1)>', resolucionPmt: 'RES-<9>',
+  }), F.linea([[-75.6000, 6.2000], [-75.5990, 6.2000]])),
+  F.placemark('OTRO', F.descripcion({
+    inicio: dd(-1), fin: df(19), contrato: 'CW98', municipio: 'Medellin', tipo: 'total',
+  }), F.linea([[-75.5989, 6.2000], [-75.5980, 6.2000]])),
+]));
+
+test('ESCAPADO: el texto de un archivo nunca se convierte en marcado', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_MARCADO]);
+
+  // 1 · No se ejecuta nada de lo que venga en el archivo.
+  assert.equal(await p.evaluate(() => document.querySelectorAll('#tablaPmt img').length), 0,
+    'una etiqueta escrita en la direccion no puede convertirse en una imagen');
+
+  // 2 · Y tampoco se enseña el marcado EN CRUDO. Esto es lo que se colo en una
+  //     tarjeta: «ACTIVACIONES DE ESTE PMT <SPAN CLASS=...>». Un texto con
+  //     angulos se ve tal como lo escribieron, ni ejecutado ni destripado.
+  const tabla = await txt(p, '#tablaPmt');
+  assert.ok(/<b>TRAMO<\/b>/.test(tabla), `el nombre se ve literal: ${tabla.slice(0, 200)}`);
+
+  await p.click('#tablaPmt tbody tr:nth-child(1)');
+  await p.waitForTimeout(700);
+  const ficha = await p.innerHTML('#fichaLateral');
+  // En el HTML de la ficha, los angulos del dato tienen que ir escapados.
+  assert.ok(/&lt;b&gt;TRAMO/.test(ficha), 'el marcado del dato va escapado en la ficha');
+  assert.ok(!/<img/.test(ficha), 'y no aparece ninguna etiqueta nacida del dato');
+
+  // 3 · Ninguna parte de la pantalla puede tener marcado a la vista, escrito
+  //     por nosotros y sin interpretar. Ese fue el defecto observado.
+  const fuga = await p.evaluate(() => {
+    const malo = /<(span|div|b|i|small|em|strong)\b[^>]*>/i;
+    for (const el of document.querySelectorAll('.ficha-rotulo, .tarjeta .t, .bj-t, .capa-nombre, .pastilla')) {
+      if (malo.test(el.textContent)) return el.textContent.slice(0, 120);
+    }
+    return null;
+  });
+  assert.equal(fuga, null, `hay marcado a la vista: ${fuga}`);
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
 /* ═══════════════════ GESTION DE FUENTES ═══════════════════ */
 
 // Mismos trazados que alfa.kmz mas uno: es la MISMA fuente, corregida.
@@ -2247,6 +2356,72 @@ test('REACTIVAR: nueva vigencia SIN redibujar, y el historial queda a la vista',
   assert.ok(/activación 2|activacion 2/i.test(siguiente),
     'tiene que decir que es la activación 2, no un PMT nuevo: ' + siguiente);
 
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('REACTIVAR: crear la vigencia nueva NO aleja el mapa ni pierde el sitio', saltar, async () => {
+  // Defecto observado: se acercaba a la obra, se creaba la vigencia nueva y el
+  // mapa saltaba a ver todo el territorio. Quien acababa de crearla tenia que
+  // volver a buscar donde estaba. El encuadre es contexto de trabajo, y una
+  // accion que responde a «esto de aqui» no puede tirarlo.
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  await p.waitForTimeout(500);
+
+  await p.click('#tablaPmt tbody tr');
+  await p.waitForTimeout(600);
+
+  // Seleccionar ya acerca el mapa a la obra, que es la situacion real desde la
+  // que alguien pulsa «nueva vigencia».
+  const antes = await p.evaluate(() => window.__pmtDiagnostico());
+  assert.ok(antes.zoom >= 17, `hace falta estar acercado para que la prueba valga: ${antes.zoom}`);
+
+  await p.click('#btnReactivarPmt');
+  await p.waitForSelector('#panelEditor:not(.oculto)', { timeout: 15000 });
+  await p.fill('#edInicio', `${diaRel(40)}T07:00`);
+  await p.fill('#edFin', `${diaRel(60)}T18:00`);
+  await p.waitForFunction(() => !document.querySelector('#edGuardar').disabled, null, { timeout: 15000 });
+  await p.click('#edGuardar');
+  await p.waitForFunction(() => document.querySelector('#cuentaPmt').textContent === '5',
+    null, { timeout: 30000 });
+  await p.waitForTimeout(800);
+
+  const despues = await p.evaluate(() => window.__pmtDiagnostico());
+  assert.equal(despues.zoom, antes.zoom, `el zoom cambio: ${antes.zoom} -> ${despues.zoom}`);
+  // El centro puede moverse para enfocar lo recien creado, pero no irse lejos:
+  // lo nuevo comparte trazado con lo anterior, asi que esta al lado.
+  const salto = Math.max(Math.abs(despues.centro[0] - antes.centro[0]),
+    Math.abs(despues.centro[1] - antes.centro[1]));
+  assert.ok(salto < 0.01, `el mapa se fue del sitio: ${JSON.stringify([antes.centro, despues.centro])}`);
+
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('RELACION: elegirla deja en el mapa SOLO los dos, con su superposicion', saltar, async () => {
+  // Antes el mapa enseñaba a la vez todos los trazados, todas las zonas y todos
+  // los conectores de medicion: una maraña en la que la pareja que se acababa
+  // de pulsar no se distinguia de las demas.
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  await p.waitForTimeout(500);
+
+  // De entrada el mapa va limpio: sin zonas de influencia ni conectores.
+  const limpio = await p.evaluate(() => window.__pmtDiagnostico());
+  assert.equal(limpio.zonas, 0, 'las zonas no salen por defecto');
+  assert.equal(limpio.relaciones, 0, 'los conectores de medicion tampoco');
+
+  await p.click('.pestanas button[data-pest="rel"]');
+  await p.waitForTimeout(400);
+  await p.click('#tablaRel tbody tr:nth-child(1)');
+  await p.waitForTimeout(1000);
+
+  const tras = await p.evaluate(() => window.__pmtDiagnostico());
+  assert.equal(tras.zonas, 2, 'salen las zonas de LOS DOS, no de todos');
+  assert.ok(tras.seleccion > 0, 'los dos quedan resaltados');
+  assert.ok(tras.trazados <= limpio.trazados,
+    'no se añaden trazados: se aisla lo que importa');
   assert.deepEqual(p.erroresJs, []);
   await p.close();
 });

@@ -20,6 +20,7 @@
     "comparar": "cd motor && npm run comparar",
     "test:navegador": "npm run construir:app && node --test app/test/navegador.test.mjs",
     "compuertas": "node herramientas/compuertas.mjs",
-    "test:todo": "npm run test && npm run test:navegador && npm run compuertas"
+    "test:todo": "npm run test && npm run test:navegador && npm run compuertas",
+    "comparador": "node herramientas/comparador-espacial.mjs"
   }
 }
