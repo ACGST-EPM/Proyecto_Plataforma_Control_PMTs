@@ -85,10 +85,22 @@ export const SIMBOLOGIA_CIERRE = Object.freeze({
     forma: 'linea-continua',
   },
   'parcial': {
-    color: '#d56b00', grosor: 4.5, guion: '14 8', halo: 3, marcador: false,
+    // ══ LINEA CONTINUA, NO DISCONTINUA ══════════════════════════════════
+    //
+    // La usuaria lo pidio expresamente, y el motivo es solido: un cierre
+    // parcial NO es un tramo intermitente. La linea discontinua se lee como
+    // «aqui si, aqui no», cuando lo que ocurre es que TODO el tramo esta
+    // afectado y lo que se reduce es la calzada.
+    //
+    // Al quitar el guion hay que devolver la diferencia por otro sitio, o los
+    // tres tipos vuelven a distinguirse solo por color: el parcial es mas
+    // FINO que el total y lleva un nucleo claro encima (forma `linea-doble`),
+    // que es la convencion de «calzada reducida» y se ve en blanco y negro.
+    color: '#d56b00', grosor: 5, guion: null, halo: 3, marcador: false,
+    nucleo: { color: '#ffe0b8', grosor: 1.6 },
     etiqueta: 'Cierre parcial',
     ayuda: 'Se mantiene el paso, con la calzada reducida o desviada.',
-    forma: 'linea-trazos',
+    forma: 'linea-doble',
   },
   'ingreso y salida': {
     color: '#1565c0', grosor: 3, guion: null, halo: 2, marcador: true,
@@ -142,9 +154,16 @@ export function muestraSvg(tipoCierre, { ancho = 44, alto = 16 } = {}) {
       `<circle cx="${ancho / 2}" cy="${y}" r="1.6" fill="${s.color}"/></svg>`;
   }
   const guion = s.guion ? ` stroke-dasharray="${s.guion}"` : '';
+  const linea = (color, ancho2, extra = '') =>
+    `<line x1="2" y1="${y}" x2="${ancho - 2}" y2="${y}" stroke="${color}" ` +
+    `stroke-width="${ancho2}" stroke-linecap="round"${guion}${extra}/>`;
   return `<svg width="${ancho}" height="${alto}" viewBox="0 0 ${ancho} ${alto}" aria-hidden="true">` +
-    `<line x1="2" y1="${y}" x2="${ancho - 2}" y2="${y}" stroke="#fff" stroke-width="${s.grosor + s.halo}" stroke-linecap="round"${guion}/>` +
-    `<line x1="2" y1="${y}" x2="${ancho - 2}" y2="${y}" stroke="${s.color}" stroke-width="${s.grosor}" stroke-linecap="round"${guion}/></svg>`;
+    linea('#fff', s.grosor + s.halo) +
+    linea(s.color, s.grosor) +
+    // NUCLEO CLARO: distingue el cierre parcial del total sin usar guiones y
+    // sin depender del color. Se ve tambien impreso en blanco y negro.
+    (s.nucleo ? linea(s.nucleo.color, s.nucleo.grosor) : '') +
+    '</svg>';
 }
 
 /** Estado de evaluacion espacial de una relacion, sin ambiguedad posible. */

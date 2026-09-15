@@ -16,6 +16,7 @@
     "construir:app": "node herramientas/construir-app.mjs",
     "construir:catalogo": "node herramientas/construir-catalogo.mjs",
     "construir:prototipo": "node herramientas/construir-app.mjs --prototipo",
+    "demo": "node herramientas/generar-demo.mjs",
     "comparar": "cd motor && npm run comparar",
     "test:navegador": "npm run construir:app && node --test app/test/navegador.test.mjs",
     "compuertas": "node herramientas/compuertas.mjs",

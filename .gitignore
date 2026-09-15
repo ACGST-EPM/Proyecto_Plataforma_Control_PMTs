@@ -27,3 +27,7 @@ crudo_*.json
 # PROYECTOS GUARDADOS: llevan los trazados reales (direcciones, contratistas,
 # fechas de obra). El repositorio es publico, asi que no entran nunca.
 *.pmt.json
+
+# El KMZ de demostracion se GENERA (`npm run demo`), no se versiona: asi no
+# puede confundirse con datos reales ni quedarse desactualizado en el repo.
+dist/PMT_demostracion.kmz

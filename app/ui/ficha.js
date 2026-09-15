@@ -26,12 +26,31 @@
  */
 import { esc, num, fechaLegible } from './dom.js';
 import { agruparPorBase, baseDe, historialDeBase } from '../nucleo/identidad-pmt.js';
+import { lecturaOperativaEnContexto, OPERATIVO, ETIQUETA_OPERATIVO } from '../nucleo/modelo.js';
 import { simbologiaDe, muestraSvg, estadoEspacial, estadoTemporal,
   ESPACIAL, TEMPORAL, ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL } from '../nucleo/modelo.js';
 import { DOCUMENTOS } from '../../motor/src/modelo/documental.js';
 
-const bloque = (rotulo, cuerpo) =>
-  `<div class="ficha-bloque"><div class="ficha-rotulo">${esc(rotulo)}</div>${cuerpo}</div>`;
+/**
+ * Un bloque de la ficha.
+ *
+ * ══ EL RÓTULO SE ESCAPA SIEMPRE, Y ESO NO SE TOCA ═════════════════════════
+ *
+ * Apareció en pantalla el texto literal
+ * «ACTIVACIONES DE ESTE PMT <SPAN CLASS="PASTILLA P-CERCA">2</SPAN>».
+ * La causa NO era que el escape sobrara: era una llamada que metía HTML dentro
+ * del rótulo. El escape hizo exactamente lo que tiene que hacer.
+ *
+ * Quitarlo habría convertido un defecto visual en un agujero de inyección: los
+ * rótulos llevan datos de archivos que no controlamos. Así que el rótulo sigue
+ * escapándose y, cuando hace falta un distintivo, va por su propio parámetro
+ * —un número o un texto corto— que también se escapa.
+ */
+const bloque = (rotulo, cuerpo, insignia = null) =>
+  `<div class="ficha-bloque"><div class="ficha-rotulo">${esc(rotulo)}` +
+  (insignia === null || insignia === undefined ? ''
+    : `<span class="ficha-insignia">${esc(insignia)}</span>`) +
+  `</div>${cuerpo}</div>`;
 const filaKV = (k, v) => `<div class="ficha-fila"><span class="k">${esc(k)}</span><span class="v">${v}</span></div>`;
 const oNada = (v) => (v ? esc(v) : '<span style="color:var(--tenue)">—</span>');
 
@@ -44,30 +63,65 @@ export function barraDocumental(doc) {
     `<b>${esc(doc.resumen)}</b> <span style="color:var(--tenue);font-size:.8rem">documentos</span></div>`;
 }
 
-function detalleDocumental(pmt) {
+/**
+ * Seguimiento documental en la ficha.
+ *
+ * ══ POR QUE NO SE ENSEÑAN SIEMPRE LOS TRES ═══════════════════════════════
+ *
+ * Antes salian los tres documentos SIEMPRE, y en la mayoria de los PMT eso es
+ * literalmente:
+ *
+ *     Resolucion PMT ................ Pendiente
+ *     Permiso de rotura ............. Pendiente
+ *     Cierre del permiso de rotura .. Pendiente
+ *
+ * Tres lineas que no dicen nada y que empujan hacia abajo lo que si importa
+ * —quien ejecuta, cuando, donde—. Repetido en cada ficha, el ojo aprende a
+ * saltarselo, y entonces tampoco se ve cuando SI hay algo.
+ *
+ * ══ LA REGLA ═════════════════════════════════════════════════════════════
+ *
+ * En la ficha normal se enseña lo que EXISTE. Lo que falta se resume en una
+ * cifra («1/3») que se puede desplegar.
+ *
+ * Cuando el usuario esta TRABAJANDO en documentacion —filtro documental
+ * activo— la pregunta cambia: entonces lo que importa es justamente lo que
+ * falta, y el detalle se abre solo.
+ *
+ * @param {object} pmt
+ * @param {boolean} enfoque  true si hay un filtro documental activo
+ */
+function detalleDocumental(pmt, enfoque = false) {
   const doc = pmt.documental;
   if (!doc) return '';
-  const lista = doc.detalle.map((d) => `<li>
-      <span>${esc(d.etiqueta)}</span>
-      ${d.codigo
-    ? `<span class="doc-codigo">${esc(d.codigo)}</span>`
-    // TERCER ESTADO: hay un documento de la activación ANTERIOR. No se
-    // presenta como registrado (nadie ha comprobado que ampare estas fechas)
-    // ni como pendiente a secas (existe y alguien tiene que mirarlo).
-    : d.codigoPrevio
-      ? `<span class="doc-codigo" style="opacity:.7">${esc(d.codigoPrevio)}</span>
+
+  const conCodigo = doc.detalle.filter((d) => d.codigo);
+  const porConfirmar = doc.detalle.filter((d) => !d.codigo && d.codigoPrevio);
+  const faltan = doc.detalle.filter((d) => !d.codigo && !d.codigoPrevio);
+
+  const linea = (d) => `<li><span>${esc(d.etiqueta)}</span>${
+    d.codigo ? `<span class="doc-codigo">${esc(d.codigo)}</span>`
+      : d.codigoPrevio
+        ? `<span class="doc-codigo" style="opacity:.7">${esc(d.codigoPrevio)}</span>
            <span class="pastilla p-porconfirmar">por confirmar</span>`
-      : '<span class="doc-pendiente">Pendiente</span>'}
-    </li>`).join('');
-  return barraDocumental(doc) + `<ul class="doc-lista">${lista}</ul>` +
-    ((doc.porConfirmar ?? 0)
-      ? `<p class="capa-ayuda"><b>${num(doc.porConfirmar)} documento(s) vienen de una activación
-           anterior de este mismo PMT.</b> Están ahí como evidencia: <b>nadie ha decidido todavía</b>
-           si amparan también estas fechas. Esa regla la tiene que fijar EPM.</p>`
-      : '') +
-    (doc.sinNinguno
-      ? '<p class="capa-ayuda">Todavía no se ha registrado ninguno. En un PMT recién creado es lo normal.</p>'
-      : '');
+        : '<span class="doc-pendiente">Pendiente</span>'}</li>`;
+
+  // Lo que EXISTE se enseña siempre: es lo que alguien puede necesitar copiar.
+  const visibles = [...conCodigo, ...porConfirmar];
+  const cabecera = barraDocumental(doc);
+
+  if (enfoque || faltan.length === 0) {
+    return cabecera + `<ul class="doc-lista">${doc.detalle.map(linea).join('')}</ul>` +
+      ((doc.porConfirmar ?? 0)
+        ? `<p class="capa-ayuda"><b>${num(doc.porConfirmar)} viene(n) de una activación anterior.</b>
+             Nadie ha decidido todavía si amparan también estas fechas.</p>` : '');
+  }
+
+  return cabecera +
+    (visibles.length ? `<ul class="doc-lista">${visibles.map(linea).join('')}</ul>` : '') +
+    `<details class="doc-mas"><summary>${
+      visibles.length ? `Faltan ${num(faltan.length)} de ${num(doc.total)}` : `Ninguno de los ${num(doc.total)} registrado`
+    }</summary><ul class="doc-lista">${faltan.map(linea).join('')}</ul></details>`;
 }
 
 /**
@@ -93,7 +147,7 @@ function historialBloque(pmt, contexto) {
   if (!base || base.veces <= 1) return '';
   const h = historialDeBase(base);
 
-  return bloque(`Activaciones de este PMT <span class="pastilla p-cerca">${num(h.veces)}</span>`,
+  return bloque('Activaciones de este PMT',
     `<div class="pista-campo" style="margin-bottom:6px">Es el <b>mismo cierre</b>, con el
        <b>mismo trazado</b>, ejecutado en ${num(h.veces)} periodos distintos.</div>
      <div class="historial">
@@ -108,7 +162,7 @@ function historialBloque(pmt, contexto) {
          </div>`).join('')}
      </div>
      ${h.diasTotales !== null ? `<div class="pista-campo">En total, <b>${num(h.diasTotales)} día(s)</b>
-       de cierre en ${esc(h.anios.join(', '))}.</div>` : ''}`);
+       de cierre en ${esc(h.anios.join(', '))}.</div>` : ''}`, num(h.veces));
 }
 
 export function fichaPmt(pmt, contexto = {}) {
@@ -141,7 +195,7 @@ export function fichaPmt(pmt, contexto = {}) {
       filaKV('Municipio', oNada(pmt.municipio)) +
       `<div class="ficha-dato" style="margin-top:4px">${oNada(pmt.direccion)}</div>`)}
 
-    ${bloque('Seguimiento documental', detalleDocumental(pmt))}
+    ${bloque('Seguimiento documental', detalleDocumental(pmt, !!contexto.enfoqueDocumental))}
 
     ${bloque('Coordinación con otros contratos', rels.length
       ? filaKV('Comparten zona', `<b>${num(rels.length)}</b>`) +
@@ -167,53 +221,96 @@ export function fichaPmt(pmt, contexto = {}) {
  * que nadie entienda geometría.
  */
 export function fichaRelacion(rel, porId, { modelo = 'minima', radio = 120 } = {}) {
-  if (!rel) return '<p class="ficha-vacia">Seleccione una relación para ver por qué existe.</p>';
+  if (!rel) {
+    return `<p class="ficha-vacia">Elija una relación en el mapa o en la tabla
+      para ver qué pasa y qué hay que hacer.</p>`;
+  }
   const a = porId?.get(rel.idA), b = porId?.get(rel.idB);
   const e = estadoEspacial(rel), t = estadoTemporal(rel);
-  const S = { A: '#009300', B: '#1565c0' };
+  const o = lecturaOperativaEnContexto(rel);
+  const sA = simbologiaDe(a?.tipoCierre), sB = simbologiaDe(b?.tipoCierre);
 
-  const porQue = rel.zonasDeInfluenciaSeSuperponen
-    ? `Sus <b>zonas de influencia de ${esc(radio)} m se superponen</b> en unos ` +
-      `<b>${esc((rel.solapeDeZonasMetros ?? 0).toFixed(0))} m</b>.`
-    : rel.distanciaMetros !== null && rel.distanciaMetros !== undefined
-      ? `Están a <b>${esc(rel.distanciaMetros.toFixed(1))} m</b>, dentro del umbral.`
-      : 'No se pudo medir la distancia entre los dos trazados.';
+  /* ── 1 · EL VEREDICTO, arriba y en una palabra ── */
+  const CLASE = {
+    [OPERATIVO.ARTICULACION_REQUERIDA]: 'veredicto-articula',
+    [OPERATIVO.COINCIDENCIA_ESPACIAL]: 'veredicto-coincide',
+    [OPERATIVO.NO_EVALUABLE]: 'veredicto-nosabe',
+    [OPERATIVO.SIN_COINCIDENCIA]: 'veredicto-lejos',
+  };
+  /* ── 2 · QUÉ HAY QUE HACER. Es lo que se viene a buscar. ── */
+  const ACCION = {
+    [OPERATIVO.ARTICULACION_REQUERIDA]:
+      'Coordinar programación, señalización y manejo del tránsito entre los dos responsables.',
+    [OPERATIVO.COINCIDENCIA_ESPACIAL]:
+      'Nada que coordinar por ahora: comparten sitio, pero no al mismo tiempo.',
+    [OPERATIVO.NO_EVALUABLE]:
+      'Revisar las fechas de los dos PMT: sin ellas no se puede saber si hay que coordinar.',
+    [OPERATIVO.SIN_COINCIDENCIA]: 'No comparten espacio con el criterio vigente.',
+  };
 
+  const lugar = [a?.municipio ?? b?.municipio, a?.direccion].filter(Boolean).join(' · ');
+
+  /* ── 3 · CUÁNDO, con fecha y hora exactas ── */
   const cuando = t === TEMPORAL.COINCIDE
-    ? `<div class="ficha-dato"><b style="color:var(--epm-naranja)">Coinciden en el tiempo</b><br>
-         ${esc(fechaLegible(rel.traslapeInicio))} — ${esc(fechaLegible(rel.traslapeFin))}<br>
-         <small>${num(rel.traslapeDias ?? 0)} día(s) en común</small></div>`
+    ? `<div class="rel-cuando">
+         <div class="rel-cuando-rot">Coinciden</div>
+         <div class="rel-cuando-fechas">
+           <b>${esc(fechaLegible(rel.traslapeInicio))}</b>
+           <span class="rel-a">a</span>
+           <b>${esc(fechaLegible(rel.traslapeFin))}</b>
+         </div>
+         <div class="rel-cuando-dias">${num(rel.traslapeDias ?? 0)} día(s) en común</div>
+       </div>`
     : t === TEMPORAL.NO_COINCIDE
-      ? '<div class="ficha-dato">Las vigencias <b>no se solapan</b>: afectan al mismo sector en momentos distintos.</div>'
-      : '<div class="ficha-dato" style="color:var(--naranja-oscuro)">No se pudo decidir: falta alguna fecha.</div>';
+      ? '<div class="rel-cuando neutro">Sus vigencias <b>no se solapan</b>: mismo sector, momentos distintos.</div>'
+      : '<div class="rel-cuando aviso">No se pudo decidir: a alguno de los dos le falta una fecha.</div>';
+
+  /* ── 4 · POR QUÉ, en una frase ── */
+  const porQue = rel.zonasDeInfluenciaSeSuperponen && modelo === 'zonasDeInfluencia'
+    ? `sus zonas de influencia de ${esc(radio)} m se superponen`
+    : rel.distanciaMetros !== null && rel.distanciaMetros !== undefined
+      ? `están a <b>${esc(rel.distanciaMetros.toFixed(0))} m</b>, dentro del umbral de ${esc(radio)} m`
+      : 'no se pudo medir la distancia entre los dos trazados';
+  const yAdemas = t === TEMPORAL.COINCIDE ? ' y <b>los dos están activos</b> durante ese periodo' : '';
 
   return `
-    <div class="ficha-titulo">Relación entre dos contratos</div>
-    <div class="ficha-sub">Lo que sigue son <b>hechos medidos</b>. No hay ninguna clasificación de criticidad.</div>
+    <div class="rel-veredicto ${CLASE[o]}">${esc(ETIQUETA_OPERATIVO[o])}</div>
 
-    ${bloque('Los dos PMT',
-      `<div class="ficha-dato" style="border-left:4px solid ${S.A};padding-left:8px;margin-bottom:8px">
-         <b>${esc(rel.contratoA ?? '')}</b><br><small>${esc(rel.frenteA ?? '')}</small></div>
-       <div class="ficha-dato" style="border-left:4px solid ${S.B};padding-left:8px">
-         <b>${esc(rel.contratoB ?? '')}</b><br><small>${esc(rel.frenteB ?? '')}</small></div>`)}
+    <div class="rel-partes">
+      <div class="rel-parte">
+        <span class="rel-marca" style="background:${sA.color}"></span>
+        <b class="mono">${esc(rel.contratoA ?? '—')}</b>
+        <span class="rel-frente">${esc(rel.frenteA ?? '—')}</span>
+      </div>
+      <div class="rel-flecha" aria-hidden="true">↔</div>
+      <div class="rel-parte">
+        <span class="rel-marca" style="background:${sB.color}"></span>
+        <b class="mono">${esc(rel.contratoB ?? '—')}</b>
+        <span class="rel-frente">${esc(rel.frenteB ?? '—')}</span>
+      </div>
+    </div>
 
-    ${bloque('Por qué están relacionados',
-      `<div class="ficha-dato">${porQue}</div>` +
-      filaKV('Distancia entre trazados', rel.distanciaMetros === null || rel.distanciaMetros === undefined
-        ? 'no se pudo medir' : `<b>${esc(rel.distanciaMetros.toFixed(1))} m</b>`) +
-      filaKV('¿Llegan a tocarse?', e === ESPACIAL.CONTACTO ? '<b>Sí</b>' : 'No') +
-      filaKV('En el espacio', esc(ETIQUETA_ESPACIAL[e])))}
+    ${lugar ? `<div class="rel-lugar">📍 ${esc(lugar)}</div>` : ''}
 
-    ${bloque('Cuándo', cuando)}
+    ${cuando}
 
-    ${bloque('Vigencias',
-      `<div class="ficha-dato"><span style="color:${S.A}">■</span> ${esc(fechaLegible(rel.vigenciaA?.inicio))} — ${esc(fechaLegible(rel.vigenciaA?.fin))}</div>
-       <div class="ficha-dato"><span style="color:${S.B}">■</span> ${esc(fechaLegible(rel.vigenciaB?.inicio))} — ${esc(fechaLegible(rel.vigenciaB?.fin))}</div>`)}
+    <div class="rel-porque"><b>Por qué:</b> ${porQue}${yAdemas}.</div>
+    <div class="rel-accion"><b>Qué hacer:</b> ${esc(ACCION[o])}</div>
 
-    ${bloque('Con qué regla salió',
-      filaKV('Criterio espacial', modelo === 'zonasDeInfluencia'
-        ? `zonas de ${esc(radio)} m que se superponen`
-        : 'distancia mínima entre trazados')
-      + filaKV('Municipio', esc([rel.municipioA, rel.municipioB].filter(Boolean).join(' · ') || '—')))}
+    <details class="rel-detalle">
+      <summary>Detalle técnico</summary>
+      ${filaKV('Distancia entre trazados', rel.distanciaMetros === null || rel.distanciaMetros === undefined
+    ? 'no se pudo medir' : `<b>${esc(rel.distanciaMetros.toFixed(1))} m</b>`)}
+      ${filaKV('¿Llegan a tocarse?', e === ESPACIAL.CONTACTO ? '<b>Sí</b>' : 'No')}
+      ${filaKV('En el espacio', esc(ETIQUETA_ESPACIAL[e]))}
+      ${rel.zonasDeInfluenciaSeSuperponen !== undefined
+    ? filaKV(`Zonas de ${esc(radio)} m`, rel.zonasDeInfluenciaSeSuperponen
+      ? `se superponen ${esc((rel.solapeDeZonasMetros ?? 0).toFixed(0))} m` : 'no se superponen') : ''}
+      ${filaKV('Vigencia A', `${esc(fechaLegible(rel.vigenciaA?.inicio))} — ${esc(fechaLegible(rel.vigenciaA?.fin))}`)}
+      ${filaKV('Vigencia B', `${esc(fechaLegible(rel.vigenciaB?.inicio))} — ${esc(fechaLegible(rel.vigenciaB?.fin))}`)}
+      ${filaKV('Criterio espacial', modelo === 'zonasDeInfluencia'
+    ? `zonas de ${esc(radio)} m que se superponen` : `distancia mínima ≤ ${esc(radio)} m`)}
+      <p class="pista-campo">Son <b>hechos medidos</b>. La plataforma no clasifica criticidad.</p>
+    </details>
   `;
 }

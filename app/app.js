@@ -20,6 +20,7 @@ import { filaDePmtCreado } from './nucleo/validacion-pmt.js';
 import * as Temporal from './nucleo/temporalidad.js';
 import * as Identidad from './nucleo/identidad-pmt.js';
 import * as Periodo from './ui/periodo.js';
+import * as Bandeja from './ui/bandeja.js';
 import { estadoDocumental } from '../motor/src/modelo/documental.js';
 import * as Ingesta from './nucleo/ingesta.js';
 import * as Filtro from './nucleo/filtrado.js';
@@ -362,7 +363,13 @@ async function reanalizar(fuentes, opciones = {}) {
     });
     pintarListaFuentes();
     ocultarAviso();
-    pintarTodo(ms, opciones.extra ? { ...opciones.extra, notas } : (notas.length ? { notas } : null));
+    pintarTodo(ms, opciones.extra ? { ...opciones.extra, notas } : (notas.length ? { notas } : null), opciones);
+
+    // ENFOCAR lo que se acaba de crear. Va DESPUES de pintar, porque antes de
+    // pintar el trazado todavia no esta en el mapa y no se puede ir a el.
+    if (opciones.enfocar && estado.porId.has(opciones.enfocar)) {
+      seleccionar(opciones.enfocar);
+    }
   } catch (e) {
     avisar(`<b>Ocurrió un error inesperado al procesar las fuentes.</b><br>` +
       `<small class="mono">${esc(e?.message ?? e)}</small><br>` +
@@ -540,7 +547,7 @@ async function abrirProyecto(file, { acumular = false } = {}) {
 
 /* ───────────────────────── Pintado ───────────────────────── */
 
-function pintarTodo(ms, extra = null) {
+function pintarTodo(ms, extra = null, opciones = {}) {
   // El gestor de fuentes queda SIEMPRE visible mientras haya un analisis: es
   // desde donde se anade, se quita y se ven los diagnosticos.
   for (const p of ['panelFuentes', 'panelResumen', 'panelExplorar', 'panelDetalle', 'panelExportar']) mostrar(p, true);
@@ -564,7 +571,16 @@ function pintarTodo(ms, extra = null) {
   });
 
   aplicarFiltros();        // pinta ya las tarjetas con el alcance visible
-  Mapa.encuadrar();
+  // ══ NO SE REENCUADRA SI YA HABIA UN ENCUADRE ════════════════════════════
+  //
+  // Crear un PMT o una nueva vigencia RECALCULA todo, y recalcular llamaba a
+  // `encuadrar()`, que alejaba el mapa a todo el territorio. El usuario estaba
+  // mirando una esquina concreta, pulsaba «crear la nueva vigencia», y el mapa
+  // se iba al valle entero: habia que volver a buscar el sitio a mano.
+  //
+  // Se encuadra SOLO la primera vez, cuando todavia no hay nada que conservar.
+  // Despues manda el enfoque que pida quien llamo (`opciones.enfocar`).
+  if (opciones.conservarVista !== true) Mapa.encuadrar();
 
   // CALIDAD DE LA ENTRADA: habla de TODO lo cargado, nunca de lo filtrado, y
   // por eso se pinta aqui una sola vez y con el resumen TOTAL.
@@ -841,6 +857,10 @@ async function incorporarPmt(pmt, editando) {
     clase: 'proyecto', nombre: idFuente, huella: 'local-' + trazados.length,
     trazados, fuentesOriginales: [],
   }], {
+    // El mapa NO se aleja: se queda donde estaba y luego se enfoca el PMT que
+    // se acaba de crear, que es lo que el usuario quiere ver.
+    conservarVista: true,
+    enfocar: fila.id,
     notas: [editando
       ? `Se actualizó el PMT «${fila.frente}» y se recalculó todo.`
       : fila.activacion.numero > 1
@@ -891,6 +911,9 @@ function pintarFicha() {
   // y no estarian en `visibles` — y entonces el historial diria «1 activacion».
   caja.innerHTML = Ficha.fichaPmt(pmt, {
     relaciones: estado.relVisibles ?? [], porId: estado.porId, todas: estado.filas,
+    // Si hay un filtro documental activo, la pregunta del usuario ES la
+    // documentacion: entonces el detalle se abre solo, sin tener que buscarlo.
+    enfoqueDocumental: (Controles.actuales().documental ?? []).length > 0,
   });
 }
 
@@ -940,9 +963,12 @@ function pintarTarjetas() {
   // ── Linea de alcance: ninguna cifra viaja sin decir de donde sale ──
   const alcance = $('alcanceResumen');
   if (alcance) {
-    alcance.className = 'alcance' + (res.filtrado ? ' filtrado' : '');
     const dia = estado.instanteRecorrido !== null
       ? ` · dia <b>${esc(diaDe(estado.instanteRecorrido))}</b>` : '';
+    // Si no hay filtro ni dia, la linea no aporta nada y se retira. En cuanto
+    // hay uno, aparece: un filtro activo no puede quedar invisible.
+    alcance.className = 'alcance' + (res.filtrado ? ' filtrado' : '')
+      + (res.filtrado || dia ? '' : ' oculto');
     alcance.innerHTML = res.filtrado || dia
       ? `<span class="etq-alcance">Resultado visible</span>` +
         `<span><b>${num(res.pmtsCargados)}</b> PMT cargados · ` +
@@ -1043,13 +1069,39 @@ function montarControlFondo() {
     [Base.SIN_FONDO, 'Sin mapa de fondo']];
   caja.innerHTML = `<label class="mini-campo">Mapa de fondo
     <select id="selFondo">${ops.map(([v, t]) => `<option value="${esc(v)}"${v === cfg.proveedor ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>
-  </label>`;
+  </label>` +
+    // ══ ATENUAR EL FONDO ══════════════════════════════════════════════════
+    //
+    // La prueba con la usuaria mostro que el callejero COMPITE con los PMT: es
+    // un mapa con sus propios colores saturados —vias amarillas, parques
+    // verdes, agua azul— y encima van lineas rojas, naranjas y azules. Seis
+    // familias de color peleando por el mismo sitio.
+    //
+    // La solucion habitual en cartografia operativa es un fondo gris apagado.
+    // Se descarto añadir un proveedor de «canvas gris»: no se puede comprobar
+    // desde aqui si funciona, y el que hay (Esri Light Gray) solo llega a zoom
+    // 16, justo por debajo del zoom que hace falta para revisar un trazado.
+    //
+    // Se hace en LOCAL, sobre las teselas que sean: menos saturacion y algo
+    // mas de claridad. Funciona con cualquier proveedor, no añade ninguna
+    // peticion y se puede quitar de un clic.
+    `<label class="mini-campo" title="Baja el color del mapa de fondo para que los trazados destaquen. No cambia de proveedor ni descarga nada.">
+       <input type="checkbox" id="fondoTenue"${cfg.tenue !== false ? ' checked' : ''}> Fondo atenuado
+     </label>`;
   $('selFondo').onchange = (e) => {
     const id = e.target.value;
     if (id === 'corporativo') return pedirServidorCorporativo();
     Base.guardarConfig({ ...Base.leerConfig(), proveedor: id });
     Mapa.aplicarFondo();
   };
+  const tenue = $('fondoTenue');
+  if (tenue) {
+    Mapa.atenuarFondo(tenue.checked);
+    tenue.onchange = () => {
+      Base.guardarConfig({ ...Base.leerConfig(), tenue: tenue.checked });
+      Mapa.atenuarFondo(tenue.checked);
+    };
+  }
 }
 
 /**
@@ -1186,6 +1238,20 @@ function aplicarFiltros() {
       aplicarFiltros();
     }, reparto.sinVigencia);
 
+  // BANDEJA: las tres cifras que importan, y que ADEMAS filtran al pulsarlas.
+  // Se pinta con el MISMO `resumen` que las tarjetas, asi que la cifra de la
+  // bandeja y la de la tabla no pueden decir cosas distintas.
+  Bandeja.pintar(resumenVisible(), f.relacion ?? [], (clave) => {
+    const antes = Controles.actuales();
+    // Las tres claves de la bandeja son EXCLUYENTES entre si: elegir una quita
+    // la anterior. Acumularlas daria «articulacion O coincidencia», que es lo
+    // mismo que no filtrar, y el usuario creeria que el filtro no funciona.
+    const otras = (antes.relacion ?? []).filter((k) => !Object.values(Bandeja.FILTRO_DE_LECTURA).includes(k));
+    Controles.fijarFiltros({ ...antes, relacion: clave ? [...otras, clave] : otras });
+    Controles.montarFiltros(estado.filas, aplicarFiltros);
+    aplicarFiltros();
+  });
+
   pintarTarjetas();
   pintarAlcancePestana();
   pintarAlcanceExportar();
@@ -1223,7 +1289,8 @@ function aplicarFiltros() {
 function seleccionar(id) {
   estado.seleccionado = id;
   estado.relacionSeleccionada = null;
-  Mapa.limpiarZonas();
+  // Salir del modo inspeccion: devuelve opacidad normal al resto del mapa.
+  Mapa.dejarDeInspeccionar();
   // La zona de influencia del PMT seleccionado se enseña siempre: es lo que
   // explica su alcance real, y verla solo al inspeccionar una relacion obligaba
   // a buscar una relacion para entender un PMT.

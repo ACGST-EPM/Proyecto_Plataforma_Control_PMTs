@@ -828,3 +828,117 @@ details.tecnico pre {
 .desg-igual, .desg-mas { color: var(--tenue); font-weight: 700; }
 .desg-sep { width: 1px; align-self: stretch; background: var(--borde); margin: 0 3px; }
 .periodo-nota { font-size: .76rem; color: var(--naranja-oscuro); max-width: 320px; align-self: center; }
+
+/* Distintivo del rotulo de un bloque de ficha. Va por su propio parametro y
+   tambien se escapa: el rotulo NUNCA acepta HTML (ver ficha.js). */
+.ficha-insignia {
+  display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px;
+  background: var(--azul-suave); color: var(--azul); font-size: .72rem; font-weight: 700;
+}
+
+/* ═══════════ FICHA DE RELACION — la prueba de los 10 segundos ═══════════
+ *
+ * El orden de arriba abajo ES la respuesta a las preguntas, en el orden en que
+ * se hacen: que pasa · entre quienes · donde · cuando · por que · que hago.
+ * El detalle tecnico existe, pero debajo y plegado: quien lo necesita lo abre;
+ * quien no, no tiene que esquivarlo. */
+.rel-veredicto {
+  font-size: 1.02rem; font-weight: 800; letter-spacing: .01em;
+  padding: 9px 12px; border-radius: var(--radio); margin-bottom: 12px;
+  border-left: 5px solid;
+}
+.veredicto-articula { background: var(--naranja-suave); color: var(--naranja-texto); border-left-color: var(--epm-naranja); }
+.veredicto-coincide { background: var(--azul-suave); color: var(--azul); border-left-color: var(--azul); }
+.veredicto-nosabe   { background: #ede7f6; color: #5e35b1; border-left-color: #5e35b1; }
+.veredicto-lejos    { background: var(--gris-suave); color: var(--gris); border-left-color: var(--gris); }
+
+.rel-partes { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; margin-bottom: 10px; }
+.rel-parte { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rel-parte b { font-size: .95rem; }
+.rel-marca { width: 26px; height: 5px; border-radius: 3px; }
+.rel-frente { font-size: .8rem; color: var(--tinta-2); overflow-wrap: anywhere; }
+.rel-flecha { font-size: 1.3rem; color: var(--tenue); }
+
+.rel-lugar { font-size: .85rem; color: var(--tinta-2); margin-bottom: 10px; overflow-wrap: anywhere; }
+
+.rel-cuando {
+  background: var(--naranja-suave); border-radius: var(--radio);
+  padding: 9px 12px; margin-bottom: 10px;
+}
+.rel-cuando.neutro { background: var(--gris-suave); font-size: .86rem; }
+.rel-cuando.aviso  { background: #ede7f6; color: #5e35b1; font-size: .86rem; }
+.rel-cuando-rot { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--naranja-texto); font-weight: 700; }
+.rel-cuando-fechas { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: .95rem; margin: 2px 0; }
+.rel-a { color: var(--tenue); font-size: .8rem; }
+.rel-cuando-dias { font-size: .78rem; color: var(--naranja-texto); }
+
+.rel-porque, .rel-accion { font-size: .86rem; margin-bottom: 8px; line-height: 1.45; }
+.rel-accion {
+  background: var(--verde-suave); border-left: 3px solid var(--verde-texto);
+  padding: 8px 10px; border-radius: var(--radio);
+}
+.rel-detalle { margin-top: 12px; border-top: 1px solid var(--borde); padding-top: 8px; }
+.rel-detalle summary {
+  cursor: pointer; font-size: .8rem; color: var(--tenue); font-weight: 600;
+  list-style: none; padding: 2px 0;
+}
+.rel-detalle summary::-webkit-details-marker { display: none; }
+.rel-detalle summary::before { content: '▸ '; }
+.rel-detalle[open] summary::before { content: '▾ '; }
+.rel-detalle summary:hover { color: var(--tinta); }
+
+/* ═══════════ BANDEJA DE TRABAJO ═══════════
+ *
+ * Tres cifras, y son BOTONES. Antes habia ocho tarjetas que solo se podian
+ * leer: ver «27 requieren articulacion» y tener que bajar al panel de filtros
+ * a buscar la casilla correspondiente son cinco pasos para llegar a lo que la
+ * cifra ya estaba señalando. */
+.tira-situacion { padding-top: 14px; padding-bottom: 14px; }
+.bandeja { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; margin-top: 10px; }
+.bj {
+  display: flex; align-items: center; gap: 9px; text-align: left;
+  padding: 9px 14px; border-radius: var(--radio); cursor: pointer;
+  border: 1.5px solid var(--borde); background: var(--papel);
+  font-family: inherit; font-size: .82rem; color: var(--tinta);
+  transition: border-color .12s, background .12s;
+}
+.bj:hover:not(:disabled) { border-color: var(--tinta-2); }
+.bj:focus-visible { outline: 2px solid var(--epm-verde); outline-offset: 2px; }
+.bj-icono { font-size: 1rem; }
+.bj-n { font-size: 1.4rem; font-weight: 800; line-height: 1; }
+.bj-t { color: var(--tinta-2); max-width: 130px; line-height: 1.25; }
+.bj.vacia { opacity: .5; cursor: default; }
+/* El estado ACTIVO se marca con borde grueso Y fondo, no solo con color: tiene
+   que verse tambien sin distinguir tonos y en blanco y negro. */
+.bj.on { border-width: 3px; padding: 7px 12px; font-weight: 600; }
+.bj-articula .bj-n { color: var(--naranja-texto); }
+.bj-articula:hover:not(:disabled), .bj-articula.on { border-color: var(--epm-naranja); background: var(--naranja-suave); }
+.bj-coincide .bj-n { color: var(--azul); }
+.bj-coincide:hover:not(:disabled), .bj-coincide.on { border-color: var(--azul); background: var(--azul-suave); }
+.bj-nosabe .bj-n { color: #5e35b1; }
+.bj-nosabe:hover:not(:disabled), .bj-nosabe.on { border-color: #5e35b1; background: #ede7f6; }
+.bj-pmt { align-self: center; font-size: .82rem; color: var(--tenue); padding-left: 6px; }
+.bj-pmt b { font-size: 1.05rem; color: var(--tinta); }
+
+/* Detalle del analisis: existe, pero plegado. No se ha quitado nada. */
+.mas-detalle { margin-top: 12px; }
+.mas-detalle > summary {
+  cursor: pointer; font-size: .82rem; color: var(--tenue); font-weight: 600;
+  list-style: none; padding: 4px 0;
+}
+.mas-detalle > summary::-webkit-details-marker { display: none; }
+.mas-detalle > summary::before { content: '▸ '; }
+.mas-detalle[open] > summary::before { content: '▾ '; }
+.mas-detalle > summary:hover { color: var(--tinta); }
+
+/* Lo que falta, plegado. Existe, pero no empuja hacia abajo lo que si importa. */
+.doc-mas { margin-top: 4px; }
+.doc-mas summary { cursor: pointer; font-size: .76rem; color: var(--tenue); list-style: none; }
+.doc-mas summary::-webkit-details-marker { display: none; }
+.doc-mas summary::before { content: '▸ '; }
+.doc-mas[open] summary::before { content: '▾ '; }
+
+/* FONDO ATENUADO. El callejero trae sus propios colores saturados y encima van
+   los trazados: seis familias de color peleando. Se baja la saturacion del
+   fondo, no la de los datos. Solo afecta a la capa de teselas. */
+#mapa.fondo-tenue .leaflet-tile-pane { filter: saturate(.38) brightness(1.08) contrast(.92); }

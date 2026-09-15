@@ -38,6 +38,10 @@ let capas = {};
 let porId = new Map();
 let alSeleccionar = () => {};
 let estadoFondo = { proveedor: null, capa: null, cargo: false, fallo: false, intentados: [] };
+// Lo ultimo que se pinto, para poder restaurarlo al salir de una inspeccion.
+let ultimasFilas = [];
+let ultimosResaltados = null;
+let ultimaInspeccion = null;
 let acercamientos = new Map();     // clave de relacion -> puntos mas cercanos
 
 export function iniciar(idContenedor, { onSeleccion } = {}) {
@@ -135,6 +139,20 @@ function avisarFondo(aviso) {
 
 export const estadoDelFondo = () => ({ ...estadoFondo, capa: undefined });
 
+/**
+ * Atenua el mapa de fondo para que los trazados destaquen.
+ *
+ * Es un filtro CSS sobre el contenedor de teselas: no cambia de proveedor, no
+ * añade ninguna peticion y se quita de un clic. La alternativa —un proveedor
+ * de «canvas gris»— no se puede comprobar desde el entorno de desarrollo y el
+ * candidato obvio (Esri Light Gray) se queda en zoom 16, por debajo del que
+ * hace falta para revisar un trazado sobre la via.
+ */
+export function atenuarFondo(si) {
+  const c = mapa?.getContainer();
+  if (c) c.classList.toggle('fondo-tenue', si !== false);
+}
+
 /* ───────────────────────── Geometrias ───────────────────────── */
 
 const aLatLng = (c) => [c[1], c[0]];
@@ -206,6 +224,10 @@ export const contextoActual = () => contexto;
 export function pintarPmts(filas, mapaPorId, resaltados = null) {
   if (!mapa) return;
   porId = mapaPorId;
+  // Se recuerda lo ultimo pintado para poder volver a ello al salir de una
+  // inspeccion, sin que quien inspecciona tenga que pasarlo otra vez.
+  ultimasFilas = filas;
+  if (!ultimaInspeccion) ultimosResaltados = resaltados;
   capas.trazados.clearLayers();
   capas.accesos.clearLayers();
 
@@ -240,6 +262,18 @@ export function pintarPmts(filas, mapaPorId, resaltados = null) {
     capa.on('click', () => alSeleccionar(x.id));
     capa.pmtId = x.id;
     capa.addTo(capas.trazados);
+
+    // NUCLEO CLARO encima del trazo: es lo que distingue el cierre PARCIAL del
+    // TOTAL ahora que los dos son linea continua. Representa «la calzada sigue
+    // abierta, reducida», se lee en blanco y negro y no añade ningun color
+    // semantico nuevo. Solo en lo destacado: en el contexto atenuado estorba.
+    if (destacado && s.nucleo) {
+      const n = dibujar(x.geometria, {
+        color: s.nucleo.color, weight: s.nucleo.grosor, opacity: 0.95,
+        fill: false, lineCap: 'round', lineJoin: 'round',
+      });
+      if (n) n.addTo(capas.trazados);
+    }
 
     // Marcador propio de "ingreso y salida": es la capa 📍 azul que tenia QGIS.
     if (s.marcador && destacado) {
@@ -305,6 +339,20 @@ export function inspeccionarRelacion(rel, { radio = RADIO_INFLUENCIA_METROS, ver
   const a = porId.get(rel.idA), b = porId.get(rel.idB);
   if (!a?.geometria || !b?.geometria) return null;
 
+  // ══ SOLO ESTOS DOS ═══════════════════════════════════════════════════════
+  //
+  // Mientras se inspecciona una relacion, los demas trazados ESTORBAN: la
+  // pregunta es «que pasa entre estos dos», y con doscientas lineas de colores
+  // alrededor no se ve.
+  //
+  // Se reutiliza el mecanismo de RESALTADO que ya existe y esta probado: lo que
+  // no esta en el conjunto se dibuja gris y translucido. Se descarto atenuar
+  // con CSS porque el mapa usa el renderizador de LIENZO: todo vive en un solo
+  // `canvas`, asi que una opacidad sobre el contenedor habria atenuado tambien
+  // la seleccion, que es justo lo que tiene que destacar.
+  ultimaInspeccion = new Set([rel.idA, rel.idB]);
+  pintarPmts(ultimasFilas, porId, ultimaInspeccion);
+
   pintarZonas([a, b], radio);
 
   // Los dos trazados, cada uno con su color de papel: A y B. Aqui el color NO
@@ -336,12 +384,56 @@ export function inspeccionarRelacion(rel, { radio = RADIO_INFLUENCIA_METROS, ver
     }
   }
 
+  // ══ LA SUPERPOSICION, DIBUJADA SIN AMBIGUEDAD ════════════════════════════
+  //
+  // Dos circulos translucidos que se pisan no dicen DONDE se superponen: el ojo
+  // ve tres tonos y no sabe cual es cual. Aqui se dibuja una figura solida.
+  //
+  // Se dibuja el DISCO INSCRITO en la superposicion, centrado en el punto medio
+  // del tramo de maxima aproximacion y con radio `solape/2`. Es exacto en un
+  // sentido comprobable: ese disco esta ENTERO dentro de la superposicion.
+  //
+  //   Sea `d` la distancia minima y `m` el punto medio del tramo a-b.
+  //   Un punto `q` a distancia `s` de `m` cumple dist(q,A) <= d/2 + s.
+  //   Para estar en la zona de A hace falta d/2 + s <= r, o sea s <= r - d/2.
+  //   Y r - d/2 = (2r - d)/2 = solape/2. Lo mismo por el lado de B.
+  //
+  // Asi que NO se inventa area: se dibuja una parte demostrable de ella, y se
+  // dice que es «al menos esto». Si el acercamiento no se puede situar con
+  // fiabilidad, no se dibuja nada — la misma regla de siempre.
+  const solape = rel.solapeDeZonasMetros;
+  if (ac.evaluable && ac.ubicado !== false && ac.a && ac.b
+      && typeof solape === 'number' && solape > 0) {
+    const medio = [(ac.a[0] + ac.b[0]) / 2, (ac.a[1] + ac.b[1]) / 2];
+    const sp = SIMBOLOGIA_COORDINACION.superposicion;
+    L.circle(aLatLng(medio), {
+      radius: solape / 2,
+      color: sp.borde, weight: 2, opacity: sp.opacidadBorde,
+      fillColor: sp.color, fillOpacity: sp.opacidad, interactive: false,
+    }).addTo(capas.superposicion);
+  }
+
   try {
     const cap = [...capas.seleccion.getLayers(), ...capas.zonas.getLayers()];
     const b2 = cap.reduce((acc, c) => (c.getBounds ? (acc ? acc.extend(c.getBounds()) : c.getBounds()) : acc), null);
     if (b2) mapa.fitBounds(b2.pad(0.15), { maxZoom: 18 });
   } catch { /* si no se puede encuadrar, no pasa nada */ }
   return ac;
+}
+
+/**
+ * Sale del modo inspeccion: devuelve el resto del mapa a su estado normal.
+ *
+ * `resaltados` vuelve a ser el que habia antes de inspeccionar —el de los
+ * filtros—, no `null`: si no, salir de una relacion borraria el atenuado que el
+ * usuario habia pedido con un filtro, y pareceria que el filtro se ha quitado.
+ */
+export function dejarDeInspeccionar() {
+  limpiarZonas();
+  if (ultimaInspeccion) {
+    ultimaInspeccion = null;
+    pintarPmts(ultimasFilas, porId, ultimosResaltados);
+  }
 }
 
 /**
@@ -500,8 +592,14 @@ export function contarDibujados() {
     accesos: n(capas.accesos),
     relaciones: n(capas.relaciones),
     zonas: n(capas.zonas),
+    superposicion: n(capas.superposicion),
     seleccion: n(capas.seleccion),
     contexto,
+    // Encuadre actual. Se expone para poder comprobar en pruebas que crear un
+    // PMT o una nueva vigencia NO aleja el mapa: es un defecto que solo se ve
+    // conduciendo la aplicacion, y sin esto no habria forma de verlo desde fuera.
+    zoom: mapa.getZoom(),
+    centro: (() => { const c = mapa.getCenter(); return [+c.lat.toFixed(5), +c.lng.toFixed(5)]; })(),
   };
 }
 

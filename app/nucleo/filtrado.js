@@ -8,7 +8,8 @@
  * Regla de diseno: un filtro vacio no filtra. Nunca se deja al usuario delante
  * de una tabla vacia sin saber por que.
  */
-import { estadoEspacial, estadoTemporal, ESPACIAL, TEMPORAL } from './modelo.js';
+import { estadoEspacial, estadoTemporal, lecturaOperativaEnContexto,
+  ESPACIAL, TEMPORAL, OPERATIVO } from './modelo.js';
 import { ALCANCE, SITUACION, situacionDe, tocaAnio, MS_DIA, limitesDelDia,
   esAccionable, relevanciaDeRelacion, RELEVANCIA,
   coincidenciaAccionable, articulacionCoordinable } from './temporalidad.js';
@@ -137,16 +138,28 @@ export function filtrarPmts(filas, f, ref = null) {
  */
 export const CLAVES_DOCUMENTAL = Object.freeze([
   ['completa', 'Documentacion completa (3 de 3)'],
-  ['falta-resolucion', 'Falta la Resolucion PMT'],
-  ['falta-permiso', 'Falta el Permiso de rotura'],
-  ['falta-cierre', 'Falta el Cierre del permiso de rotura'],
+  ['incompleta', 'Documentacion incompleta'],
   ['sin-ninguno', 'Sin ningun documento todavia'],
+  // PENDIENTE y REGISTRADO por documento. Hacen falta LAS DOS caras: preguntar
+  // «cuales tienen ya la resolucion» es tan legitimo como preguntar «a cuales
+  // les falta», y antes solo se podia preguntar lo segundo.
+  ['falta-resolucion', 'Resolucion PMT pendiente'],
+  ['tiene-resolucion', 'Resolucion PMT registrada'],
+  ['falta-permiso', 'Permiso de rotura pendiente'],
+  ['tiene-permiso', 'Permiso de rotura registrado'],
+  ['falta-cierre', 'Cierre de rotura pendiente'],
+  ['tiene-cierre', 'Cierre de rotura registrado'],
 ]);
 
 const CLAVE_A_PENDIENTE = {
   'falta-resolucion': 'resolucionPmt',
   'falta-permiso': 'permisoRotura',
   'falta-cierre': 'cierrePermisoRotura',
+};
+const CLAVE_A_REGISTRADO = {
+  'tiene-resolucion': 'resolucionPmt',
+  'tiene-permiso': 'permisoRotura',
+  'tiene-cierre': 'cierrePermisoRotura',
 };
 
 function cumpleDocumental(x, claves) {
@@ -157,9 +170,17 @@ function cumpleDocumental(x, claves) {
   // que alguien quiere decir al marcar las dos, no «faltan las dos a la vez».
   return claves.some((c) => {
     if (c === 'completa') return d.completo;
+    if (c === 'incompleta') return !d.completo;
     if (c === 'sin-ninguno') return d.sinNinguno;
     const p = CLAVE_A_PENDIENTE[c];
-    return p ? d.pendientes.includes(p) : false;
+    if (p) return d.pendientes.includes(p);
+    const r = CLAVE_A_REGISTRADO[c];
+    // REGISTRADO significa que tiene CODIGO PROPIO. Un documento «por
+    // confirmar» —heredado de una activacion anterior— no cuenta: nadie ha
+    // decidido si ampara estas fechas, asi que decir que esta registrado seria
+    // resolver la pregunta P21 desde un filtro.
+    if (r) return d.detalle.some((y) => y.clave === r && y.codigo);
+    return false;
   });
 }
 
@@ -168,6 +189,16 @@ function cumpleDocumental(x, claves) {
  * aqui no aparece la palabra "critico" ni ninguna jerarquia operativa.
  */
 export const CLAVES_RELACION = Object.freeze([
+  // ── POR LECTURA OPERATIVA: son las que usa la bandeja ──
+  //
+  // Van PRIMERO porque son las que responden a la pregunta que se hace quien
+  // abre esto: «¿qué tengo que coordinar?». Y son EXACTAMENTE lo que cuenta la
+  // bandeja: la cifra y el filtro comparten esta funcion, asi que no pueden
+  // decir cosas distintas.
+  ['articulacion', 'Requieren articulacion'],
+  ['coincidencia-espacial', 'Comparten sitio, en otro momento'],
+  ['relacion-no-evaluable', 'No se pudieron comprobar'],
+  // ── POR HECHOS MEDIDOS: el detalle, para quien lo necesite ──
   ['contacto', 'Se tocan fisicamente'],
   ['cercania', 'Cerca, sin tocarse'],
   ['a-la-vez', 'Coinciden en el tiempo'],
@@ -179,6 +210,15 @@ export const CLAVES_RELACION = Object.freeze([
 function cumpleClave(rel, clave) {
   const e = estadoEspacial(rel), t = estadoTemporal(rel);
   switch (clave) {
+    // La lectura operativa se calcula con `lecturaOperativaEnContexto`, la
+    // MISMA que usan la bandeja, la tabla, el informe y las exportaciones. Si
+    // alguna vez difieren, es que alguien llamo a otra funcion.
+    case 'articulacion':
+      return lecturaOperativaEnContexto(rel) === OPERATIVO.ARTICULACION_REQUERIDA;
+    case 'coincidencia-espacial':
+      return lecturaOperativaEnContexto(rel) === OPERATIVO.COINCIDENCIA_ESPACIAL;
+    case 'relacion-no-evaluable':
+      return lecturaOperativaEnContexto(rel) === OPERATIVO.NO_EVALUABLE;
     case 'contacto': return e === ESPACIAL.CONTACTO;
     case 'cercania': return e === ESPACIAL.CERCANIA;
     case 'a-la-vez': return t === TEMPORAL.COINCIDE;

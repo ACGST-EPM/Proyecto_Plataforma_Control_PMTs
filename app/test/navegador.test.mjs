@@ -398,9 +398,16 @@ test('INTERACCION: pulsar una relacion EXPLICA por que existe', saltar, async ()
   await filas[0].click();
   await p.waitForTimeout(1000);
 
+  // La ficha se reordeno en la etapa de evolucion: primero el VEREDICTO, luego
+  // quienes son, donde, cuando, por que y que hacer; el detalle tecnico queda
+  // bajo demanda. Lo que se exige aqui no es una redaccion concreta, sino que
+  // las seis preguntas tengan respuesta y que no se cuele una gravedad.
   const ficha = await txt(p, '#fichaLateral');
-  assert.ok(/Relación entre dos contratos/.test(ficha), ficha.slice(0, 160));
-  assert.ok(/Por qué están relacionados/.test(ficha), 'tiene que explicar el motivo');
+  assert.ok(/Articulación requerida|Coincidencia espacial|No se pudo comprobar/.test(ficha),
+    ficha.slice(0, 160));
+  assert.ok(/CW1/.test(ficha) && /CW2/.test(ficha), 'dice QUIENES son los dos contratos');
+  assert.ok(/Por qué:/.test(ficha), 'tiene que explicar el motivo');
+  assert.ok(/Qué hacer:/.test(ficha), 'y decir que hacer con ello');
   assert.ok(/zonas de influencia|dentro del umbral|no se pudo medir/i.test(ficha), ficha.slice(0, 300));
   assert.ok(/hechos medidos/.test(ficha), 'y seguir sin clasificar criticidad');
   assert.ok(!/crítico|critico/i.test(ficha), 'la palabra «crítico» no puede aparecer');
@@ -1039,6 +1046,12 @@ test('2.4 · las TARJETAS siguen al alcance visible, y lo dicen', saltar, async 
   assert.ok(/4 PMT cargados/.test(alcance), alcance);
   assert.ok(/2 visibles/.test(alcance), alcance);
 
+  // Y SE TIENE QUE VER. Estuvo dentro del plegable «Ver el detalle» y quedaba
+  // escondido justo cuando mas falta hace: con un filtro puesto, ni la linea de
+  // alcance ni el boton de quitarlo eran alcanzables sin abrir el plegable.
+  assert.ok(await p.isVisible('#alcanceResumen'), 'con filtro, el alcance se ve');
+  assert.ok(await p.isVisible('#btnQuitarFiltros'), 'y su salida tambien');
+
   // Y la fila de archivos NO se mueve con los filtros: habla de otra cosa.
   const cargadosTotal = await p.$$eval('#tarjetasArchivos .tarjeta', (n) => {
     const t = n.find((x) => /PMT cargados en total/i.test(x.querySelector('.t').textContent));
@@ -1412,8 +1425,8 @@ test('TAREA F: la ficha de una relación explica el motivo sin jerga', saltar, a
   await p.click('#tablaRel tbody tr:nth-child(1)');
   await p.waitForTimeout(900);
   const f = await txt(p, '#fichaLateral');
-  assert.ok(/Por qué están relacionados/.test(f));
-  assert.ok(/Con qué regla salió/.test(f), 'y dice con qué criterio salió');
+  assert.ok(/Por qué:/.test(f));
+  assert.ok(/Criterio espacial/.test(f), 'y dice con qué criterio salió');
   assert.ok(/Distancia entre trazados/.test(f));
   await p.close();
 });

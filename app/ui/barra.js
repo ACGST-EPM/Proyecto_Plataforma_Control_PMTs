@@ -21,6 +21,7 @@
  */
 import { $, esc, num } from './dom.js';
 import { desplegableBuscable, conectar } from './desplegable.js';
+import * as Filtro from '../nucleo/filtrado.js';
 
 let alCambiar = () => {};
 let alQuitar = () => {};
@@ -73,8 +74,20 @@ export function pintarChips(filtros, onQuitar) {
     `${esc(texto)}<button type="button" data-campo="${esc(campo)}" data-valor="${esc(valor ?? '')}" ` +
     `aria-label="Quitar el filtro ${esc(texto)}">✕</button></span>`);
 
+  // ══ EL CHIP ENSEÑA LA ETIQUETA, NO LA CLAVE ══════════════════════════
+  //
+  // Los filtros de relacion y documentales se guardan con claves internas
+  // («articulacion», «falta-permiso»). Un chip que pone «Relacion: articulacion»
+  // obliga a traducir mentalmente; peor, «falta-permiso» no se parece a nada de
+  // lo que el usuario pulso. La etiqueta es la que ya esta escrita en la lista
+  // de claves, asi que no hay ningun texto nuevo que mantener sincronizado.
+  const etiquetaDe = (campo, v) => {
+    const lista = campo === 'relacion' ? Filtro.CLAVES_RELACION
+      : campo === 'documental' ? Filtro.CLAVES_DOCUMENTAL : null;
+    return lista ? (lista.find(([k]) => k === v)?.[1] ?? v) : v;
+  };
   for (const campo of ['contrato', 'contratista', 'proyecto', 'municipio', 'frente', 'tipoCierre', 'relacion', 'documental']) {
-    for (const v of filtros[campo] ?? []) anadir(campo, v, v);
+    for (const v of filtros[campo] ?? []) anadir(campo, v, etiquetaDe(campo, v));
   }
   if (filtros.desde) anadir('desde', null, filtros.desde);
   if (filtros.hasta) anadir('hasta', null, filtros.hasta);

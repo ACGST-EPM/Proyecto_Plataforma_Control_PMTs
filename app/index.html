@@ -84,50 +84,59 @@
     </div>
   </section>
 
-  <!-- ─────────────── PASO 2 · RESUMEN ─────────────── -->
+  <!-- ═══════════ TIRA DE SITUACION ═══════════
+       ANTES aqui habia once bloques apilados —banda, selector, aviso, frase,
+       alcance, ocho tarjetas, glosario, titulo, tarjetas de archivos y
+       siguiente paso— y el mapa quedaba debajo de todo eso. Nadie llega al
+       mapa despues de leer once parrafos: se salta los once.
+
+       AHORA: contexto en una linea, TRES cifras que ademas FILTRAN al pulsarlas,
+       y todo lo demas bajo demanda. Lo que explicaba un parrafo permanente lo
+       explica ahora un tooltip en el sitio donde surge la duda. -->
   <section class="panel oculto" id="panelResumen">
-    <h2><span class="paso">2</span> Esto es lo que se encontró</h2>
-    <div class="cuerpo">
-
-      <!-- BANDA DE CONTEXTO. Confundir «esto ocurrio en 2025» con «esto hay que
-           coordinarlo» es el error mas caro de esta pantalla, asi que el
-           contexto se dice CON PALABRAS y siempre encima de las cifras, no con
-           un matiz de color que puede no distinguirse o imprimirse en gris. -->
+    <div class="cuerpo tira-situacion">
       <div id="bandaContexto" class="banda-contexto"></div>
-
-      <!-- Que estoy viendo: operativo, historico de un año, o todo. NO es un
-           filtro mas: es el punto de vista desde el que se mira todo lo demas. -->
       <div id="selectorPeriodo" class="selector-periodo no-imprimir"></div>
-
-      <!-- LA VISTA OPERATIVA PUEDE ESCONDERLO TODO. Con datos de hace unos
-           meses la pantalla queda vacia, y sin explicacion eso no se lee como
-           «no hay nada que coordinar» sino como «no cargo mis archivos». -->
       <div id="avisoVistaVacia" class="frase atencion oculto no-imprimir"
         style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"></div>
+      <div id="fraseResumen" class="frase oculto"></div>
 
-      <div id="fraseResumen" class="frase"></div>
+      <!-- LAS TRES CIFRAS QUE IMPORTAN, Y SON BOTONES.
+           Antes eran ocho tarjetas decorativas: se leian y no se podia hacer
+           nada con ellas. Ahora pulsar «articulacion requerida» deja en el mapa
+           y en la tabla exactamente esas relaciones. La cifra y el filtro son
+           la misma cosa, asi que no pueden contradecirse. -->
+      <div class="bandeja" id="bandeja" role="group" aria-label="Qué necesita atención"></div>
 
-      <!-- ALCANCE: dice SIEMPRE de que conjunto hablan las tarjetas de abajo.
-           Sin esta linea, un 2 arriba y un 1 en la tabla parecen un error. -->
-      <div id="alcanceResumen" class="alcance"></div>
-      <div class="tarjetas" id="tarjetas"></div>
+      <!-- EL ALCANCE VIVE FUERA DEL PLEGABLE.
+           Estuvo dentro y fue un error: con un filtro puesto, la linea que
+           dice «esta viendo 2 de 4» y el boton de quitarlo quedaban escondidos
+           tras un «Ver el detalle» que nadie tiene por que abrir. Un filtro
+           activo SIEMPRE tiene que verse, y su salida tambien. Cuando no hay
+           filtro ni dia, la linea no dice nada util y se retira: eso es
+           reducir ruido, no esconder estado. -->
+      <div id="alcanceResumen" class="alcance oculto"></div>
 
-      <!-- QUE SIGNIFICAN LAS DOS PRIMERAS. Van aqui, pegadas a las cifras, y no
-           en una ayuda aparte: una etiqueta que hay que ir a buscar se
-           interpreta a ojo, y ahi es donde nace «entonces esto es lo critico». -->
-      <p class="frase" id="glosarioOperativo" style="font-size:.85rem">
-        <b>Articulación requerida</b>: comparten espacio <b>y</b> coinciden en el tiempo — hay que
-        coordinar entre contratos. · <b>Coincidencia espacial</b>: comparten espacio pero en momentos
-        distintos. · Las dos se <b>deducen</b> de los hechos medidos que están debajo;
-        <b>no son un nivel de criticidad</b> y no ordenan por urgencia.
-      </p>
+      <details class="mas-detalle no-imprimir" id="detalleResumen">
+        <summary>Ver el detalle del análisis</summary>
+        <div class="tarjetas" id="tarjetas"></div>
 
-      <!-- Segunda fila: habla de los ARCHIVOS, no de los PMT visibles, y por
-           eso no se mueve con los filtros. Va aparte para que no se confunda. -->
-      <h3 class="titulo-grupo" id="tituloArchivos">Archivos cargados <small>(no cambia con los filtros)</small></h3>
-      <div class="tarjetas" id="tarjetasArchivos"></div>
-
-      <div id="siguientePaso" class="frase" style="margin-top:16px;background:var(--azul-suave);border-left-color:var(--azul)"></div>
+        <!-- QUE SIGNIFICAN LAS DOS PRIMERAS.
+             Estaba como parrafo permanente sobre las cifras. Ahora el
+             significado corto va en el tooltip de cada boton de la bandeja
+             (donde se lee la etiqueta) y aqui queda la version completa, con la
+             advertencia que NO se puede perder: estas lecturas no ordenan por
+             gravedad. Se entra con un clic, no hay que ir a buscarla. -->
+        <p class="frase" id="glosarioOperativo" style="font-size:.85rem">
+          <b>Articulación requerida</b>: comparten espacio <b>y</b> coinciden en el tiempo — hay que
+          coordinar entre contratos. · <b>Coincidencia espacial</b>: comparten espacio pero en momentos
+          distintos. · Las dos se <b>deducen</b> de los hechos medidos que están debajo;
+          <b>no son un nivel de criticidad</b> y no ordenan por urgencia.
+        </p>
+        <h3 class="titulo-grupo" id="tituloArchivos">Archivos cargados <small>(no cambia con los filtros)</small></h3>
+        <div class="tarjetas" id="tarjetasArchivos"></div>
+        <div id="siguientePaso" class="frase" style="margin-top:16px;background:var(--azul-suave);border-left-color:var(--azul)"></div>
+      </details>
     </div>
   </section>
 
