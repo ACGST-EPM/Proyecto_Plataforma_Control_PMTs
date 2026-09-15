@@ -144,6 +144,19 @@ async function abrirFiltros(p) {
   }
 }
 
+/**
+ * ABRE LOS AJUSTES DEL RECORRIDO.
+ *
+ * Desde la etapa de evolucion el recorrido enseña arriba lo que se usa siempre
+ * (fecha, reproducir, paso, volver al periodo) y deja a un clic la velocidad,
+ * el salto a una fecha y el tramo que se recorre. Las pruebas que manejan esos
+ * controles lo abren, igual que lo haria una persona.
+ */
+async function abrirAjustesRecorrido(p) {
+  await p.$eval('#ajustesRecorrido', (d) => { d.open = true; });
+  await p.waitForTimeout(120);
+}
+
 async function cargar(p, archivos, selector = '#entrada') {
   await p.setInputFiles(selector, archivos);
   await p.waitForSelector('#panelResumen:not(.oculto)', { timeout: 60000 });
@@ -425,7 +438,11 @@ test('RECORRIDO: barra, reproducir, pausar, paso, velocidad y volver a todo', sa
   // Etapa 3: la fecha visible es el dato más importante de este panel y ahora
   // se enseña en grande, diciendo SIEMPRE de qué está hablando.
   assert.match(await txt(p, '#fechaViva'), /Periodo completo/);
-  for (const id of ['#recorridoDesde', '#recorridoHasta', '#irAFecha', '#btnAtras', '#btnAdelante']) {
+  // El paso y reproducir se ven siempre; velocidad, ir-a-fecha y el tramo
+  // viven en «Ajustar el recorrido»: siguen existiendo, a un clic.
+  assert.equal(await p.isVisible('#velocidad'), false, 'la velocidad ya no ocupa sitio por defecto');
+  await abrirAjustesRecorrido(p);
+  for (const id of ['#recorridoDesde', '#recorridoHasta', '#irAFecha', '#btnAtras', '#btnAdelante', '#velocidad']) {
     assert.ok(await p.$(id), `falta el control ${id}`);
   }
   await p.evaluate(() => { const b = document.getElementById('barraTiempo'); b.value = 5; b.dispatchEvent(new Event('input')); });
@@ -1431,6 +1448,51 @@ test('TAREA F: la ficha de una relación explica el motivo sin jerga', saltar, a
   await p.close();
 });
 
+test('TABLA REL: las columnas se eligen, pero la lectura nunca se queda sola', saltar, async () => {
+  // La tabla de relaciones gana el mismo selector que la de PMT. Con un limite
+  // que NO es de interfaz sino del producto: la lectura operativa y los dos
+  // hechos de los que se deduce no se pueden apagar. Si se pudiera, la lectura
+  // quedaria afirmando sin que se vea de donde sale.
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  await p.click('.pestanas button[data-pest="rel"]');
+  await p.waitForTimeout(400);
+  const cab = () => p.$$eval('#tablaRel thead th', (n) => n.map((x) => x.textContent.replace(/[▲▼⇅]/g, '').trim()));
+
+  const inicial = await cab();
+  for (const c of ['Lectura', 'En el espacio', 'En el tiempo']) {
+    assert.ok(inicial.includes(c), `falta ${c}: ${JSON.stringify(inicial)}`);
+  }
+  assert.ok(!inicial.includes('Dias'), 'de entrada, solo lo operativo');
+
+  await p.$eval('#barraTablaRel details', (d) => { d.open = true; });
+  await p.waitForTimeout(150);
+  // Las tres fijas NO se ofrecen: no se puede pedir quitarlas.
+  const elegibles = await p.$$eval('#columnasRelMenu input[data-col]', (n) => n.map((i) => i.dataset.col));
+  for (const c of ['_operativo', '_espacial', '_temporal']) {
+    assert.ok(!elegibles.includes(c), `${c} no puede ser elegible: ${JSON.stringify(elegibles)}`);
+  }
+
+  await p.check('#columnasRelMenu input[data-col="traslapeDias"]');
+  await p.waitForTimeout(300);
+  assert.ok((await cab()).includes('Dias'), 'lo que se pide, aparece');
+
+  await p.uncheck('#columnasRelMenu input[data-col="distanciaMetros"]');
+  await p.waitForTimeout(300);
+  const tras = await cab();
+  assert.ok(!tras.includes('Distancia'), 'lo que se quita, desaparece');
+  for (const c of ['Lectura', 'En el espacio', 'En el tiempo']) {
+    assert.ok(tras.includes(c), `${c} tiene que seguir: ${JSON.stringify(tras)}`);
+  }
+
+  // Y las celdas tienen que cuadrar con las cabeceras: una tabla descuadrada
+  // enseña el dato de una columna bajo el titulo de otra.
+  const celdas = await p.$$eval('#tablaRel tbody tr:first-child td', (n) => n.length);
+  assert.equal(celdas, tras.length, 'cabeceras y celdas cuadran');
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
 test('CAPAS: apagar una capa quita esos trazados del mapa, y la cifra lo dice', saltar, async () => {
   const p = await abrir({ sinRed: true });
   await cargar(p, [KMZ_A, KMZ_B]);
@@ -1482,6 +1544,7 @@ test('RECORRIDO: se puede acotar el tramo que se recorre', saltar, async () => {
   const p = await abrir({ sinRed: true });
   await cargar(p, [KMZ_DOC]);
   const maxAntes = await p.$eval('#barraTiempo', (b) => +b.max);
+  await abrirAjustesRecorrido(p);
   await p.fill('#recorridoDesde', diaRel(9));
   await p.fill('#recorridoHasta', diaRel(19));
   await p.waitForTimeout(500);
@@ -1489,6 +1552,12 @@ test('RECORRIDO: se puede acotar el tramo que se recorre', saltar, async () => {
   const min = await p.$eval('#barraTiempo', (b) => +b.min);
   assert.ok(max - min < maxAntes, 'el recorrido queda acotado al tramo pedido');
   assert.ok(/Se recorren \d+ día/.test(await txt(p, '#avisoRecorte')), await txt(p, '#avisoRecorte'));
+  // Y con el plegable CERRADO tiene que seguir viendose que esta acotado: un
+  // ajuste activo escondido es lo mismo que un filtro activo invisible.
+  await p.$eval('#ajustesRecorrido', (d) => { d.open = false; });
+  await p.waitForTimeout(120);
+  assert.ok(/acotado a \d+ día/.test(await txt(p, '#rotuloAjustes')), await txt(p, '#rotuloAjustes'));
+  await abrirAjustesRecorrido(p);
 
   // Un rango invertido NO se aplica a medias: se dice y se deja como estaba.
   await p.fill('#recorridoDesde', diaRel(24));
@@ -1651,6 +1720,7 @@ test('TAREA B: «qué está abierto un día concreto», escribiendo la fecha', s
   await cargar(p, [KMZ_DOC]);
 
   // Paso unico: escribir el dia. No hay que arrastrar la barra hasta acertar.
+  await abrirAjustesRecorrido(p);
   await p.fill('#irAFecha', diaRel(27));
   await p.waitForTimeout(600);
   const viva = await txt(p, '#fechaViva');
@@ -2046,6 +2116,7 @@ test('RECORRIDO: volver a una fecha pasada devuelve lo que pasaba entonces', sal
 
   // En «Todo», para que el recorrido cubra todo el periodo.
   await elegirAlcance(p, 'todo');
+  await abrirAjustesRecorrido(p);
   await p.fill('#irAFecha', `${ANIO - 2}-03-10`);
   await p.waitForTimeout(900);
 

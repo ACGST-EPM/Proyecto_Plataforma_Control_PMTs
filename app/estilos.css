@@ -931,6 +931,27 @@ details.tecnico pre {
 .mas-detalle[open] > summary::before { content: '▾ '; }
 .mas-detalle > summary:hover { color: var(--tinta); }
 
+/* ── EL RECORRIDO, PEGADO AL MAPA ──────────────────────────────────────────
+   Ya no es un panel aparte con su propio titulo: es el mando del mapa. Se
+   separa con una linea, no con una caja, para que se lea como parte de el. */
+.recorrido {
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--linea);
+  display: block;
+}
+.recorrido input[type="range"] { width: 100%; }
+
+.recorrido-ajustes > summary {
+  cursor: pointer; font-size: .82rem; color: var(--tenue); font-weight: 600;
+  list-style: none; padding: 4px 0;
+}
+.recorrido-ajustes > summary::-webkit-details-marker { display: none; }
+.recorrido-ajustes > summary::before { content: '▸ '; }
+.recorrido-ajustes[open] > summary::before { content: '▾ '; }
+.recorrido-ajustes > summary:hover { color: var(--tinta); }
+.recorrido-ajustes[open] > div { padding: 10px 0 2px; }
+/* Un ajuste puesto se ve aunque el plegable este cerrado. */
+.ajuste-activo { color: var(--naranja-texto); }
+
 /* Lo que falta, plegado. Existe, pero no empuja hacia abajo lo que si importa. */
 .doc-mas { margin-top: 4px; }
 .doc-mas summary { cursor: pointer; font-size: .76rem; color: var(--tenue); list-style: none; }

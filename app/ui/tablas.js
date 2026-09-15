@@ -303,18 +303,65 @@ export function pintarDocumental(filas, { onFila } = {}) {
   caja.querySelectorAll('tr[data-id]').forEach((tr) => { tr.onclick = () => onFila?.(tr.dataset.id); });
 }
 
+/**
+ * COLUMNAS DE LA TABLA DE RELACIONES.
+ *
+ * ══ TRES SON FIJAS, Y NO ES UN CAPRICHO ═══════════════════════════════════
+ *
+ * `fija: true` marca las que NO se pueden quitar: la lectura operativa y los
+ * dos hechos de los que se deduce (espacio y tiempo). El invariante de la
+ * etapa anterior dice que la lectura no sustituye a los hechos, y que las tres
+ * se ven a la vez para poder comprobar de donde sale. Si el selector dejara
+ * apagar «En el espacio», la lectura quedaria sola y afirmando por su cuenta,
+ * que es justo lo que ese invariante impide. Un selector de columnas no puede
+ * deshacer una garantia del producto.
+ *
+ * `basica: true` marca las que salen por defecto. El resto existe y se añade
+ * desde «Columnas»: no se ha quitado nada.
+ */
 const COLS_REL = [
-  ['_operativo', 'Lectura'],
-  ['contratoA', 'Contrato A'], ['frenteA', 'Frente A'], ['contratoB', 'Contrato B'], ['frenteB', 'Frente B'],
-  ['distanciaMetros', 'Distancia', 'num'], ['_espacial', 'En el espacio'], ['_temporal', 'En el tiempo'],
-  ['traslapeInicio', 'Coinciden desde'], ['traslapeDias', 'Dias', 'num'],
+  ['_operativo', 'Lectura', null, { fija: true }],
+  ['contratoA', 'Contrato A', null, { basica: true }], ['frenteA', 'Frente A', null, { basica: true }],
+  ['contratoB', 'Contrato B', null, { basica: true }], ['frenteB', 'Frente B', null, { basica: true }],
+  ['distanciaMetros', 'Distancia', 'num', { basica: true }],
+  ['_espacial', 'En el espacio', null, { fija: true }], ['_temporal', 'En el tiempo', null, { fija: true }],
+  ['traslapeInicio', 'Coinciden desde', null, {}], ['traslapeDias', 'Dias', 'num', {}],
 ];
 
+export const COLUMNAS_REL_BASICAS = Object.freeze(COLS_REL.filter((c) => c[3]?.basica).map((c) => c[0]));
+/** Solo las que se pueden elegir: las fijas no se ofrecen porque no se pueden quitar. */
+export const COLUMNAS_REL_ELEGIBLES = Object.freeze(
+  COLS_REL.filter((c) => !c[3]?.fija).map(([k, t]) => ({ clave: k, titulo: t })));
+
+/** Celda de cada columna de relacion. Una sola definicion para cabecera y celda. */
+function celdaRel(r, clave) {
+  const e = estadoEspacial(r), t = estadoTemporal(r), o = lecturaOperativaEnContexto(r);
+  switch (clave) {
+    case '_operativo':
+      return `<td><span class="pastilla ${CLASE_OPERATIVO[o]}" title="${esc(EXPLICACION_OPERATIVO[o])}">${esc(ETIQUETA_OPERATIVO[o])}</span></td>`;
+    case 'contratoA': return `<td class="mono">${esc(r.contratoA)}</td>`;
+    case 'frenteA': return `<td>${esc(r.frenteA ?? '—')}</td>`;
+    case 'contratoB': return `<td class="mono">${esc(r.contratoB)}</td>`;
+    case 'frenteB': return `<td>${esc(r.frenteB ?? '—')}</td>`;
+    case 'distanciaMetros':
+      return `<td class="num">${r.distanciaMetros === null || r.distanciaMetros === undefined
+        ? '<span class="pastilla p-nosabe">no medible</span>' : esc(r.distanciaMetros.toFixed(1)) + ' m'}</td>`;
+    case '_espacial': return `<td><span class="pastilla ${CLASE_ESPACIAL[e]}">${esc(ETIQUETA_ESPACIAL[e])}</span></td>`;
+    case '_temporal': return `<td><span class="pastilla ${CLASE_TEMPORAL[t]}">${esc(ETIQUETA_TEMPORAL[t])}</span></td>`;
+    case 'traslapeInicio': return `<td class="mono">${esc(r.traslapeInicio ? fechaLegible(r.traslapeInicio) : '—')}</td>`;
+    case 'traslapeDias': return `<td class="num">${esc(r.traslapeDias ?? '—')}</td>`;
+    default: return '<td>—</td>';
+  }
+}
+
 /** Tabla de relaciones. Hechos separados; ninguna criticidad. */
-export function pintarRelaciones(relaciones, { onFila } = {}) {
+export function pintarRelaciones(relaciones, { onFila, columnas } = {}) {
   const tabla = $('tablaRel');
-  const repintar = () => pintarRelaciones(relaciones, { onFila });
-  tabla.querySelector('thead').innerHTML = cabecera(COLS_REL, 'rel');
+  const repintar = () => pintarRelaciones(relaciones, { onFila, columnas });
+  // Las fijas entran SIEMPRE, se pidan o no; las demas, si estan elegidas.
+  const pedidas = columnas?.length ? columnas : COLUMNAS_REL_BASICAS;
+  const activas = COLS_REL.filter(([k, , , o]) => o?.fija || pedidas.includes(k));
+  tabla.querySelector('thead').innerHTML = cabecera(activas.map(([k, t, c]) => [k, t, c]), 'rel');
   conectarOrden(tabla, 'rel', repintar);
 
   const conEstado = relaciones.map((r) => ({
@@ -327,23 +374,11 @@ export function pintarRelaciones(relaciones, { onFila } = {}) {
   const cuerpo = tabla.querySelector('tbody');
   pintarPaginador('pagRel', 'rel', todos.length, info, repintar);
   if (!todos.length) {
-    cuerpo.innerHTML = `<tr><td colspan="${COLS_REL.length}" class="vacio">No hay relaciones que mostrar con los filtros aplicados.</td></tr>`;
+    cuerpo.innerHTML = `<tr><td colspan="${activas.length}" class="vacio">No hay relaciones que mostrar con los filtros aplicados.</td></tr>`;
     return;
   }
-  cuerpo.innerHTML = datos.map((r, i) => {
-    const e = estadoEspacial(r), t = estadoTemporal(r), o = lecturaOperativaEnContexto(r);
-    return `<tr data-i="${i}">
-      <td><span class="pastilla ${CLASE_OPERATIVO[o]}" title="${esc(EXPLICACION_OPERATIVO[o])}">${esc(ETIQUETA_OPERATIVO[o])}</span></td>
-      <td class="mono">${esc(r.contratoA)}</td><td>${esc(r.frenteA ?? '—')}</td>
-      <td class="mono">${esc(r.contratoB)}</td><td>${esc(r.frenteB ?? '—')}</td>
-      <td class="num">${r.distanciaMetros === null || r.distanciaMetros === undefined
-        ? '<span class="pastilla p-nosabe">no medible</span>' : esc(r.distanciaMetros.toFixed(1)) + ' m'}</td>
-      <td><span class="pastilla ${CLASE_ESPACIAL[e]}">${esc(ETIQUETA_ESPACIAL[e])}</span></td>
-      <td><span class="pastilla ${CLASE_TEMPORAL[t]}">${esc(ETIQUETA_TEMPORAL[t])}</span></td>
-      <td class="mono">${esc(r.traslapeInicio ? fechaLegible(r.traslapeInicio) : '—')}</td>
-      <td class="num">${esc(r.traslapeDias ?? '—')}</td>
-    </tr>`;
-  }).join('');
+  cuerpo.innerHTML = datos.map((r, i) =>
+    `<tr data-i="${i}">${activas.map(([k]) => celdaRel(r, k)).join('')}</tr>`).join('');
   cuerpo.querySelectorAll('tr[data-i]').forEach((tr) => {
     tr.onclick = () => onFila?.(datos[+tr.dataset.i]);
   });

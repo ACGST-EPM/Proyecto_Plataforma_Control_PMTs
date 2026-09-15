@@ -388,28 +388,37 @@ export function montarRecorrido(filas, onPaso) {
           <option value="30">Mes a mes</option>
         </select>
       </label>
-      <label class="mini-campo" for="velocidad">Velocidad
-        <select id="velocidad">${VELOCIDADES.map(([v, t], i) => `<option value="${v}"${i === 1 ? ' selected' : ''}>${t}</option>`).join('')}</select>
-      </label>
       <span class="sep"></span>
-      <label class="mini-campo" for="irAFecha">Ir a la fecha
-        <input type="date" id="irAFecha" min="${esc(primero)}" max="${esc(ultimo)}">
-      </label>
       <button id="btnTodoTiempo" class="b-suave b-mini">Ver todo el periodo</button>
     </div>
 
     <input type="range" id="barraTiempo" min="0" max="${dias}" value="0"
            aria-label="Día del recorrido" style="margin:14px 0 6px">
 
-    <div class="recorrido-controles" style="font-size:.84rem">
-      <label class="mini-campo" for="recorridoDesde">Recorrer desde
-        <input type="date" id="recorridoDesde" value="${esc(primero)}" min="${esc(primero)}" max="${esc(ultimo)}">
-      </label>
-      <label class="mini-campo" for="recorridoHasta">hasta
-        <input type="date" id="recorridoHasta" value="${esc(ultimo)}" min="${esc(primero)}" max="${esc(ultimo)}">
-      </label>
-      <span id="avisoRecorte" class="pista-campo"></span>
-    </div>`;
+    <!-- LO QUE SE AJUSTA UNA VEZ NO TIENE POR QUE ESTAR SIEMPRE DELANTE.
+         Arriba queda lo que se toca en cada uso: la fecha, reproducir, el paso
+         y volver al periodo entero. La velocidad, el salto a una fecha y el
+         tramo que se recorre se ajustan de vez en cuando, asi que viven a un
+         clic. NO se han quitado: siguen enteros, con el mismo comportamiento. -->
+    <details class="recorrido-ajustes" id="ajustesRecorrido">
+      <summary><span id="rotuloAjustes">Ajustar el recorrido</span></summary>
+      <div class="recorrido-controles" style="font-size:.84rem">
+        <label class="mini-campo" for="velocidad">Velocidad
+          <select id="velocidad">${VELOCIDADES.map(([v, t], i) => `<option value="${v}"${i === 1 ? ' selected' : ''}>${t}</option>`).join('')}</select>
+        </label>
+        <label class="mini-campo" for="irAFecha">Ir a la fecha
+          <input type="date" id="irAFecha" min="${esc(primero)}" max="${esc(ultimo)}">
+        </label>
+        <span class="sep"></span>
+        <label class="mini-campo" for="recorridoDesde">Recorrer desde
+          <input type="date" id="recorridoDesde" value="${esc(primero)}" min="${esc(primero)}" max="${esc(ultimo)}">
+        </label>
+        <label class="mini-campo" for="recorridoHasta">hasta
+          <input type="date" id="recorridoHasta" value="${esc(ultimo)}" min="${esc(primero)}" max="${esc(ultimo)}">
+        </label>
+        <span id="avisoRecorte" class="pista-campo"></span>
+      </div>
+    </details>`;
 
   $('barraTiempo').oninput = (e) => aplicarPaso(+e.target.value);
   $('btnPlay').onclick = () => (tocando ? parar() : reproducir());
@@ -452,9 +461,20 @@ function fijarRecorte() {
   barra.max = String(hasta);
   if (+barra.value < desde) barra.value = String(desde);
   if (+barra.value > hasta) barra.value = String(hasta);
-  aviso.textContent = (desde === 0 && hasta === dominio.dias)
+  const completo = desde === 0 && hasta === dominio.dias;
+  aviso.textContent = completo
     ? 'Se recorre el periodo completo.'
     : `Se recorren ${hasta - desde + 1} día(s) de los ${dominio.dias + 1} que hay.`;
+  // UN AJUSTE ACTIVO NO PUEDE QUEDAR ESCONDIDO DETRAS DE SU PLEGABLE.
+  // Si se ha acotado el tramo, el rotulo lo dice aunque este cerrado: es la
+  // misma regla que impide tener un filtro puesto sin verlo en su control.
+  const rotulo = $('rotuloAjustes');
+  if (rotulo) {
+    rotulo.textContent = completo
+      ? 'Ajustar el recorrido'
+      : `Ajustar el recorrido · acotado a ${hasta - desde + 1} día(s)`;
+    rotulo.classList.toggle('ajuste-activo', !completo);
+  }
 }
 
 /** Va directamente a una fecha escrita. */

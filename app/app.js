@@ -637,9 +637,42 @@ function montarSelectorColumnas() {
   }
 }
 
+/** Columnas elegidas de la tabla de relaciones. Las fijas no pasan por aqui. */
+let columnasRel = [...Tablas.COLUMNAS_REL_BASICAS];
+
+/**
+ * Selector de columnas de relaciones. Solo ofrece las que se pueden quitar: la
+ * lectura operativa y sus dos hechos son fijos, porque la lectura no puede
+ * quedarse sola afirmando sin que se vea de donde sale.
+ */
+function montarSelectorColumnasRel() {
+  const caja = $('barraTablaRel');
+  if (!caja || caja.dataset.listo) return;
+  caja.dataset.listo = '1';
+  caja.innerHTML = `<details class="mini-campo"><summary style="cursor:pointer">Columnas</summary>
+    <div id="columnasRelMenu" style="margin-top:8px"></div></details>
+    <span class="pista-campo">Pulse una fila para verla en el mapa. Esto no clasifica criticidad:
+    son hechos medidos.</span>`;
+  const menu = $('columnasRelMenu');
+  menu.innerHTML = Tablas.COLUMNAS_REL_ELEGIBLES.map((c) =>
+    `<label style="display:inline-block;min-width:170px;font-size:.84rem;padding:2px 0">
+      <input type="checkbox" data-col="${esc(c.clave)}"${columnasRel.includes(c.clave) ? ' checked' : ''}>
+      ${esc(c.titulo)}</label>`).join('');
+  for (const inp of menu.querySelectorAll('input[data-col]')) {
+    inp.onchange = () => {
+      const k = inp.dataset.col;
+      if (inp.checked) { if (!columnasRel.includes(k)) columnasRel.push(k); }
+      else columnasRel = columnasRel.filter((c) => c !== k);
+      Tablas.pintarRelaciones(estado.relVisibles ?? [],
+        { onFila: (r) => inspeccionar(r), columnas: columnasRel });
+    };
+  }
+}
+
 function montarEspacioDeTrabajo() {
   mostrar('barraTrabajo', true);
   montarSelectorColumnas();
+  montarSelectorColumnasRel();
 
   // Buscador general. Se sincroniza con el filtro de texto del panel grande:
   // son el MISMO filtro, y tener dos cajas que no se hablan seria una trampa.
@@ -1196,7 +1229,10 @@ function aplicarFiltros() {
   Tablas.pintarPmts(estado.visiblesConSituacion,
     { onFila: seleccionar, seleccionado: estado.seleccionado, columnas: columnasPmt });
   Tablas.pintarDocumental(visibles, { onFila: seleccionar });
-  Tablas.pintarRelaciones(relVisibles, { onFila: (r) => inspeccionar(r) });
+  // Se guarda lo pintado: el selector de columnas repinta la MISMA lista, no
+  // una recalculada por su cuenta. Dos caminos distintos podrian discrepar.
+  estado.relVisibles = relVisibles;
+  Tablas.pintarRelaciones(relVisibles, { onFila: (r) => inspeccionar(r), columnas: columnasRel });
 
   // UNA RELACION SE VE SI AL MENOS UNO DE SUS DOS EXTREMOS ESTA VISIBLE.
   //

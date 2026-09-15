@@ -182,12 +182,15 @@
             <div id="avisoMapa" class="frase atencion oculto" style="margin-bottom:10px;font-size:.86rem"></div>
             <div id="mapa"></div>
             <div class="leyenda" id="leyendaMapa"></div>
-          </div>
-        </div>
 
-        <div class="panel" style="margin-bottom:0">
-          <h2>Recorrido en el tiempo</h2>
-          <div class="cuerpo"><div class="recorrido" id="recorrido"></div></div>
+            <!-- EL RECORRIDO VA PEGADO AL MAPA, NO EN SU PROPIO PANEL.
+                 Estuvo debajo, como un panel con su propio titulo, compitiendo
+                 con el mapa por el alto de la pantalla. Pero el recorrido no es
+                 otra cosa que se mira: es el MANDO del mapa — mueve el dia y el
+                 mapa responde. Puesto aqui, la causa y el efecto se ven a la
+                 vez y el mapa recupera el sitio que le habia quitado. -->
+            <div class="recorrido" id="recorrido"></div>
+          </div>
         </div>
       </div>
 
@@ -230,10 +233,12 @@
       </div>
 
       <div id="pest_rel" class="oculto">
-        <div class="frase" style="font-size:.88rem">
-          Aquí están los <b>hechos</b> de cada pareja: a qué distancia están, si llegan a tocarse y si coinciden en el tiempo.
-          <b>Todavía no se clasifica ninguna como crítica</b>: esa decisión se tomará cuando se puedan ver los casos reales.
-        </div>
+        <!-- LA MISMA CAPACIDAD QUE LA TABLA DE PMT: pocas columnas de entrada y
+             el resto a un clic. El parrafo permanente que habia aqui explicaba
+             en tres lineas lo que las propias cabeceras ya dicen; la unica
+             frase que no se podia perder —que esto no clasifica criticidad— se
+             conserva como pista corta. -->
+        <div class="barra-acciones no-imprimir" id="barraTablaRel"></div>
         <div id="notaParejaFuera" class="frase atencion oculto" style="font-size:.86rem"></div>
         <div class="tabla-caja"><table class="datos" id="tablaRel"><thead></thead><tbody></tbody></table></div>
         <div class="paginador no-imprimir" id="pagRel"></div>
