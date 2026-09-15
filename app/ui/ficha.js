@@ -96,32 +96,39 @@ function detalleDocumental(pmt, enfoque = false) {
   if (!doc) return '';
 
   const conCodigo = doc.detalle.filter((d) => d.codigo);
-  const porConfirmar = doc.detalle.filter((d) => !d.codigo && d.codigoPrevio);
-  const faltan = doc.detalle.filter((d) => !d.codigo && !d.codigoPrevio);
+  const faltan = doc.detalle.filter((d) => !d.codigo);
 
+  // CADA ACTIVACION TIENE SUS PROPIOS DOCUMENTOS, asi que lo que tuvo la
+  // anterior no rebaja lo que falta aqui: sale como HISTORIA, en letra menuda y
+  // detras de la palabra «Pendiente», nunca en su lugar.
   const linea = (d) => `<li><span>${esc(d.etiqueta)}</span>${
     d.codigo ? `<span class="doc-codigo">${esc(d.codigo)}</span>`
-      : d.codigoPrevio
-        ? `<span class="doc-codigo" style="opacity:.7">${esc(d.codigoPrevio)}</span>
-           <span class="pastilla p-porconfirmar">por confirmar</span>`
-        : '<span class="doc-pendiente">Pendiente</span>'}</li>`;
+      : `<span class="doc-pendiente">Pendiente</span>${d.codigoPrevio
+        ? `<span class="doc-previo" title="Es el de la activación anterior. Esta vigencia necesita el suyo.">la anterior tuvo ${esc(d.codigoPrevio)}</span>`
+        : ''}`}</li>`;
 
-  // Lo que EXISTE se enseña siempre: es lo que alguien puede necesitar copiar.
-  const visibles = [...conCodigo, ...porConfirmar];
   const cabecera = barraDocumental(doc);
 
   if (enfoque || faltan.length === 0) {
-    return cabecera + `<ul class="doc-lista">${doc.detalle.map(linea).join('')}</ul>` +
-      ((doc.porConfirmar ?? 0)
-        ? `<p class="capa-ayuda"><b>${num(doc.porConfirmar)} viene(n) de una activación anterior.</b>
-             Nadie ha decidido todavía si amparan también estas fechas.</p>` : '');
+    return cabecera + `<ul class="doc-lista">${doc.detalle.map(linea).join('')}</ul>` + notaPrevios(doc);
   }
 
   return cabecera +
-    (visibles.length ? `<ul class="doc-lista">${visibles.map(linea).join('')}</ul>` : '') +
+    (conCodigo.length ? `<ul class="doc-lista">${conCodigo.map(linea).join('')}</ul>` : '') +
     `<details class="doc-mas"><summary>${
-      visibles.length ? `Faltan ${num(faltan.length)} de ${num(doc.total)}` : `Ninguno de los ${num(doc.total)} registrado`
-    }</summary><ul class="doc-lista">${faltan.map(linea).join('')}</ul></details>`;
+      conCodigo.length ? `Faltan ${num(faltan.length)} de ${num(doc.total)}` : `Ninguno de los ${num(doc.total)} registrado`
+    }</summary><ul class="doc-lista">${faltan.map(linea).join('')}</ul>${notaPrevios(doc)}</details>`;
+}
+
+/**
+ * La nota que evita el malentendido: ver un numero de resolucion de la
+ * activacion anterior podria hacer pensar que ya esta resuelto. No lo esta.
+ */
+function notaPrevios(doc) {
+  if (!(doc.conPrevio ?? 0)) return '';
+  return `<p class="capa-ayuda"><b>${num(doc.conPrevio)} de estos documentos los tuvo la activación
+    anterior.</b> Cada vigencia necesita los suyos, así que siguen pendientes aquí: el número
+    anterior se muestra solo para saber que ese trámite ya se hizo alguna vez.</p>`;
 }
 
 /**

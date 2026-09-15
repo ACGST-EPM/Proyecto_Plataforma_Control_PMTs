@@ -52,7 +52,7 @@ export function pmtsACsv(filas) {
     // que se exporto —que viaja en el nombre del archivo—, y DOC_POR_CONFIRMAR
     // dice cuantos documentos vienen de una activacion anterior sin que nadie
     // haya decidido si amparan esta.
-    'PMT_BASE', 'ACTIVACION', 'SITUACION', 'DOC_POR_CONFIRMAR'];
+    'PMT_BASE', 'ACTIVACION', 'SITUACION', 'DOC_DE_ACTIVACION_ANTERIOR'];
   const cuerpo = filas.map((x) => [x.id, x.contrato, x.contratista, x.proyecto, x.municipio,
     x.frente, x.direccion, x.tipoCierre, x.inicio, x.fin, x.tipoGeometria,
     x.resolucionPmt ?? '', x.permisoRotura ?? '', x.cierrePermisoRotura ?? '',
@@ -63,7 +63,9 @@ export function pmtsACsv(filas) {
     // `_situacion` la pone quien pinta, a partir de la fecha de referencia. Si
     // no viene, se deja vacio: inventarla aqui usaria otro reloj.
     x._situacion ?? '',
-    x.documental?.porConfirmar ?? 0]);
+    // Cuantos documentos los tuvo la activacion ANTERIOR y esta todavia no.
+    // Es historia; los pendientes de esta activacion siguen siendo los suyos.
+    x.documental?.conPrevio ?? 0]);
   return BOM + csvFilas([cab, ...cuerpo]);
 }
 

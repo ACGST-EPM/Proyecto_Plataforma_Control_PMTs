@@ -227,20 +227,20 @@ function pintar() {
           después de un código de verdad.
         </div>
         ${DOCUMENTOS.map((doc) => {
-          // ══ EL DOCUMENTO ANTERIOR SE ENSEÑA, NO SE RELLENA ═══════════════
+          // ══ EL DOCUMENTO ANTERIOR SE ENSEÑA, NUNCA SE RELLENA ════════════
           //
-          // Al reactivar, si la activación anterior tenía este documento se
-          // muestra AL LADO de la casilla, vacía. No se precarga: rellenarla
-          // haría que cualquiera pulsara «guardar» y el código quedara
-          // registrado para esta vigencia sin que nadie haya comprobado que
-          // sigue amparándola. Esa comprobación es la pregunta P21, y no la
-          // tenemos respondida.
+          // Cada vigencia lleva su propia resolución y su propio permiso de
+          // rotura, así que la casilla sale VACÍA y el trámite queda pendiente.
+          // El número de la activación anterior se muestra al lado como dato de
+          // referencia —para buscar el expediente, o para numerar el nuevo— y
+          // no se precarga: si se precargara, bastaría pulsar «guardar» para
+          // que un código que NO ampara estas fechas quedara registrado como si
+          // lo hiciera.
           const previo = d.documentosPrevios?.[doc.clave] ?? null;
           const nota = previo
-            ? `<div class="doc-previo"><span class="pastilla p-porconfirmar">Previo disponible</span>
+            ? `<div class="doc-previo"><b>La activación anterior tuvo</b>
                  <span class="mono">${esc(previo)}</span>
-                 <small>de la activación anterior · <b>aplicabilidad a esta vigencia por confirmar</b>.
-                 Si ampara también estas fechas, escríbalo aquí; si hace falta uno nuevo, déjelo vacío.</small></div>`
+                 <small>Esta vigencia necesita el <b>suyo</b>: se muestra solo como referencia.</small></div>`
             : '';
           return campo('ed_' + doc.clave, doc.etiqueta,
             `<input type="text" id="ed_${esc(doc.clave)}" value="${esc(d[doc.clave] ?? '')}" placeholder="código de la resolución">${nota}`,

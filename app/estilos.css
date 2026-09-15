@@ -803,17 +803,19 @@ details.tecnico pre {
    vistazo al pasar paginas. */
 .inf-nota-historica { background: #f3eee4; border-left-color: #8a6d3b; color: #4a3b22; }
 
-/* DOCUMENTO DE LA ACTIVACION ANTERIOR. Se enseña como EVIDENCIA, nunca como
-   dato de esta activacion: por eso va fuera de la casilla y con su propia
-   pastilla. Precargarlo haria que quedara registrado sin que nadie hubiera
-   comprobado que sigue amparando estas fechas (pregunta P21, sin responder). */
+/* NUMERO DE DOCUMENTO DE LA ACTIVACION ANTERIOR.
+   Cada vigencia lleva su propia resolucion y su propio permiso de rotura
+   (regla de EPM), asi que esto es HISTORIA, no un dato de esta activacion:
+   nunca ocupa la casilla ni sustituye a «Pendiente». Va en letra menuda,
+   debajo o al lado, para que se lea como lo que es — una referencia. */
 .doc-previo {
   display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
-  margin-top: 6px; padding: 6px 9px; border-radius: var(--radio);
-  background: #f3eee4; border-left: 3px solid #8a6d3b; font-size: .8rem;
+  margin-top: 5px; padding: 5px 8px; border-radius: var(--radio);
+  background: var(--fondo-suave, #f5f6f7); border-left: 3px solid var(--linea);
+  font-size: .76rem; color: var(--tenue);
 }
-.doc-previo small { color: #5d4a2c; flex: 1 1 200px; }
-.p-porconfirmar { background: #f3eee4; color: #6b5326; border: 1.5px solid #8a6d3b; }
+.doc-previo small { flex: 1 1 200px; }
+.doc-previo .mono { color: var(--tinta); }
 
 /* DESGLOSE DE LA BANDA: la cuenta escrita, en una linea.
    No son cinco tarjetas iguales a proposito: la cifra que se mira todos los

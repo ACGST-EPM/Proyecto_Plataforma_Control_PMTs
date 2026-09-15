@@ -52,7 +52,7 @@ equipo cargando datos.
                  │
                  └── DOCUMENTO  · tipo (resolución / permiso / cierre)
                                 · código · fecha · quién lo registró
-                                · a qué activación ampara   ← P21, SIN RESOLVER
+                                · PERTENECE A UNA ACTIVACIÓN   ← P21, resuelta
 ```
 
 Cinco cambios, en orden de lo que desbloquea cada uno:
@@ -85,13 +85,15 @@ sería un retroceso, por muy ordenado que quede el diagrama:
 - **NO EVALUABLE ≠ VERDADERO ≠ FALSO**, en el espacio, en el tiempo y en los documentos.
 - **Un dato derivado nunca sustituye al motor.** Las relaciones se recalculan siempre.
 - **«Pendiente» nunca es un código.** El estado se deriva de la ausencia del dato.
-- **El modelo no decide si un documento anterior sigue valiendo** (P21). Ni lo copia ni lo borra:
-  lo conserva como `documentosPrevios`, con estado `HEREDADO_POR_CONFIRMAR`.
+- **Los documentos pertenecen a la ACTIVACIÓN, no al PMT base** (P21, respondida). Una activación
+  nueva nace sin códigos propios y queda pendiente; el número de la anterior se conserva como
+  historia en `documentosPrevios` y nunca cuenta como registrado.
 - **Ocultar no es borrar.** Los alcances temporales son vistas.
 - **Ninguna cifra viaja sin su alcance.**
 
-Si EPM responde P21, la decisión se implementa **sin migrar nada**: el estado derivado cambia de
-regla, los datos guardados no.
+**P21 se respondió y se implementó SIN MIGRAR NADA**, que era justamente la prueba de que el diseño
+estaba bien puesto: la evidencia ya vivía en su propia clave, separada del campo del código, así que
+bastó cambiar cómo se interpreta. Ningún proyecto guardado necesitó tocarse.
 
 ---
 
@@ -214,7 +216,8 @@ Las 22 preguntas completas están en `DESCUBRIMIENTO_EPM.md`. Las que bloquean *
 
 | # | Pregunta | Desbloquea |
 |---|---|---|
-| P21 | ¿Una resolución de PMT ampara unas fechas concretas, o al cierre mientras esté vigente? | el estado `HEREDADO_POR_CONFIRMAR` deja de ser provisional |
+| ~~P21~~ | ~~¿Una resolución ampara unas fechas concretas?~~ **RESPONDIDA**: cada activación tiene la suya. Implementado | — |
+| — | ¿El **cierre del permiso de rotura** sigue la misma regla? *(se asumió que sí, por ser el cierre de ese permiso)* | confirmar una asunción ya implementada |
 | — | ¿Existe un consecutivo corporativo de PMT? | el paso 1 del §4 |
 | — | ¿Qué mapa base puede usar EPM, y con qué licencia? | la tabla del §7 |
 | — | ¿Puede el repositorio ser privado? | el §8 |

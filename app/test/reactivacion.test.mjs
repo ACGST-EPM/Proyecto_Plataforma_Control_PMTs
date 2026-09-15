@@ -73,38 +73,42 @@ test('B · reactivar hereda la identidad y NO DECIDE sobre los documentos', () =
   }
   assert.equal(r.datos.idBase, 'base_a');
 
-  // ══ NI SE COPIA NI SE BORRA ═══════════════════════════════════════════
+  // ══ CADA VIGENCIA LLEVA LOS SUYOS, Y LA ANTERIOR QUEDA COMO HISTORIA ══
   //
-  // No sabemos si la resolución anterior ampara la vigencia nueva (P21).
-  // Copiarla afirmaría que sí; no guardar nada afirmaría que no y además
-  // perdería una evidencia que alguien tendrá que mirar para decidir.
+  // Regla dada por la responsable funcional del proceso: cada PMT y cada
+  // reactivación tienen una resolución independiente, y lo mismo el permiso de
+  // rotura. Así que no se copia —haría pasar por tramitado lo que no lo está—
+  // y tampoco se borra: que la activación anterior tuviera ese número es un
+  // hecho de la historia del PMT.
   assert.equal(r.datos.resolucionPmt, null, 'sin código PROPIO: nadie ha tramitado nada aquí');
   assert.equal(r.datos.permisoRotura, null);
   assert.deepEqual(r.datos.documentosPrevios,
     { resolucionPmt: 'RES-1', permisoRotura: 'PR-1', cierrePermisoRotura: null },
-    'pero la evidencia de la activación anterior SE CONSERVA, en su propio sitio');
+    'la historia de la activación anterior SE CONSERVA, en su propio sitio');
 
-  // Y el estado derivado dice exactamente lo que se sabe.
+  // Y el estado derivado dice exactamente lo que hay que hacer: tramitarlos.
   const e = estadoDocumental(r.datos);
   const res = e.detalle.find((d) => d.clave === 'resolucionPmt');
-  assert.equal(res.estado, ESTADO_DOC.HEREDADO_POR_CONFIRMAR);
+  assert.equal(res.estado, ESTADO_DOC.PENDIENTE, 'esta vigencia necesita la suya');
   assert.equal(res.codigo, null, 'no tiene código propio');
   assert.equal(res.codigoPrevio, 'RES-1', 'y el anterior viaja con su propio nombre');
-  assert.equal(e.registrados, 0, 'un documento por confirmar NO cuenta como registrado');
-  assert.equal(e.porConfirmar, 2);
+  assert.equal(e.registrados, 0, 'lo de la activación anterior NO cuenta como registrado');
+  assert.equal(e.pendientes.length, 3, 'faltan los tres, no dos');
+  assert.equal(e.conPrevio, 2, 'y la historia se cuenta aparte');
   assert.equal(e.resumen, '0/3');
   assert.equal(e.completo, false);
 });
 
-test('B · un documento por confirmar no se puede hacer pasar por tramitado', () => {
-  // La evidencia va en `documentosPrevios`, nunca en el campo del código. Si
+test('B · el documento de la activación anterior no se puede hacer pasar por tramitado', () => {
+  // La historia va en `documentosPrevios`, nunca en el campo del código. Si
   // ocupara el campo, en la siguiente lectura sería indistinguible de uno
-  // tramitado para esta vigencia, y la decisión quedaría tomada por accidente.
+  // tramitado para esta vigencia, y bastaría pulsar «guardar» para dar por
+  // amparada una vigencia que no lo está.
   const origen = pmt('base_a', { resolucionPmt: 'RES-1' });
   const r = Id.prepararReactivacion(origen, {});
   assert.ok(!('resolucionPmt' in r.datos) || r.datos.resolucionPmt === null);
-  // Y si alguien SÍ tramita uno nuevo, manda el suyo y el previo desaparece
-  // de la vista: ya no hay nada que confirmar.
+  // Y cuando SÍ se tramita el de esta vigencia, manda el suyo y el anterior
+  // deja de mostrarse: ya no hace falta la referencia.
   const conPropio = estadoDocumental({ ...r.datos, resolucionPmt: 'RES-2' });
   const d = conPropio.detalle.find((x) => x.clave === 'resolucionPmt');
   assert.equal(d.estado, ESTADO_DOC.REGISTRADO);
@@ -116,10 +120,10 @@ test('B · el estado documental sin historia previa se comporta como siempre', (
   // Un PMT que viene de un KMZ no tiene `documentosPrevios`: nada cambia.
   const e = estadoDocumental({ resolucionPmt: 'RES-9' });
   assert.equal(e.registrados, 1);
-  assert.equal(e.porConfirmar, 0);
+  assert.equal(e.conPrevio, 0);
   assert.equal(e.resumen, '1/3');
   assert.deepEqual(e.pendientes, ['permisoRotura', 'cierrePermisoRotura']);
-  assert.deepEqual(e.clavesPorConfirmar, []);
+  assert.deepEqual(e.clavesConPrevio, []);
 });
 
 test('B · un PMT sin trazado NO se puede reactivar, y se dice por qué', () => {
@@ -872,7 +876,7 @@ test('M8 · el histórico sobrevive a guardar y abrir, con la evidencia document
   assert.equal(v.resolucionPmt, null, 'la nueva sigue sin código propio');
   assert.equal(v.documentosPrevios.resolucionPmt, 'RES-VIEJA',
     'y la EVIDENCIA de la anterior sobrevive a guardar y abrir');
-  assert.equal(estadoDocumental(v).porConfirmar, 1);
+  assert.equal(estadoDocumental(v).conPrevio, 1);
   // La anterior conserva el suyo, registrado de verdad.
   const vieja = leido.proyecto.trazados.find((x) => x.id === 'act_1');
   assert.equal(vieja.resolucionPmt, 'RES-VIEJA');

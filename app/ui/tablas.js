@@ -189,11 +189,12 @@ function celdaPmt(x, clave) {
     case 'resolucionPmt': case 'permisoRotura': case 'cierrePermisoRotura': {
       if (x[clave]) return `<td class="mono"><small>${esc(x[clave])}</small></td>`;
       const previo = x.documental?.detalle?.find((d) => d.clave === clave)?.codigoPrevio;
-      // Un documento de la activación anterior NO se enseña como si fuera de
-      // esta: lleva su propia pastilla y dice que está por confirmar.
-      return previo
-        ? `<td><span class="pastilla p-porconfirmar" title="De una activación anterior de este mismo PMT. Nadie ha decidido si ampara también estas fechas.">${esc(previo)} · por confirmar</span></td>`
-        : '<td><span class="doc-pendiente">Pendiente</span></td>';
+      // El documento de la activación anterior NO ocupa esta casilla: cada
+      // vigencia lleva el suyo, así que esto está PENDIENTE. El número anterior
+      // va debajo, en letra menuda, como referencia para buscar el expediente.
+      return `<td><span class="doc-pendiente">Pendiente</span>${previo
+        ? `<div class="doc-previo" title="Es el de la activación anterior. Esta vigencia necesita el suyo.">la anterior tuvo <span class="mono">${esc(previo)}</span></div>`
+        : ''}</td>`;
     }
     case 'origenArchivo': return `<td><small>${esc(x.origenArchivo ?? '—')}</small></td>`;
     case 'tipoGeometria': return `<td>${esc(x.tipoGeometria ?? 'sin geometria')}</td>`;
@@ -238,13 +239,13 @@ export function pintarPmts(filas, { onFila, seleccionado, columnas } = {}) {
 export function pintarDocumental(filas, { onFila } = {}) {
   const caja = $('panelDocumental');
   if (!caja) return;
-  const conteo = { completos: 0, sinNinguno: 0, resolucionPmt: 0, permisoRotura: 0, cierrePermisoRotura: 0, porConfirmar: 0 };
+  const conteo = { completos: 0, sinNinguno: 0, resolucionPmt: 0, permisoRotura: 0, cierrePermisoRotura: 0, conPrevio: 0 };
   for (const x of filas) {
     const d = x.documental;
     if (!d) continue;
     if (d.completo) conteo.completos++;
     if (d.sinNinguno) conteo.sinNinguno++;
-    if ((d.porConfirmar ?? 0) > 0) conteo.porConfirmar++;
+    if ((d.conPrevio ?? 0) > 0) conteo.conPrevio++;
     for (const p of d.pendientes) conteo[p]++;
   }
   const t = (n, txt, clase = '') =>
@@ -255,13 +256,14 @@ export function pintarDocumental(filas, { onFila } = {}) {
     const d = x.documental;
     const celda = (clave) => {
       if (x[clave]) return `<td class="mono"><small>${esc(x[clave])}</small></td>`;
-      // TERCER ESTADO: viene de una activación anterior del mismo PMT. Ni
-      // registrado (nadie ha comprobado que ampare estas fechas) ni pendiente
-      // a secas (existe, y alguien tiene que decidir sobre él).
+      // Cada activación tiene sus propios documentos, así que esto está
+      // PENDIENTE. Si la activación anterior tuvo el suyo, se dice al lado como
+      // historia: sirve para saber que el trámite ya se hizo alguna vez, y no
+      // rebaja en nada lo que falta aquí.
       const previo = d?.detalle?.find((y) => y.clave === clave)?.codigoPrevio;
-      return previo
-        ? `<td><span class="pastilla p-porconfirmar" title="De una activación anterior de este mismo PMT. Su aplicabilidad a esta vigencia está por confirmar.">${esc(previo)} · por confirmar</span></td>`
-        : '<td><span class="doc-pendiente">Pendiente</span></td>';
+      return `<td><span class="doc-pendiente">Pendiente</span>${previo
+        ? `<div class="doc-previo" title="Es el de la activación anterior. Esta vigencia necesita el suyo.">la anterior tuvo ${esc(previo)}</div>`
+        : ''}</td>`;
     };
     return `<tr data-id="${esc(x.id)}">
       <td>${esc(x.frente ?? '—')}</td>
@@ -278,10 +280,12 @@ export function pintarDocumental(filas, { onFila } = {}) {
       la casilla queda <b>vacía</b> y el estado es <b>Pendiente</b>: escribir «Pendiente» como si fuera
       el número de la resolución haría imposible distinguirlo de un código de verdad.
     </p>
-    ${conteo.porConfirmar ? `<p class="frase atencion" style="font-size:.86rem">
-      <b>${num(conteo.porConfirmar)} PMT tienen documentos de una activación anterior.</b>
-      Aparecen como <b>«por confirmar»</b>: existen, pero <b>nadie ha decidido todavía</b> si amparan
-      también la vigencia nueva. Esa regla la tiene que fijar EPM; la plataforma no la inventa.
+    ${conteo.conPrevio ? `<p class="frase" style="font-size:.86rem">
+      <b>${num(conteo.conPrevio)} PMT reactivado${conteo.conPrevio === 1 ? '' : 's'}
+      ${conteo.conPrevio === 1 ? 'arrastra' : 'arrastran'} el número de documento de su activación
+      anterior.</b> Sigue apareciendo <b>Pendiente</b>, y es correcto: cada vigencia lleva su propia
+      resolución y su propio permiso de rotura. El número anterior se muestra al lado únicamente
+      para saber que ese trámite ya se hizo antes para este mismo cierre.
     </p>` : ''}
     <div class="tarjetas" style="margin-bottom:16px">
       ${t(conteo.completos, 'con los 3 documentos', conteo.completos ? 'verde' : 'gris')}

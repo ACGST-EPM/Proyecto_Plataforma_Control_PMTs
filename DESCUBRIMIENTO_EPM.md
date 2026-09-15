@@ -184,13 +184,26 @@ no hay.
 - **Respuesta mínima:** si existe un procedimiento escrito, y de qué municipio o autoridad depende.
 
 ### P21. Cuando un mismo PMT se vuelve a ejecutar, ¿los documentos se renuevan o se conservan?
-- **Por qué importa:** la plataforma ya permite **reactivar** un PMT —volver a usar el mismo cierre,
-  con el mismo trazado, en otras fechas—. Hoy **no se heredan** los códigos de resolución y permisos
-  a la nueva vigencia, porque una resolución ampara unas fechas concretas y copiar el número haría
-  pasar por tramitado algo que no lo está. Puede que en algún caso sí amparen varias ejecuciones.
-- **Desbloquea:** si «Resolución PMT», «Permiso de rotura» y «Cierre del permiso» pertenecen al PMT
-  base, a cada activación, o unos a cada nivel.
-- **Respuesta mínima:** para cada uno de los tres, si se tramita otra vez al repetir el cierre.
+> ✅ **RESPONDIDA — 2026-09-15**, por Leydi Marín (Centro de Gestión Servicios Técnicos, responsable
+> funcional del proceso):
+>
+> > «Cada PMT y sus reactivaciones para nuevas vigencias tienen una resolución independiente, al
+> > igual sucede con los permisos de rotura.»
+>
+> **Implementado.** Los documentos pertenecen a la **activación**, no al PMT base. Una activación
+> nueva nace sin códigos propios y queda **pendiente** de tramitarlos; el número que tuvo la
+> activación anterior se conserva como **historia** —se enseña como «la anterior tuvo X»— y no
+> cuenta como registrado. El estado provisional «aplicabilidad por confirmar» se retiró.
+>
+> **Asunción declarada, pendiente de una palabra:** la regla se dio para la resolución y el permiso
+> de rotura. El **cierre del permiso de rotura** se trata igual, por ser el cierre *de ese* permiso.
+> Si no fuera así, basta decirlo: se cambia en un sitio.
+
+- **Por qué importaba:** la plataforma permite **reactivar** un PMT —volver a usar el mismo cierre,
+  con el mismo trazado, en otras fechas—. Copiar el número anterior habría hecho pasar por tramitado
+  algo que no lo está; borrarlo habría perdido un dato útil. Sin la regla no se podía elegir.
+- **Desbloqueó:** que «Resolución PMT», «Permiso de rotura» y «Cierre del permiso» pertenecen a
+  **cada activación**.
 
 ### P22. ¿Hace falta registrar POR QUÉ se reactiva un PMT?
 - **Por qué importa:** la plataforma conserva el dato de cuántas veces y cuándo se reactivó cada PMT,

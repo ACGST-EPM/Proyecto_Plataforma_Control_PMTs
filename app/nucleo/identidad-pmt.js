@@ -245,27 +245,34 @@ export function clonarGeometria(g) {
  * desplazada. Un trazado que se mueve solo es el peor defecto posible aquí,
  * porque nadie lo ve y cambia todas las distancias medidas.
  *
- * ══ LOS DOCUMENTOS: NO SE DECIDE, SE CONSERVA LA EVIDENCIA ═══════════════
+ * ══ LOS DOCUMENTOS: CADA ACTIVACIÓN LLEVA LOS SUYOS ══════════════════════
  *
- * La versión anterior de esto NO copiaba los documentos, y lo justificaba
- * diciendo que «una resolución ampara unas fechas concretas». **Eso era tomar
- * una decisión jurídica que no nos corresponde**, y además se contradecía con
- * la propia documentación, que listaba la pregunta P21 como pendiente: no se
- * puede declarar algo pendiente y a la vez resolverlo en el código.
+ * Esta parte tuvo dos versiones equivocadas antes de la buena, y las dos lo
+ * fueron por el mismo motivo: decidían por su cuenta.
  *
- * No sabemos si la resolución, el permiso de rotura o su cierre amparan también
- * la vigencia nueva. Las dos salidas fáciles son las dos erróneas:
+ * La primera NO guardaba nada y lo justificaba diciendo que «una resolución
+ * ampara unas fechas concretas». Era la conclusión correcta por el camino
+ * equivocado: tomaba una decisión administrativa que la propia documentación
+ * declaraba pendiente (P21). No se puede declarar algo pendiente y a la vez
+ * resolverlo en el código.
  *
- *   · copiar el código  → afirma que el documento SIGUE siendo válido;
- *   · no copiar nada    → afirma que NO lo es, y además borra de la vista una
- *                         evidencia que existe y que alguien tendrá que mirar.
+ * La segunda no decidió: dejó los documentos anteriores como «aplicabilidad
+ * por confirmar», a la espera de la regla.
  *
- * Así que no se hace ninguna de las dos. La activación nueva nace **sin código
- * propio** —porque nadie ha tramitado nada para ella— y se guarda aparte, en
- * `documentosPrevios`, lo que tenía la anterior. El estado derivado dice
- * exactamente lo que se sabe: «previo disponible · aplicabilidad por
- * confirmar». Cuando EPM responda P21, la decisión se implementa sin migrar
- * nada, porque la evidencia ya está guardada.
+ * LA REGLA YA ESTÁ DADA, por la responsable funcional del proceso en EPM
+ * (Leydi Marín, Centro de Gestión Servicios Técnicos):
+ *
+ *     «Cada PMT y sus reactivaciones para nuevas vigencias tienen una
+ *      resolución independiente, al igual sucede con los permisos de rotura.»
+ *
+ * Así que la activación nueva nace **sin código propio**, y eso significa
+ * PENDIENTE: hay que tramitar los suyos. Lo que tenía la anterior se sigue
+ * guardando aparte, en `documentosPrevios`, porque es un hecho de la historia
+ * del PMT —ese trámite se hizo, con ese número— y sirve para saberlo. NO
+ * cuenta como registrado y no rebaja lo que falta.
+ *
+ * No hizo falta migrar nada: la evidencia ya estaba guardada en su propia
+ * clave, separada del campo del código. Para eso se separó.
  *
  * @returns {{ok:true, datos:object} | {ok:false, motivo:string}}
  */
@@ -297,10 +304,10 @@ export function prepararReactivacion(origen, { inicio = '', fin = '', motivo = '
     resolucionPmt: null,
     permisoRotura: null,
     cierrePermisoRotura: null,
-    // EVIDENCIA de la activación anterior. Va en su propio sitio y con su
-    // propio nombre, de modo que nunca pueda confundirse con un código
-    // tramitado para esta activación. Se guarda aunque esté vacío en todos
-    // sus campos: saber que se miró y no había nada también es información.
+    // HISTORIA de la activación anterior. Va en su propio sitio y con su propio
+    // nombre, de modo que nunca pueda confundirse con un código tramitado para
+    // esta activación. Se guarda aunque esté vacío en todos sus campos: saber
+    // que se miró y no había nada también es información.
     documentosPrevios: documentosDe(origen),
     reactivacionDe: origen.id ?? null,
     activacion: { numero: null, motivo: motivo || null, creada: new Date(ahora).toISOString() },

@@ -181,17 +181,22 @@ Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada
 - **REACTIVAR REUTILIZA EL TRAZADO, EXACTAMENTE.** `prepararReactivacion` clona y COMPRUEBA la
   igualdad; el editor bloquea el dibujo; `guardar()` vuelve a comprobarla. Un trazado que se mueve
   solo no lo ve nadie y cambia todas las distancias medidas.
-- **REACTIVAR NO DECIDE NADA SOBRE LOS DOCUMENTOS.** La versión anterior no los heredaba y lo
-  justificaba diciendo que «una resolución ampara unas fechas concretas»: eso era **tomar la
-  decisión jurídica** que la propia documentación declaraba pendiente (P21). No se puede declarar
-  algo pendiente y a la vez resolverlo en el código.
-  Las dos salidas fáciles son las dos erróneas: copiar el código afirma que sigue valiendo; no
-  guardar nada afirma que no vale **y** pierde una evidencia que alguien tendrá que mirar.
-  Modelo neutral: la activación nueva nace **sin código propio**, y lo que tenía la anterior se
-  guarda en `documentosPrevios` — clave propia, nunca el campo del código. Tercer estado derivado:
-  `HEREDADO_POR_CONFIRMAR`. **No suma a `registrados`** ni a `completo`. Cuando EPM responda P21, la
-  decisión se implementa **sin migrar nada**. Compuerta R, que además vigila que el código no
-  contenga la afirmación jurídica.
+- **CADA ACTIVACIÓN LLEVA SUS PROPIOS DOCUMENTOS. P21 RESUELTA** (2026-09-15, por la responsable
+  funcional del proceso, Leydi Marín): *«Cada PMT y sus reactivaciones para nuevas vigencias tienen
+  una resolución independiente, al igual sucede con los permisos de rotura.»*
+  Por tanto: la activación nueva nace **sin código propio** y eso es **PENDIENTE**, sin matices.
+  El tercer estado `HEREDADO_POR_CONFIRMAR` **se retiró**: existía solo para no decidir, y ya hay
+  regla. Quedan DOS estados: `registrado` y `pendiente`.
+  Lo que tenía la anterior se sigue guardando en `documentosPrevios` —clave propia, nunca el campo
+  del código— porque es un **hecho de la historia** del PMT: se enseña como «la anterior tuvo X»,
+  **no cuenta como registrado y no rebaja lo pendiente** (`conPrevio` / `clavesConPrevio`).
+  **No hizo falta migrar nada**, que era exactamente el objetivo de haber separado la evidencia del
+  campo del código. Compuerta R, que ahora vigila lo contrario de lo que vigilaba: que la regla se
+  aplique, que no se copie el número, que no se pierda la historia y que no quede rastro de «por
+  confirmar» en la interfaz.
+  ⚠️ **Asunción declarada**: la regla se dio para la resolución y el permiso de rotura. El **cierre
+  del permiso de rotura** se trata igual porque es el cierre *de ese* permiso; si EPM dice otra cosa,
+  se cambia en un sitio.
 - **Nada de parentescos inventados.** Dos geometrías idénticas NO son el mismo PMT: puede haber dos
   cierres distintos en el mismo sitio. Un KMZ sin identidad explícita es su propia base.
 - **El NÚMERO de activación se DERIVA**, nunca se lee del archivo, y se calcula **una sola vez sobre

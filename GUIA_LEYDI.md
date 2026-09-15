@@ -187,6 +187,17 @@ de su resolución.
 «Pendiente». La plataforma ya dirá Pendiente sola. Si usted escribe esa palabra, después no hay forma
 de distinguir un trámite que falta de un texto de relleno.
 
+### Cuando un PMT se vuelve a usar en otras fechas
+
+**Cada vigencia lleva sus propios documentos.** Usted lo confirmó así: cada PMT y cada reactivación
+tienen su resolución independiente, y lo mismo el permiso de rotura. Así que al crear una vigencia
+nueva las tres casillas salen **vacías** y el PMT aparece en **0/3**: hay que tramitar los de esa vez.
+
+Lo que sí verá, en letra pequeña debajo de «Pendiente», es **el número que tuvo la vez anterior**
+—«la anterior tuvo RES-1001-2026»—. No es un error ni significa que ya esté resuelto: está ahí
+solo para que pueda buscar el expediente anterior si lo necesita. No cuenta como registrado y no
+rebaja el «0/3».
+
 ---
 
 ## 8 · El informe

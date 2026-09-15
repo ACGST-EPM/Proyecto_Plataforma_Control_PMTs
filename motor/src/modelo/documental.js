@@ -44,42 +44,53 @@ export const DOCUMENTOS = Object.freeze([
 ]);
 
 /**
- * ══ TRES ESTADOS, Y EL TERCERO EXISTE PARA NO DECIDIR ═════════════════════
+ * ══ DOS ESTADOS. HUBO UN TERCERO, Y YA NO HACE FALTA ══════════════════════
  *
  * REGISTRADO   esta activacion tiene su propio codigo.
- * PENDIENTE    no hay codigo, y no hay ninguno anterior al que mirar.
- * HEREDADO_POR_CONFIRMAR
- *              esta activacion NO tiene codigo propio, pero la activacion
- *              anterior del MISMO PMT si lo tenia.
+ * PENDIENTE    esta activacion no tiene su codigo, y hay que tramitarlo.
  *
- * ══ POR QUE EL TERCERO NO SE PUEDE COLAPSAR EN NINGUNO DE LOS OTROS DOS ═══
+ * ══ POR QUE HUBO UN TERCERO, Y POR QUE SE RETIRA ══════════════════════════
  *
- * Cuando un PMT se reactiva, no sabemos si su resolucion anterior ampara
- * tambien la vigencia nueva. **No tenemos esa regla de EPM** (pregunta P21).
- * Las dos salidas faciles son las dos erroneas:
+ * Mientras no se supo si la resolucion de una activacion amparaba tambien a la
+ * siguiente, habia un tercer estado —HEREDADO_POR_CONFIRMAR— que existia
+ * justamente para NO decidirlo. Las dos salidas faciles eran las dos erroneas:
+ * copiar el codigo afirmaba que seguia valiendo; dejarlo pendiente afirmaba que
+ * no. Las dos eran decisiones administrativas, y este programa no podia
+ * tomarlas.
  *
- *   · copiar el codigo   → afirma que el documento SIGUE siendo valido;
- *   · dejarlo pendiente  → afirma que NO lo es, y borra de la vista una
- *                          evidencia que existe y que alguien tendra que
- *                          mirar para decidir.
+ * LA REGLA YA ESTA DADA. La responsable funcional del proceso en EPM (Leydi
+ * Marin, Centro de Gestion Servicios Tecnicos) la establecio asi:
  *
- * Las dos son decisiones juridicas, y este programa no puede tomarlas. El
- * tercer estado dice exactamente lo que se sabe: HAY un documento anterior, y
- * su aplicabilidad a esta activacion ESTA POR CONFIRMAR.
+ *     «Cada PMT y sus reactivaciones para nuevas vigencias tienen una
+ *      resolucion independiente, al igual sucede con los permisos de rotura.»
  *
- * Cuando EPM responda P21, la decision se implementa sin migrar nada: la
- * evidencia ya esta guardada y solo cambia como se interpreta.
+ * Es la respuesta a P21. Por tanto:
+ *
+ *   · una activacion nueva NACE SIN DOCUMENTOS PROPIOS, y eso es PENDIENTE,
+ *     sin matices: hay que tramitar los suyos;
+ *   · el codigo de la activacion anterior NO se copia —nunca se copio— y
+ *     tampoco queda «por confirmar»: ya se sabe que no ampara a esta.
+ *
+ * ══ Y SIN EMBARGO EL DOCUMENTO ANTERIOR NO SE BORRA ═══════════════════════
+ *
+ * Que no ampare esta vigencia no lo convierte en falso: es un HECHO de la
+ * historia del PMT —la activacion anterior tuvo esa resolucion— y sirve para
+ * saber que se tramito antes y con que numero. Se conserva en
+ * `documentosPrevios`, viaja en `codigoPrevio` con su propio nombre, se enseña
+ * como HISTORIA de la activacion anterior y NO cuenta como registrado ni
+ * cambia el estado de esta.
+ *
+ * NO HIZO FALTA MIGRAR NADA: la evidencia ya estaba guardada aparte del campo
+ * del codigo, que es exactamente para lo que se separo.
  */
 export const ESTADO_DOC = Object.freeze({
   REGISTRADO: 'registrado',
   PENDIENTE: 'pendiente',
-  HEREDADO_POR_CONFIRMAR: 'heredado-por-confirmar',
 });
 
 export const ETIQUETA_ESTADO_DOC = Object.freeze({
   [ESTADO_DOC.REGISTRADO]: 'Registrado',
   [ESTADO_DOC.PENDIENTE]: 'Pendiente',
-  [ESTADO_DOC.HEREDADO_POR_CONFIRMAR]: 'Previo disponible · aplicabilidad por confirmar',
 });
 
 /**
@@ -130,8 +141,8 @@ export function normalizarCodigoDocumental(valor, etiqueta = 'el documento') {
  */
 export function estadoDocumental(campos = {}) {
   // `documentosPrevios` son los codigos que tenia la activacion ANTERIOR del
-  // mismo PMT. Es EVIDENCIA, no un codigo de esta activacion: se conserva para
-  // que alguien pueda decidir, y NO se cuenta como registrado.
+  // mismo PMT. NO amparan a esta —cada activacion tiene los suyos— pero son un
+  // hecho de la historia del PMT, asi que se conservan y se enseñan como tal.
   const previos = campos.documentosPrevios ?? null;
 
   const detalle = DOCUMENTOS.map((d) => {
@@ -141,40 +152,39 @@ export function estadoDocumental(campos = {}) {
       clave: d.clave,
       etiqueta: d.etiqueta,
       codigo: propio,
-      // El codigo anterior viaja aparte y con su nombre. Nunca ocupa el sitio
+      // El codigo anterior viaja aparte y con su nombre. NUNCA ocupa el sitio
       // del propio: si lo hiciera, en la siguiente lectura seria
       // indistinguible de uno tramitado para esta vigencia.
       codigoPrevio: propio ? null : previo,
-      estado: propio ? ESTADO_DOC.REGISTRADO
-        : previo ? ESTADO_DOC.HEREDADO_POR_CONFIRMAR
-          : ESTADO_DOC.PENDIENTE,
+      // EL ESTADO SOLO DEPENDE DEL CODIGO PROPIO. Que la activacion anterior
+      // tuviera el suyo no adelanta ni un paso el tramite de esta.
+      estado: propio ? ESTADO_DOC.REGISTRADO : ESTADO_DOC.PENDIENTE,
     };
   });
 
-  const cuenta = (e) => detalle.filter((d) => d.estado === e).length;
-  const registrados = cuenta(ESTADO_DOC.REGISTRADO);
-  const porConfirmar = cuenta(ESTADO_DOC.HEREDADO_POR_CONFIRMAR);
+  const registrados = detalle.filter((d) => d.estado === ESTADO_DOC.REGISTRADO).length;
+  // Cuantos de los que faltan SI los tuvo la activacion anterior. Es
+  // informativo —dice que ese tramite ya se hizo alguna vez y con que numero—
+  // y no cambia ningun recuento.
+  const clavesConPrevio = detalle.filter((d) => d.codigoPrevio).map((d) => d.clave);
 
   return {
     detalle,
     registrados,
-    // Documentos de la activacion ANTERIOR cuya aplicabilidad a esta nadie ha
-    // decidido todavia. NO suman a `registrados`: afirmar que valen seria
-    // tomar la decision juridica que no tenemos (P21).
-    porConfirmar,
+    // Documentos que la activacion ANTERIOR si tuvo y esta todavia no. NO suman
+    // a `registrados` ni restan a `pendientes`: son historia, no tramite.
+    conPrevio: clavesConPrevio.length,
     total: DOCUMENTOS.length,
     completo: registrados === DOCUMENTOS.length,
     // Ni uno: es distinto de «le falta el ultimo». Merece su propio estado
     // porque es el caso de un PMT recien creado, que no es un problema.
-    sinNinguno: registrados === 0 && porConfirmar === 0,
+    sinNinguno: registrados === 0,
     resumen: `${registrados}/${DOCUMENTOS.length}`,
-    // Se conserva `pendientes` con su significado de siempre —lo que falta por
-    // registrar en ESTA activacion— porque es lo que alimenta los filtros. Lo
-    // por confirmar cuenta como pendiente: todavia no hay nada tramitado aqui.
+    // Lo que falta por registrar en ESTA activacion. Es lo que alimenta los
+    // filtros, y su significado no ha cambiado.
     pendientes: detalle.filter((d) => d.estado !== ESTADO_DOC.REGISTRADO).map((d) => d.clave),
-    // Y aparte, para poder enseñarlo distinto sin mezclarlo con lo anterior.
-    clavesPorConfirmar: detalle
-      .filter((d) => d.estado === ESTADO_DOC.HEREDADO_POR_CONFIRMAR).map((d) => d.clave),
+    // Y aparte, para poder enseñar la historia sin mezclarla con el tramite.
+    clavesConPrevio,
   };
 }
 
@@ -183,23 +193,23 @@ export function resumenDocumental(registros) {
   const r = {
     total: registros.length, completos: 0, sinNinguno: 0,
     pendientePorDocumento: {},
-    // Cuantos PMT tienen algun documento de una activacion anterior cuya
-    // aplicabilidad esta por confirmar. Se cuenta APARTE de lo pendiente para
-    // que no parezca que falta tramitar algo cuando puede que ya exista.
-    conPorConfirmar: 0,
-    porConfirmarPorDocumento: {},
+    // Cuantos PMT tienen algun documento que la activacion ANTERIOR si tuvo.
+    // Es historia, no tramite pendiente de otro tipo: sirve para saber que ese
+    // documento ya se tramito alguna vez para este mismo cierre.
+    conPrevio: 0,
+    conPrevioPorDocumento: {},
   };
   for (const d of DOCUMENTOS) {
     r.pendientePorDocumento[d.clave] = 0;
-    r.porConfirmarPorDocumento[d.clave] = 0;
+    r.conPrevioPorDocumento[d.clave] = 0;
   }
   for (const x of registros) {
     const e = x.documental ?? estadoDocumental(x);
     if (e.completo) r.completos++;
     if (e.sinNinguno) r.sinNinguno++;
-    if ((e.porConfirmar ?? 0) > 0) r.conPorConfirmar++;
+    if ((e.conPrevio ?? 0) > 0) r.conPrevio++;
     for (const p of e.pendientes) r.pendientePorDocumento[p]++;
-    for (const p of (e.clavesPorConfirmar ?? [])) r.porConfirmarPorDocumento[p]++;
+    for (const p of (e.clavesConPrevio ?? [])) r.conPrevioPorDocumento[p]++;
   }
   return r;
 }

@@ -222,3 +222,26 @@ Compuertas de entrega ......   18   (A..R)
 
 Las tres compuertas nuevas (P, Q, R) se probaron **restaurando la regla antigua a propósito**: las
 tres la detectaron.
+
+
+---
+
+# Epílogo · P21 fue respondida (2026-09-15)
+
+Este documento describe una corrección hecha **cuando la regla todavía no existía**, y su
+conclusión —«no se puede declarar algo pendiente y a la vez resolverlo en el código»— sigue siendo
+la correcta para aquel momento. Se conserva tal cual, sin retocar, porque es el registro de lo que
+se decidió y por qué.
+
+**La regla llegó después.** La responsable funcional del proceso en EPM la dio así:
+
+> «Cada PMT y sus reactivaciones para nuevas vigencias tienen una resolución independiente, al igual
+> sucede con los permisos de rotura.»
+
+Con ella, el tercer estado —«Previo disponible · aplicabilidad por confirmar»— **se retiró**: existía
+para no decidir, y ya hay quien decidió. Una activación nueva queda **Pendiente** de sus tres
+documentos, y el número que tuvo la anterior se conserva como **historia**, nunca como documento de
+esta vigencia.
+
+**No hubo migración**, exactamente como este documento anticipaba: la evidencia ya estaba guardada
+en su propia clave. El detalle está en el apéndice de `INFORME_ETAPA_EVOLUCION.md`.

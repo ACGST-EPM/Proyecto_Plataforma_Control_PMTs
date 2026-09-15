@@ -406,8 +406,20 @@ await compuerta('Q', 'Lo que no se puede situar no se cuenta como atendible', as
   return 'operativo = vigentes + futuros · lo indeterminado se conserva y se cuenta aparte';
 });
 
-/* ── R · Reactivar no decide la validez de un documento ── */
-await compuerta('R', 'Reactivar no decide si un documento anterior sigue valiendo', async () => {
+/* ── R · Cada activacion lleva sus propios documentos ── */
+await compuerta('R', 'Cada activación lleva sus propios documentos, y la anterior queda como historia', async () => {
+  // ══ ESTA COMPUERTA CAMBIO DE SIGNIFICADO, Y ESE ES EL PUNTO ═════════════
+  //
+  // Hasta que EPM respondio P21, vigilaba que el codigo NO decidiera si un
+  // documento anterior seguia valiendo: habia un tercer estado, «aplicabilidad
+  // por confirmar», que existia para no tomar una decision administrativa.
+  //
+  // La regla ya esta dada por la responsable funcional del proceso:
+  //   «Cada PMT y sus reactivaciones para nuevas vigencias tienen una
+  //    resolucion independiente, al igual sucede con los permisos de rotura.»
+  //
+  // Asi que ahora vigila lo contrario de lo que vigilaba: que la regla SE
+  // APLIQUE, y que al aplicarla no se pierda la historia.
   const Id = await import('../app/nucleo/identidad-pmt.js');
   const { estadoDocumental, ESTADO_DOC } = await import('../motor/src/modelo/documental.js');
   const origen = { id: 'x', contrato: 'CW1', tipoCierre: 'total',
@@ -416,30 +428,46 @@ await compuerta('R', 'Reactivar no decide si un documento anterior sigue valiend
   const r = Id.prepararReactivacion(origen, {});
   exigir(r.ok, 'no se pudo preparar: ' + r.motivo);
 
-  // Ni se copia (afirmaría que vale) ni se pierde (afirmaría que no vale).
-  exigir(r.datos.resolucionPmt === null,
-    'copia el código anterior: eso afirma que el documento ampara la vigencia nueva');
+  // 1 · NO se copia. Copiarlo dejaria registrado para esta vigencia un codigo
+  //     que ampara a la anterior, y bastaria pulsar «guardar» para hacerlo.
+  exigir(r.datos.resolucionPmt === null && r.datos.permisoRotura === null,
+    'copia el código anterior: cada vigencia lleva el suyo');
+
+  // 2 · NO se pierde. Que no ampare esta vigencia no lo vuelve falso: la
+  //     activacion anterior si lo tuvo, y saberlo sirve.
   exigir(r.datos.documentosPrevios?.resolucionPmt === 'RES-1',
-    'pierde la evidencia del documento anterior, que alguien tendrá que mirar');
+    'pierde el número de la activación anterior, que es un hecho de su historia');
 
   const e = estadoDocumental(r.datos);
-  exigir(e.registrados === 0, 'un documento por confirmar NO puede contar como registrado');
-  exigir(e.porConfirmar === 2, 'tienen que contarse aparte, con su propio nombre');
-  const d = e.detalle.find((x) => x.clave === 'resolucionPmt');
-  exigir(d.estado === ESTADO_DOC.HEREDADO_POR_CONFIRMAR,
-    'el estado tiene que ser el tercero, no «registrado» ni «pendiente»');
-  exigir(d.codigo === null && d.codigoPrevio === 'RES-1',
-    'el código anterior nunca puede ocupar el sitio del propio');
 
-  // Y el código de la aplicación no puede afirmar la regla jurídica.
-  const afirmaciones = /ampara unas fechas concretas|no se heredan|deja de aplicar|sigue siendo válid/i;
-  for (const f of ['app/nucleo/identidad-pmt.js', 'motor/src/modelo/documental.js']) {
+  // 3 · El estado es PENDIENTE, sin matices: hay que tramitar los de esta.
+  const d = e.detalle.find((x) => x.clave === 'resolucionPmt');
+  exigir(d.estado === ESTADO_DOC.PENDIENTE,
+    'el estado tiene que ser PENDIENTE: la resolución de esta vigencia no existe todavía');
+  exigir(Object.values(ESTADO_DOC).length === 2,
+    'sobra un estado documental: con la regla dada solo hacen falta registrado y pendiente');
+
+  // 4 · Y el numero anterior NUNCA ocupa el sitio del propio.
+  exigir(d.codigo === null && d.codigoPrevio === 'RES-1',
+    'el código anterior no puede ocupar el sitio del propio');
+
+  // 5 · La historia no rebaja el tramite: sigue faltando todo.
+  exigir(e.registrados === 0, 'un documento de la activación anterior NO cuenta como registrado');
+  exigir(e.pendientes.length === e.total,
+    `tienen que faltar los ${e.total}, y faltan ${e.pendientes.length}`);
+  exigir(e.conPrevio === 2, 'la historia se cuenta aparte, con su propio nombre');
+
+  // 6 · Y el producto no puede volver a afirmar lo que ya no toca: el tercer
+  //     estado se retiro, no puede quedar rastro de el enseñandose.
+  for (const f of ['app/ui/ficha.js', 'app/ui/tablas.js', 'app/ui/editor.js']) {
     const malas = soloCodigo(leer(f))
-      .map((l, i) => (afirmaciones.test(l) ? `${i + 1}: ${l.trim()}` : null)).filter(Boolean);
+      .map((l, i) => (/por confirmar|aplicabilidad/i.test(l) ? `${i + 1}: ${l.trim()}` : null))
+      .filter(Boolean);
     exigir(malas.length === 0,
-      `${f} decide una regla jurídica que EPM no ha aprobado (P21):\n  ` + malas.join('\n  '));
+      `${f} sigue presentando un documento anterior como «por confirmar», y ya hay regla:\n  ` +
+      malas.join('\n  '));
   }
-  return 'ni se copia ni se borra: se conserva como evidencia, con su estado propio';
+  return 'cada vigencia necesita los suyos · el número anterior se conserva como historia';
 });
 
 /* ── utilidades ── */

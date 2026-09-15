@@ -152,8 +152,9 @@ Total: **2.141 líneas añadidas, 258 retiradas**, en 20 archivos.
 
 1. **NO sustituí la regla espacial de 120 m.** El modelo candidato está construido, medido y
    disponible; sigue **sin aplicarse**. Es una decisión de negocio (§8).
-2. **NO resolví P21** (si una resolución anterior ampara una vigencia nueva). Sigue el modelo
-   neutral: ni se copia ni se borra, se conserva como `HEREDADO_POR_CONFIRMAR`.
+2. **NO resolví P21 por mi cuenta** (si una resolución anterior ampara una vigencia nueva). Se
+   mantuvo el modelo neutral hasta que la responsable funcional dio la regla — lo hizo al cerrar
+   esta etapa, y entonces sí se implementó. Ver el apéndice al final.
 3. **NO introduje criticidad.** Ni «crítico», ni «alto», ni un orden por gravedad. Hay una
    compuerta que lo vigila.
 4. **NO toqué la historia de Git** ni borré `01_KMZ_Entrada.zip`. Exige autorización expresa, y
@@ -312,8 +313,9 @@ Se calculan las mismas distancias: **el modelo candidato no es más lento.**
 
 ## 15 · Asuntos que requieren validación de EPM / TI
 
-1. **P21** — ¿una resolución de PMT ampara unas fechas concretas, o el cierre mientras esté
-   vigente? Mientras no se responda, `HEREDADO_POR_CONFIRMAR` sigue siendo provisional.
+1. ~~**P21**~~ — **RESPONDIDA** al cerrar esta etapa: cada activación tiene su propia resolución y
+   su propio permiso de rotura. Implementado; ver el apéndice. Queda **una asunción por confirmar**:
+   que el *cierre del permiso de rotura* sigue la misma regla.
 2. **¿Existe un consecutivo corporativo de PMT?** Desbloquea la identidad estable del PMT base.
 3. **¿Qué mapa base puede usar EPM, y con qué licencia?** No se afirma que el uso corporativo de
    Esri esté autorizado: no hay ningún documento que lo diga.
@@ -426,3 +428,52 @@ un programa.
 **Qué falta.** Que alguien de EPM responda cinco preguntas que no son técnicas —entre ellas si una
 resolución anterior sigue valiendo cuando una obra se reactiva— y que se decida si el repositorio
 sigue siendo público, porque contiene datos de obra reales.
+
+
+---
+
+# Apéndice · P21 respondida y aplicada
+
+**Después de entregar esta etapa**, la responsable funcional del proceso en EPM dio la regla que
+llevaba pendiente desde la Etapa 3:
+
+> «Cada PMT y sus reactivaciones para nuevas vigencias tienen una resolución independiente, al igual
+> sucede con los permisos de rotura.»
+
+## Qué cambia
+
+Los documentos pertenecen a la **activación**, no al PMT base. En consecuencia:
+
+| | Antes (sin regla) | Ahora |
+|---|---|---|
+| Activación nueva sin código propio | «aplicabilidad por confirmar» — un tercer estado que existía **para no decidir** | **Pendiente**, sin matices: hay que tramitar el suyo |
+| Estados documentales | tres | **dos**: registrado / pendiente |
+| El número de la activación anterior | se enseñaba como documento con aplicabilidad dudosa | se enseña como **historia**: «la anterior tuvo RES-1001-2026» |
+| Recuento | igual | igual: nunca contó como registrado, y sigue sin contar |
+
+## Por qué no hubo que migrar nada
+
+Porque la evidencia nunca ocupó el campo del código: vivía en `documentosPrevios`, con su propia
+clave. Esa separación se hizo precisamente para que el día que llegara la regla solo hubiera que
+cambiar **cómo se interpreta**, no los datos guardados. Ningún `.pmt.json` necesitó tocarse.
+
+## La compuerta cambió de significado, a propósito
+
+La compuerta **R** vigilaba que el código **no decidiera** la regla. Ahora vigila lo contrario: que
+la regla **se aplique** (el número no se copia), que al aplicarla **no se pierda la historia** (el
+número anterior se conserva), que el recuento **no se rebaje** por ella (faltan los tres), y que no
+quede rastro de «por confirmar» en la interfaz. 18/18 siguen pasando.
+
+## Una asunción declarada
+
+La regla se dio para la **resolución** y el **permiso de rotura**. El **cierre del permiso de
+rotura** se ha tratado igual, porque es el cierre *de ese* permiso: si cada activación tramita su
+permiso, tramita también su cierre. **Si no fuera así, basta decirlo**: está en un solo sitio
+(`motor/src/modelo/documental.js`) y se cambia en minutos.
+
+## Pruebas tras el cambio
+
+259 motor + 258 app + 85 de navegador real + 18 compuertas. **Todo en verde.** Se actualizaron
+cuatro pruebas —tres de Node y una de navegador— porque su contenido era la regla anterior; las
+cuatro conservan lo que garantizaban y añaden lo nuevo: que al PMT reactivado le faltan **los tres**
+documentos aunque la activación anterior tuviera los tres.

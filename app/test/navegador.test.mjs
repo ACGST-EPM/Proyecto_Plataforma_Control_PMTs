@@ -2591,7 +2591,7 @@ test('SEMÁNTICA: «vigencia no determinada» no cuenta como operativa, y se dic
   await p.close();
 });
 
-test('SEMÁNTICA: reactivar NO decide si el documento anterior sigue valiendo', saltar, async () => {
+test('SEMÁNTICA: cada vigencia lleva sus documentos; la anterior queda como referencia', saltar, async () => {
   const p = await abrir({ sinRed: true });
   await cargar(p, [KMZ_DOC]);
   await p.waitForTimeout(600);
@@ -2609,12 +2609,16 @@ test('SEMÁNTICA: reactivar NO decide si el documento anterior sigue valiendo', 
   assert.equal(await p.inputValue('#ed_resolucionPmt'), '',
     'precargar el código haría que quedara registrado sin que nadie lo comprobara');
 
-  // Pero el documento anterior SE ENSEÑA, como evidencia y con su etiqueta.
+  // Pero el numero anterior SE ENSEÑA, dicho como lo que es: de la activacion
+  // anterior, y solo como referencia. La regla del proceso es que cada vigencia
+  // lleva su propia resolucion y su propio permiso de rotura.
   const cuerpo = await txt(p, '#panelEditor');
-  assert.ok(/RES-1001-2026/.test(cuerpo), 'la evidencia anterior tiene que verse: ' + cuerpo.slice(0, 400));
-  assert.ok(/Previo disponible/i.test(cuerpo), cuerpo.slice(0, 400));
-  assert.ok(/por confirmar/i.test(cuerpo),
-    'y decir que su aplicabilidad está por confirmar, no que vale ni que no vale');
+  assert.ok(/RES-1001-2026/.test(cuerpo), 'el número anterior tiene que verse: ' + cuerpo.slice(0, 400));
+  assert.ok(/activación anterior tuvo/i.test(cuerpo), cuerpo.slice(0, 400));
+  assert.ok(/necesita el/i.test(cuerpo),
+    'y decir que esta vigencia necesita el suyo, no que el anterior valga');
+  assert.ok(!/por confirmar/i.test(cuerpo),
+    'ya hay regla: nada queda «por confirmar»');
 
   // Se guarda SIN tocar los documentos.
   await p.fill('#edInicio', `${diaRel(60)}T07:00`);
@@ -2624,12 +2628,23 @@ test('SEMÁNTICA: reactivar NO decide si el documento anterior sigue valiendo', 
   await p.waitForFunction(() => document.querySelector('#cuentaPmt').textContent === '4',
     null, { timeout: 30000 });
 
-  // La activación nueva NO cuenta el documento anterior como registrado.
+  // La activación nueva NO cuenta el documento anterior como registrado, y
+  // aparece PENDIENTE: hay que tramitar los suyos.
   await p.click('[data-pest="doc"]');
   await p.waitForTimeout(600);
   const doc = await txt(p, '#pest_doc');
-  assert.ok(/por confirmar/i.test(doc),
-    'el seguimiento documental tiene que distinguir el tercer estado: ' + doc.slice(0, 300));
+  assert.ok(/arrastrae?n? el número de documento de su activación anterior/i.test(doc),
+    'tiene que decir que ese número es de la anterior: ' + doc.slice(0, 400));
+  assert.ok(/la anterior tuvo RES-1001-2026/i.test(doc),
+    'y enseñarlo como referencia: ' + doc.slice(0, 400));
+  assert.ok(!/por confirmar/i.test(doc),
+    'con la regla dada no queda nada por confirmar: ' + doc.slice(0, 300));
+
+  // Y el recuento no se rebaja por la historia: al PMT reactivado le faltan
+  // los tres, aunque la activación anterior tuviera los tres.
+  const nuevas = await p.$$eval('#pest_doc tbody tr', (n) => n.map((t) => t.textContent.replace(/\s+/g, ' ')));
+  const fila = nuevas.find((t) => /DOC-COMPLETO/.test(t));
+  assert.ok(fila && /0\/3/.test(fila), `la activación nueva tiene que estar en 0/3: ${fila}`);
   assert.deepEqual(p.erroresJs, []);
   await p.close();
 });
