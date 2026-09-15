@@ -802,3 +802,29 @@ details.tecnico pre {
    señal nunca es solo el color, pero el color ayuda a no confundirse de un
    vistazo al pasar paginas. */
 .inf-nota-historica { background: #f3eee4; border-left-color: #8a6d3b; color: #4a3b22; }
+
+/* DOCUMENTO DE LA ACTIVACION ANTERIOR. Se enseña como EVIDENCIA, nunca como
+   dato de esta activacion: por eso va fuera de la casilla y con su propia
+   pastilla. Precargarlo haria que quedara registrado sin que nadie hubiera
+   comprobado que sigue amparando estas fechas (pregunta P21, sin responder). */
+.doc-previo {
+  display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap;
+  margin-top: 6px; padding: 6px 9px; border-radius: var(--radio);
+  background: #f3eee4; border-left: 3px solid #8a6d3b; font-size: .8rem;
+}
+.doc-previo small { color: #5d4a2c; flex: 1 1 200px; }
+.p-porconfirmar { background: #f3eee4; color: #6b5326; border: 1.5px solid #8a6d3b; }
+
+/* DESGLOSE DE LA BANDA: la cuenta escrita, en una linea.
+   No son cinco tarjetas iguales a proposito: la cifra que se mira todos los
+   dias es «operativos»; las demas existen para poder comprobarla. */
+.desglose { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: .8rem; }
+.desg-suma { display: inline-flex; align-items: baseline; gap: 5px; flex-wrap: wrap; }
+.desg-item b { font-size: .95rem; }
+.desg-item.fuerte b { font-size: 1.1rem; color: var(--verde-oscuro); }
+.banda-contexto.retrospectiva .desg-item.fuerte b { color: #6b5326; }
+.desg-item.tenue { color: var(--tenue); }
+.desg-item.aviso { color: var(--naranja-oscuro); font-weight: 600; }
+.desg-igual, .desg-mas { color: var(--tenue); font-weight: 700; }
+.desg-sep { width: 1px; align-self: stretch; background: var(--borde); margin: 0 3px; }
+.periodo-nota { font-size: .76rem; color: var(--naranja-oscuro); max-width: 320px; align-self: center; }

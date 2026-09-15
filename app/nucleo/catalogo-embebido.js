@@ -18,7 +18,7 @@
  * los mismos datos que ya viajan dentro de cada KMZ.
  *
  * NO EDITAR A MANO: se regenera. Edite `contratos_db.json`.
- * Generado el 2026-09-14 · 3 contrato(s).
+ * Generado el 2026-09-15 · 3 contrato(s).
  */
 export const CATALOGO_EMBEBIDO = [
  {

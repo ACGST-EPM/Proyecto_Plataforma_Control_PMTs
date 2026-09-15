@@ -21,7 +21,7 @@
  * informe que la insinuara induciria a actuar sobre una regla inexistente.
  */
 import { $, esc, num, fechaLegible, soloDia } from './dom.js';
-import { estadoEspacial, estadoTemporal, lecturaOperativa, ESPACIAL, TEMPORAL, OPERATIVO,
+import { estadoEspacial, estadoTemporal, lecturaOperativaEnContexto, ESPACIAL, TEMPORAL, OPERATIVO,
   ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL, ETIQUETA_OPERATIVO, EXPLICACION_OPERATIVO,
   simbologiaDe, TIPOS_CIERRE, LECTURA } from '../nucleo/modelo.js';
 import { describirModeloEspacial } from '../../motor/src/nucleo/config.js';
@@ -348,14 +348,14 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
     [OPERATIVO.SIN_COINCIDENCIA]: 3,
   };
   const porLectura = (a, b) =>
-    PESO_OPERATIVO[lecturaOperativa(a)] - PESO_OPERATIVO[lecturaOperativa(b)]
+    PESO_OPERATIVO[lecturaOperativaEnContexto(a)] - PESO_OPERATIVO[lecturaOperativaEnContexto(b)]
     || (a.distanciaMetros ?? 1e9) - (b.distanciaMetros ?? 1e9);
   const orden = [...relaciones].sort(porLectura);
   const detalle = orden.slice(0, 60);
 
   const filaRel = (r) => {
     const e = estadoEspacial(r), t = estadoTemporal(r);
-    const o = lecturaOperativa(r);
+    const o = lecturaOperativaEnContexto(r);
     return `<tr>
       <td><span class="inf-op inf-op-${esc(o)}">${esc(ETIQUETA_OPERATIVO[o])}</span></td>
       <td>${esc(r.contratoA)}<br><small>${esc(r.frenteA ?? '')}</small></td>
@@ -487,6 +487,18 @@ export function generar({ filas, relaciones, porId, noEvaluables, archivos, resu
     : '— las cifras describen <b>lo que todavía se puede atender</b>.'}</td></tr>` : ''}
     ${referencia ? `<tr><th>Fecha de referencia</th><td><span class="mono">${esc(new Date(referencia.ms).toISOString().slice(0, 10))}</span>
       · origen: ${esc(referencia.origen)}. De ella se derivan «vigente», «programado» e «histórico».</td></tr>` : ''}
+    ${(() => {
+    // DESGLOSE POR SITUACIÓN, con la suma escrita. Un informe que dice «182
+    // operativos» sin enseñar de dónde salen obliga a creérselo.
+    if (!referencia || !todas?.length) return '';
+    const r = repartirPorSituacion(todas, referencia);
+    return `<tr><th>Situación de los PMT cargados</th><td>
+        <b>${num(r.operativos)} operativos</b> = ${num(r.vigentes)} vigentes + ${num(r.futuros)} programados ·
+        ${num(r.historicos)} vencidos${r.sinVigencia
+  ? ` · <b>${num(r.sinVigencia)} con vigencia no determinada</b>, que NO entran en «operativos»
+      porque no se puede afirmar que sigan vigentes` : ''}
+        · <b>${num(r.total)} en total</b>.</td></tr>`;
+  })()}
     <tr><th>Contratistas</th><td>${esc(contratistas.join(', ')) || '—'}</td></tr>
     <!-- PROCEDENCIA: para poder responder, dentro de seis meses, «que version
          produjo este PDF y con que reglas». Las tres versiones van juntas

@@ -226,9 +226,26 @@ function pintar() {
           el estado ya dirá Pendiente, y un texto de relleno no se puede distinguir
           después de un código de verdad.
         </div>
-        ${DOCUMENTOS.map((doc) => campo('ed_' + doc.clave, doc.etiqueta,
-          `<input type="text" id="ed_${esc(doc.clave)}" value="${esc(d[doc.clave] ?? '')}" placeholder="código de la resolución">`,
-          doc.ayuda)).join('')}
+        ${DOCUMENTOS.map((doc) => {
+          // ══ EL DOCUMENTO ANTERIOR SE ENSEÑA, NO SE RELLENA ═══════════════
+          //
+          // Al reactivar, si la activación anterior tenía este documento se
+          // muestra AL LADO de la casilla, vacía. No se precarga: rellenarla
+          // haría que cualquiera pulsara «guardar» y el código quedara
+          // registrado para esta vigencia sin que nadie haya comprobado que
+          // sigue amparándola. Esa comprobación es la pregunta P21, y no la
+          // tenemos respondida.
+          const previo = d.documentosPrevios?.[doc.clave] ?? null;
+          const nota = previo
+            ? `<div class="doc-previo"><span class="pastilla p-porconfirmar">Previo disponible</span>
+                 <span class="mono">${esc(previo)}</span>
+                 <small>de la activación anterior · <b>aplicabilidad a esta vigencia por confirmar</b>.
+                 Si ampara también estas fechas, escríbalo aquí; si hace falta uno nuevo, déjelo vacío.</small></div>`
+            : '';
+          return campo('ed_' + doc.clave, doc.etiqueta,
+            `<input type="text" id="ed_${esc(doc.clave)}" value="${esc(d[doc.clave] ?? '')}" placeholder="código de la resolución">${nota}`,
+            doc.ayuda);
+        }).join('')}
       </div>
     </div>
 

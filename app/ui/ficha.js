@@ -50,10 +50,21 @@ function detalleDocumental(pmt) {
   const lista = doc.detalle.map((d) => `<li>
       <span>${esc(d.etiqueta)}</span>
       ${d.codigo
-        ? `<span class="doc-codigo">${esc(d.codigo)}</span>`
-        : '<span class="doc-pendiente">Pendiente</span>'}
+    ? `<span class="doc-codigo">${esc(d.codigo)}</span>`
+    // TERCER ESTADO: hay un documento de la activación ANTERIOR. No se
+    // presenta como registrado (nadie ha comprobado que ampare estas fechas)
+    // ni como pendiente a secas (existe y alguien tiene que mirarlo).
+    : d.codigoPrevio
+      ? `<span class="doc-codigo" style="opacity:.7">${esc(d.codigoPrevio)}</span>
+           <span class="pastilla p-porconfirmar">por confirmar</span>`
+      : '<span class="doc-pendiente">Pendiente</span>'}
     </li>`).join('');
   return barraDocumental(doc) + `<ul class="doc-lista">${lista}</ul>` +
+    ((doc.porConfirmar ?? 0)
+      ? `<p class="capa-ayuda"><b>${num(doc.porConfirmar)} documento(s) vienen de una activación
+           anterior de este mismo PMT.</b> Están ahí como evidencia: <b>nadie ha decidido todavía</b>
+           si amparan también estas fechas. Esa regla la tiene que fijar EPM.</p>`
+      : '') +
     (doc.sinNinguno
       ? '<p class="capa-ayuda">Todavía no se ha registrado ninguno. En un PMT recién creado es lo normal.</p>'
       : '');

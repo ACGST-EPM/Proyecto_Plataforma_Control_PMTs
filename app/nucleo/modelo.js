@@ -288,6 +288,31 @@ export function lecturaOperativa(rel) {
 }
 
 /**
+ * Lectura operativa AJUSTADA a la relevancia temporal de la pareja.
+ *
+ * ══ POR QUÉ HACE FALTA, Y POR QUÉ VA APARTE ══════════════════════════════
+ *
+ * `lecturaOperativa` lee HECHOS: distancia y traslape. Pero si uno de los dos
+ * PMT no se puede situar en el tiempo, no se puede afirmar que la pareja sea
+ * algo sobre lo que actuar hoy — ni tampoco que no lo sea. Decir
+ * «articulación requerida» sería prometer una acción sin base; decir «sin
+ * coincidencia» sería negar un hecho que sí está medido.
+ *
+ * La respuesta correcta es la tercera: NO SE PUDO COMPROBAR.
+ *
+ * Va en una función aparte y no dentro de `lecturaOperativa` porque son dos
+ * preguntas distintas: qué dicen los hechos, y qué se puede hacer desde la
+ * fecha que se está mirando. Mezclarlas haría imposible enseñar las dos.
+ *
+ * `relevanciaTemporal` la pone la vista (`marcarVigenciaDeRelaciones`). Si no
+ * viene, no se supone nada y manda la lectura de los hechos.
+ */
+export function lecturaOperativaEnContexto(rel) {
+  if (rel.relevanciaTemporal === 'no-evaluable') return OPERATIVO.NO_EVALUABLE;
+  return lecturaOperativa(rel);
+}
+
+/**
  * Aplana un registro del motor a la vista que usa la interfaz. Deja la
  * vigencia en campos planos para poder ordenar y filtrar sin rodeos, pero
  * conserva el objeto completo por si hace falta el detalle.

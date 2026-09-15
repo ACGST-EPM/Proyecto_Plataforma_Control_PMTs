@@ -10,6 +10,7 @@
  */
 import { estadoEspacial, estadoTemporal, ESPACIAL, TEMPORAL } from './modelo.js';
 import { ALCANCE, SITUACION, situacionDe, tocaAnio, MS_DIA, limitesDelDia,
+  esAccionable, relevanciaDeRelacion, RELEVANCIA,
   coincidenciaAccionable, articulacionCoordinable } from './temporalidad.js';
 
 // Las primitivas de dia calendario viven en `temporalidad.js` (ver alli el
@@ -95,9 +96,17 @@ export function enAlcance(fila, f, ref) {
     // que cruza el 31 de diciembre toca los dos años y sale en los dos.
     return f.anio === null || f.anio === undefined ? true : tocaAnio(fila, f.anio);
   }
-  // Operativo: todo lo que no haya terminado antes de la referencia. Lo que no
-  // se puede situar en el tiempo SE CONSERVA, con su etiqueta.
-  return situacionDe(fila, ref) !== SITUACION.HISTORICO;
+  // ══ OPERATIVO = VIGENTE o FUTURO. NADA MÁS ════════════════════════════
+  //
+  // Antes esto era «todo lo que no haya terminado», que metía dentro a los PMT
+  // cuya vigencia NO SE PUEDE DETERMINAR. Eso los presentaba como atendibles
+  // sin saberlo: la misma afirmación sin fundamento que el producto persigue.
+  //
+  // «No determinada» se conserva entero —sigue en «Todo», en el histórico y en
+  // Calidad de los datos—, se cuenta aparte, y la interfaz lo ANUNCIA en la
+  // vista operativa para que se pueda ir a corregir. Lo que no hace es entrar
+  // en un alcance cuya definición exige saber si está vigente.
+  return esAccionable(fila, ref);
 }
 
 /**
@@ -209,9 +218,16 @@ export function filtrarRelaciones(relaciones, f, idsVisibles, ref = null, porId 
  * referencia. Es un dato DERIVADO que se añade a la vista; el hecho almacenado
  * (`hayTraslapeTemporal`, `traslapeInicio`, `traslapeFin`) no se toca jamás.
  */
-export function marcarVigenciaDeRelaciones(relaciones, ref) {
+export function marcarVigenciaDeRelaciones(relaciones, ref, porId = null) {
   if (!ref) return relaciones;
-  return relaciones.map((r) => ({ ...r, articulacionVigente: articulacionCoordinable(r, ref) }));
+  return relaciones.map((r) => ({
+    ...r,
+    articulacionVigente: articulacionCoordinable(r, ref),
+    // RELEVANCIA TEMPORAL de la pareja: accionable, no accionable, o no
+    // evaluable. Es lo que permite que la lectura operativa diga «no se pudo
+    // comprobar» en vez de inventar un «sin coincidencia» que nadie ha medido.
+    relevanciaTemporal: porId ? relevanciaDeRelacion(r, porId, ref) : undefined,
+  }));
 }
 
 /** Valores disponibles para poblar un desplegable, ya ordenados. */

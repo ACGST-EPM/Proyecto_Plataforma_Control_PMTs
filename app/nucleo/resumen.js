@@ -5,7 +5,7 @@
  * son DOS numeros distintos y nunca se suman. Todo lo que no se pudo evaluar
  * sale con su propio contador y su propio color.
  */
-import { estadoEspacial, estadoTemporal, lecturaOperativa, ESPACIAL, TEMPORAL, OPERATIVO, LECTURA } from './modelo.js';
+import { estadoEspacial, estadoTemporal, lecturaOperativaEnContexto, ESPACIAL, TEMPORAL, OPERATIVO, LECTURA } from './modelo.js';
 import { resumenDocumental } from '../../motor/src/modelo/documental.js';
 
 /**
@@ -65,7 +65,7 @@ export function resumir(analisis, filas, relaciones, noEvaluables = [], opciones
     if (t === TEMPORAL.COINCIDE) aLaVez++;
     if (t === TEMPORAL.NO_EVALUABLE) temporalNoEval++;
     if (e === ESPACIAL.CONTACTO && t === TEMPORAL.COINCIDE) contactoALaVez++;
-    const o = lecturaOperativa(r);
+    const o = lecturaOperativaEnContexto(r);
     if (o === OPERATIVO.ARTICULACION_REQUERIDA) articulacion++;
     if (o === OPERATIVO.COINCIDENCIA_ESPACIAL) coincidenciaEspacial++;
   }

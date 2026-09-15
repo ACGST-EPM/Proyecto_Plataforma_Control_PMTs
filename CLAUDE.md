@@ -173,8 +173,17 @@ Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada
 - **REACTIVAR REUTILIZA EL TRAZADO, EXACTAMENTE.** `prepararReactivacion` clona y COMPRUEBA la
   igualdad; el editor bloquea el dibujo; `guardar()` vuelve a comprobarla. Un trazado que se mueve
   solo no lo ve nadie y cambia todas las distancias medidas.
-- **Los documentos NO se heredan al reactivar** (una resolución ampara unas fechas concretas). Si EPM
-  confirma que alguno ampara varias activaciones, se cambia entonces. **DECISIÓN PENDIENTE.**
+- **REACTIVAR NO DECIDE NADA SOBRE LOS DOCUMENTOS.** La versión anterior no los heredaba y lo
+  justificaba diciendo que «una resolución ampara unas fechas concretas»: eso era **tomar la
+  decisión jurídica** que la propia documentación declaraba pendiente (P21). No se puede declarar
+  algo pendiente y a la vez resolverlo en el código.
+  Las dos salidas fáciles son las dos erróneas: copiar el código afirma que sigue valiendo; no
+  guardar nada afirma que no vale **y** pierde una evidencia que alguien tendrá que mirar.
+  Modelo neutral: la activación nueva nace **sin código propio**, y lo que tenía la anterior se
+  guarda en `documentosPrevios` — clave propia, nunca el campo del código. Tercer estado derivado:
+  `HEREDADO_POR_CONFIRMAR`. **No suma a `registrados`** ni a `completo`. Cuando EPM responda P21, la
+  decisión se implementa **sin migrar nada**. Compuerta R, que además vigila que el código no
+  contenga la afirmación jurídica.
 - **Nada de parentescos inventados.** Dos geometrías idénticas NO son el mismo PMT: puede haber dos
   cierres distintos en el mismo sitio. Un KMZ sin identidad explícita es su propia base.
 - **El NÚMERO de activación se DERIVA**, nunca se lee del archivo, y se calcula **una sola vez sobre
@@ -186,10 +195,28 @@ Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada
 - **Ocultar históricos NO es borrarlos.** El alcance temporal es una VISTA. Volver a la fecha de un
   PMT vencido lo devuelve entero, con sus relaciones. `enAlcance` y `filtrarRelaciones` solo deciden
   qué se enseña; los hechos almacenados no se tocan jamás.
-- **Coincidencia vs articulación, alcance distinto y deliberado**: basta con que UNO siga operativo
-  para que la coincidencia sea útil; la articulación exige que **el traslape siga vivo**
-  (`traslapeFin >= ref.desde`), porque solo se puede coordinar un solape que no ha terminado. Una
-  articulación caducada **se degrada a coincidencia espacial**, no desaparece.
+- **COINCIDENCIA OPERATIVA: LOS DOS EXTREMOS, NO UNO.** Para coordinar hacen falta DOS partes. Con
+  un contrato cuya obra terminó no hay nada que acordar, aunque el otro siga vivo. `esAccionable`
+  exige VIGENTE o FUTURO, y `relevanciaDeRelacion` los exige en los DOS. Medido sobre los 8 KMZ
+  reales: la regla anterior («basta con uno») presentaba **95** relaciones como accionables; la
+  correcta presenta **27**, y **cero** con un extremo vencido.
+- La articulación además exige que **el traslape siga vivo** (`traslapeFin >= ref.desde`): solo se
+  coordina un solape que no ha terminado. Una articulación caducada **se degrada a coincidencia
+  espacial**, no desaparece.
+- **NO EVALUABLE ≠ VERDADERO ≠ FALSO**, también aquí. `relevanciaDeRelacion` tiene **TRES** valores.
+  Si alguno de los dos no se puede situar en el tiempo, la respuesta es `NO_EVALUABLE`: la relación
+  **no se esconde** (esconder lo desconocido afirma que no importa) y `lecturaOperativaEnContexto`
+  la presenta como «no se pudo comprobar», nunca como articulación ni como «sin coincidencia».
+- **«VIGENCIA NO DETERMINADA» NO ES OPERATIVA.** La primera versión la contaba como operativa
+  razonando que esconderla afirmaría que terminó. Cierto — pero contarla como atendible afirma que
+  NO ha terminado, y eso tampoco se sabe. Las dos son afirmaciones sobre lo desconocido. Se conserva
+  entera (está en «Todo», en Calidad de los datos y se puede corregir), **se cuenta aparte**, y la
+  interfaz la **anuncia** en la vista operativa con un botón para ir a verla.
+- **`operativos` = `vigentes` + `futuros`. Ni un sumando más.** `repartirPorSituacion` devuelve
+  además `cuadra`: las cuatro categorías son excluyentes y cubren el total. Lo que se cuenta como
+  operativo y lo que se enseña tiene que ser lo mismo — hay prueba y compuerta (Q).
+- **Un PMT sin vigencia no pertenece a ningún año**, así que no sale en ninguna consulta histórica.
+  Es correcto, pero se **dice** junto al selector de año: si no, desaparecería sin que nadie lo supiera.
 - **Un PMT pertenece a TODO año que su vigencia toque** (`aniosDe`). Cualquier otra regla lo hace
   desaparecer de una consulta legítima.
 - El selector de año se **puebla con los datos** (`inventarioDeAnios`), nunca con una lista fija: una
@@ -202,12 +229,13 @@ Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada
   revés había ciclo de importaciones y el empaquetador de un solo archivo revienta.
 
 #### Compuertas de entrega
-- `npm run compuertas` ejecuta 15 comprobaciones (A..O) sobre el PRODUCTO, no sobre el código. Cada
-  una se rompió a propósito una vez para comprobar que detecta su infracción: 15 de 15.
-  Las tres últimas vigilan lo añadido en el cierre operativo: **M** reactivar reutiliza el trazado
-  exactamente, **N** la clasificación temporal usa una sola fecha de referencia, **O** ocultar
-  históricos nunca borra un hecho.
-- Pruebas: **259 motor + 245 app + 74 de navegador real + 15 compuertas**.
+- `npm run compuertas` ejecuta 18 comprobaciones (A..R) sobre el PRODUCTO, no sobre el código. Cada
+  una se rompió a propósito una vez para comprobar que detecta su infracción: 18 de 18.
+  **M** reactivar reutiliza el trazado exactamente · **N** una sola fecha de referencia ·
+  **O** ocultar históricos nunca borra un hecho · **P** una coincidencia operativa exige DOS partes
+  coordinables · **Q** lo que no se puede situar no se cuenta como atendible · **R** reactivar no
+  decide si un documento anterior sigue valiendo.
+- Pruebas: **259 motor + 258 app + 77 de navegador real + 18 compuertas**.
 
 ### Otras reglas de la 2.4
 - `motor/src/geo/plano-local.js` añade `desproyectar()` (inverso del plano ENU, iterando

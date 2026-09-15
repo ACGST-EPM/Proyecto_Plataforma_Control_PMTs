@@ -25,7 +25,7 @@
  *            un invariante del proyecto. La procedencia va en el NOMBRE DEL
  *            ARCHIVO, que viaja con el fichero aunque se envie por correo.
  */
-import { estadoEspacial, estadoTemporal, lecturaOperativa,
+import { estadoEspacial, estadoTemporal, lecturaOperativaEnContexto,
   ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL, ETIQUETA_OPERATIVO } from './modelo.js';
 import { selloProcedencia, selloEnUnaLinea, VERSION_APP, VERSION_REGLAS } from './version.js';
 
@@ -46,12 +46,24 @@ export function pmtsACsv(filas) {
     // separados a proposito: una columna que mezcle «RES-1234» con «Pendiente»
     // no se puede contar ni filtrar.
     'RESOLUCION_PMT', 'PERMISO_ROTURA', 'CIERRE_PERMISO_ROTURA', 'ESTADO_DOCUMENTAL',
-    'ARCHIVO_ORIGEN', 'AVISOS'];
+    'ARCHIVO_ORIGEN', 'AVISOS',
+    // AL FINAL, para no mover ninguna posicion existente. Son DERIVADOS y por
+    // eso van etiquetados: SITUACION depende de la fecha de referencia con la
+    // que se exporto —que viaja en el nombre del archivo—, y DOC_POR_CONFIRMAR
+    // dice cuantos documentos vienen de una activacion anterior sin que nadie
+    // haya decidido si amparan esta.
+    'PMT_BASE', 'ACTIVACION', 'SITUACION', 'DOC_POR_CONFIRMAR'];
   const cuerpo = filas.map((x) => [x.id, x.contrato, x.contratista, x.proyecto, x.municipio,
     x.frente, x.direccion, x.tipoCierre, x.inicio, x.fin, x.tipoGeometria,
     x.resolucionPmt ?? '', x.permisoRotura ?? '', x.cierrePermisoRotura ?? '',
     x.documental?.resumen ?? '', x.origenArchivo,
-    (x.avisos ?? []).join(' | ')]);
+    (x.avisos ?? []).join(' | '),
+    x.idBase ?? x.id,
+    x.activacion?.de > 1 ? `${x.activacion.numero} de ${x.activacion.de}` : '1 de 1',
+    // `_situacion` la pone quien pinta, a partir de la fecha de referencia. Si
+    // no viene, se deja vacio: inventarla aqui usaria otro reloj.
+    x._situacion ?? '',
+    x.documental?.porConfirmar ?? 0]);
   return BOM + csvFilas([cab, ...cuerpo]);
 }
 
@@ -78,7 +90,7 @@ export function relacionesACsv(relaciones, porId) {
       [r.motivoNoEvaluableEspacial ? `distancia: ${r.motivoNoEvaluableEspacial}` : '',
        r.traslapeEvaluable === false && r.motivoSinTraslape ? `fechas: ${r.motivoSinTraslape}` : '']
         .filter(Boolean).join(' | '),
-      ETIQUETA_OPERATIVO[lecturaOperativa(r)],
+      ETIQUETA_OPERATIVO[lecturaOperativaEnContexto(r)],
     ];
   });
   return BOM + csvFilas([cab, ...cuerpo]);

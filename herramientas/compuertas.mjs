@@ -343,6 +343,105 @@ await compuerta('O', 'Ocultar históricos nunca borra un hecho', async () => {
   return 'fuera de la vista operativa, intacto en el histórico, entero al volver a su fecha';
 });
 
+/* ── P · Coincidencia operativa: los DOS extremos, no uno ── */
+await compuerta('P', 'Una coincidencia operativa exige DOS partes coordinables', async () => {
+  const T = await import('../app/nucleo/temporalidad.js');
+  const hoy = T.referencia({ ahora: Date.UTC(2026, 8, 14) });
+  const pmt = (id, ini, fin) => ({ id, vigenciaValida: true,
+    inicioMs: ini, finMs: fin, inicio: 'x', fin: 'y' });
+  const H = pmt('H', Date.UTC(2025, 2, 1), Date.UTC(2025, 2, 20));   // vencido
+  const V = pmt('V', Date.UTC(2026, 8, 1), Date.UTC(2026, 11, 1));   // vigente
+  const F = pmt('F', Date.UTC(2027, 0, 10), Date.UTC(2027, 1, 10));  // futuro
+  const S = { id: 'S', vigenciaValida: false, inicioMs: null, finMs: null };
+  const porId = new Map([['H', H], ['V', V], ['F', F], ['S', S]]);
+  const r = (a, b) => T.relevanciaDeRelacion({ idA: a, idB: b }, porId, hoy);
+
+  // Para coordinar hacen falta DOS. Con un contrato cuya obra terminó no hay
+  // nada que acordar, aunque el otro siga vivo.
+  for (const [a, b] of [['H', 'V'], ['H', 'F'], ['H', 'H']]) {
+    exigir(r(a, b) === T.RELEVANCIA.NO_ACCIONABLE,
+      `${a}+${b} se presenta como accionable y no lo es`);
+  }
+  for (const [a, b] of [['V', 'F'], ['V', 'V'], ['F', 'F']]) {
+    exigir(r(a, b) === T.RELEVANCIA.ACCIONABLE, `${a}+${b} tendría que ser accionable`);
+  }
+  // Y lo desconocido no se convierte en ninguna de las dos respuestas.
+  for (const [a, b] of [['V', 'S'], ['H', 'S']]) {
+    exigir(r(a, b) === T.RELEVANCIA.NO_EVALUABLE,
+      `${a}+${b} responde con certeza a algo que no se sabe`);
+  }
+  return 'vencido+vivo NO · vivo+vivo SÍ · con indeterminado, no se sabe';
+});
+
+/* ── Q · «Vigencia no determinada» nunca cuenta como operativa ── */
+await compuerta('Q', 'Lo que no se puede situar no se cuenta como atendible', async () => {
+  const T = await import('../app/nucleo/temporalidad.js');
+  const { filtrarPmts, filtrosVacios } = await import('../app/nucleo/filtrado.js');
+  const hoy = T.referencia({ ahora: Date.UTC(2026, 8, 14) });
+  const filas = [
+    { id: 'v', vigenciaValida: true, inicioMs: Date.UTC(2026, 8, 1), finMs: Date.UTC(2026, 11, 1) },
+    { id: 'f', vigenciaValida: true, inicioMs: Date.UTC(2027, 0, 1), finMs: Date.UTC(2027, 1, 1) },
+    { id: 'h', vigenciaValida: true, inicioMs: Date.UTC(2025, 0, 1), finMs: Date.UTC(2025, 1, 1) },
+    { id: 's', vigenciaValida: false, inicioMs: null, finMs: null },
+  ];
+  const r = T.repartirPorSituacion(filas, hoy);
+
+  exigir(T.esAccionable(filas[3], hoy) === false,
+    'una vigencia que no se puede determinar NO puede darse por atendible');
+  exigir(r.operativos === 2,
+    `«operativo» vale ${r.operativos} y tendría que ser 2 (1 vigente + 1 programado)`);
+  exigir(r.operativos === r.vigentes + r.futuros,
+    '«operativo» tiene que ser explicable como vigentes + futuros, sin sumandos ocultos');
+  exigir(r.vigentes + r.futuros + r.historicos + r.sinVigencia === r.total,
+    'las cuatro categorías tienen que ser excluyentes y cubrir el total');
+  exigir(r.cuadra === true, 'el reparto se declara descuadrado');
+
+  // Y lo que se cuenta es EXACTAMENTE lo que se enseña.
+  const vistos = filtrarPmts(filas, { ...filtrosVacios(), alcance: T.ALCANCE.OPERATIVO }, hoy);
+  exigir(vistos.length === r.operativos,
+    `se cuentan ${r.operativos} operativos y se enseñan ${vistos.length}`);
+  // Pero NO se ha perdido: sigue entero en «Todo».
+  exigir(filtrarPmts(filas, { ...filtrosVacios(), alcance: T.ALCANCE.TODO }, hoy).length === 4,
+    'lo que no se puede situar tiene que seguir estando en «Todo»');
+  return 'operativo = vigentes + futuros · lo indeterminado se conserva y se cuenta aparte';
+});
+
+/* ── R · Reactivar no decide la validez de un documento ── */
+await compuerta('R', 'Reactivar no decide si un documento anterior sigue valiendo', async () => {
+  const Id = await import('../app/nucleo/identidad-pmt.js');
+  const { estadoDocumental, ESTADO_DOC } = await import('../motor/src/modelo/documental.js');
+  const origen = { id: 'x', contrato: 'CW1', tipoCierre: 'total',
+    resolucionPmt: 'RES-1', permisoRotura: 'PR-1',
+    geometria: { type: 'Point', coordinates: [-75.6, 6.2] } };
+  const r = Id.prepararReactivacion(origen, {});
+  exigir(r.ok, 'no se pudo preparar: ' + r.motivo);
+
+  // Ni se copia (afirmaría que vale) ni se pierde (afirmaría que no vale).
+  exigir(r.datos.resolucionPmt === null,
+    'copia el código anterior: eso afirma que el documento ampara la vigencia nueva');
+  exigir(r.datos.documentosPrevios?.resolucionPmt === 'RES-1',
+    'pierde la evidencia del documento anterior, que alguien tendrá que mirar');
+
+  const e = estadoDocumental(r.datos);
+  exigir(e.registrados === 0, 'un documento por confirmar NO puede contar como registrado');
+  exigir(e.porConfirmar === 2, 'tienen que contarse aparte, con su propio nombre');
+  const d = e.detalle.find((x) => x.clave === 'resolucionPmt');
+  exigir(d.estado === ESTADO_DOC.HEREDADO_POR_CONFIRMAR,
+    'el estado tiene que ser el tercero, no «registrado» ni «pendiente»');
+  exigir(d.codigo === null && d.codigoPrevio === 'RES-1',
+    'el código anterior nunca puede ocupar el sitio del propio');
+
+  // Y el código de la aplicación no puede afirmar la regla jurídica.
+  const afirmaciones = /ampara unas fechas concretas|no se heredan|deja de aplicar|sigue siendo válid/i;
+  for (const f of ['app/nucleo/identidad-pmt.js', 'motor/src/modelo/documental.js']) {
+    const malas = soloCodigo(leer(f))
+      .map((l, i) => (afirmaciones.test(l) ? `${i + 1}: ${l.trim()}` : null)).filter(Boolean);
+    exigir(malas.length === 0,
+      `${f} decide una regla jurídica que EPM no ha aprobado (P21):\n  ` + malas.join('\n  '));
+  }
+  return 'ni se copia ni se borra: se conserva como evidencia, con su estado propio';
+});
+
 /* ── utilidades ── */
 function listar(dir, re, acc = []) {
   const raiz = path.join(RAIZ, dir);

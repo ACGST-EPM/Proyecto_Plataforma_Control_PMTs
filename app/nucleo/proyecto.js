@@ -185,6 +185,15 @@ export function crearProyecto({ filas, relaciones, noEvaluables, archivos, confi
       resolucionPmt: normalizarCodigoDocumental(x.resolucionPmt).codigo,
       permisoRotura: normalizarCodigoDocumental(x.permisoRotura).codigo,
       cierrePermisoRotura: normalizarCodigoDocumental(x.cierrePermisoRotura).codigo,
+      // EVIDENCIA de la activación anterior, cuando la hay. Es ENTRADA, igual
+      // que los códigos propios: no se puede derivar de nada y se perdería al
+      // guardar. Va en su propia clave para que jamás pueda confundirse con un
+      // código tramitado para ESTA activación.
+      ...(x.documentosPrevios ? { documentosPrevios: {
+        resolucionPmt: normalizarCodigoDocumental(x.documentosPrevios.resolucionPmt).codigo,
+        permisoRotura: normalizarCodigoDocumental(x.documentosPrevios.permisoRotura).codigo,
+        cierrePermisoRotura: normalizarCodigoDocumental(x.documentosPrevios.cierrePermisoRotura).codigo,
+      } } : {}),
       avisos: x.avisos ?? [], geometria: x.geometria,
     })),
     /**
@@ -355,7 +364,18 @@ export function leerProyecto(texto) {
       vigenciaEstado: vig.estado, inicioValido: vig.inicioValido, finValido: vig.finValido,
       duplicadoExacto: marcaDuplicado, idRepetidoEnOrigen: marcaIdRepetido,
       ...documentos,
-      documental: estadoDocumental(documentos),
+      // Se acepta solo si es un objeto: cualquier otra cosa se ignora en vez de
+      // agrupar mal en silencio. Los códigos se vuelven a normalizar, así que
+      // «Pendiente» tampoco entra por esta vía.
+      ...(esObjeto(t.documentosPrevios) ? { documentosPrevios: Object.fromEntries(
+        DOCUMENTOS.map((d) => [d.clave,
+          normalizarCodigoDocumental(t.documentosPrevios[d.clave], d.etiqueta).codigo])),
+      } : {}),
+      documental: estadoDocumental({ ...documentos,
+        ...(esObjeto(t.documentosPrevios) ? { documentosPrevios: Object.fromEntries(
+          DOCUMENTOS.map((d) => [d.clave,
+            normalizarCodigoDocumental(t.documentosPrevios[d.clave], d.etiqueta).codigo])),
+        } : {}) }),
       geometria,
       tipoGeometria: geometria?.type ?? null,
       tieneGeometria: !!geometria,

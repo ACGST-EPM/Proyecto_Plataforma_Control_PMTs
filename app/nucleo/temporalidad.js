@@ -70,14 +70,14 @@ export const SITUACION = Object.freeze({
   VIGENTE: 'vigente',
   FUTURO: 'futuro',
   HISTORICO: 'historico',
-  SIN_VIGENCIA: 'sin-vigencia',   // no se puede situar en el tiempo. NO es «vencido».
+  SIN_VIGENCIA: 'sin-vigencia',   // NO SE PUEDE SITUAR. Ni vencido, ni vigente, ni futuro.
 });
 
 export const ETIQUETA_SITUACION = Object.freeze({
   [SITUACION.VIGENTE]: 'Vigente',
   [SITUACION.FUTURO]: 'Programado',
   [SITUACION.HISTORICO]: 'Histórico',
-  [SITUACION.SIN_VIGENCIA]: 'Sin vigencia utilizable',
+  [SITUACION.SIN_VIGENCIA]: 'Vigencia no determinada',
 });
 
 /**
@@ -139,26 +139,88 @@ export function situacionDe(fila, ref) {
   return SITUACION.VIGENTE;
 }
 
-/** ¿Este PMT sigue siendo accionable desde la referencia? */
-export const esOperativo = (fila, ref) => {
+/**
+ * ¿Se puede TODAVÍA actuar sobre este PMT desde la referencia?
+ *
+ * ══ NO EVALUABLE ≠ VERDADERO ≠ FALSO ══════════════════════════════════════
+ *
+ * La primera versión de esto devolvía `true` para «vigencia no determinada»,
+ * razonando que esconderlo equivaldría a afirmar que había terminado. El
+ * razonamiento tenía una mitad buena y una mitad mala, y la mala es más grave:
+ *
+ *   · es CIERTO que esconderlo afirma que terminó;
+ *   · pero contarlo como accionable afirma que NO ha terminado, y eso tampoco
+ *     se sabe.
+ *
+ * Las dos son afirmaciones sobre algo desconocido. La respuesta correcta no es
+ * elegir una: es **no responder que sí**. Por eso esto exige VIGENTE o FUTURO,
+ * y «no determinada» tiene su propio camino: se conserva, se cuenta aparte, se
+ * anuncia y se puede corregir — pero no entra en ningún cálculo que necesite
+ * saber si está vigente.
+ *
+ * Es el mismo principio que atraviesa el producto desde la Etapa 1: «no se
+ * pudo analizar» nunca se presenta como «no hay».
+ */
+export const esAccionable = (fila, ref) => {
   const s = situacionDe(fila, ref);
-  // «Sin vigencia» cuenta como operativo A PROPÓSITO: no se puede afirmar que
-  // haya terminado, así que esconderlo sería afirmarlo. Sale con su etiqueta.
-  return s !== SITUACION.HISTORICO;
+  return s === SITUACION.VIGENTE || s === SITUACION.FUTURO;
 };
 
+/** ¿Se puede situar este PMT en el tiempo? Sin esto no se puede decidir nada. */
+export const seSitua = (fila, ref) => situacionDe(fila, ref) !== SITUACION.SIN_VIGENCIA;
+
+/** Relevancia operativa de una relación. TRES valores, no dos. */
+export const RELEVANCIA = Object.freeze({
+  ACCIONABLE: 'accionable',       // los dos se pueden coordinar todavía
+  NO_ACCIONABLE: 'no-accionable', // al menos uno ya terminó: no queda nada que hacer
+  NO_EVALUABLE: 'no-evaluable',   // al menos uno no se puede situar en el tiempo
+});
+
 /**
- * ¿Es esta relación una COINCIDENCIA ESPACIAL todavía accionable?
+ * ¿Se puede TODAVÍA coordinar esta coincidencia espacial?
  *
- * Regla: basta con que UNO de los dos siga siendo operativo. Es lo que pidió la
- * operación —«no mostrar como alerta una coincidencia formada EXCLUSIVAMENTE
- * por PMT ya vencidos»— y tiene sentido: que donde hoy trabaja alguien hubo
- * otra intervención es contexto útil, aunque aquella ya terminara.
+ * ══ LA REGLA, Y POR QUÉ ES «LOS DOS» ══════════════════════════════════════
+ *
+ * La primera versión pedía solo que UNO de los dos siguiera vivo, razonando
+ * que «donde hoy trabaja alguien hubo otra intervención» es contexto útil. Eso
+ * confunde DOS cosas distintas:
+ *
+ *   · contexto histórico del lugar  → sí, es útil, y para eso está el histórico;
+ *   · capacidad de coordinar AHORA  → para coordinar hacen falta DOS partes.
+ *
+ * Coordinar con un contrato cuya obra terminó hace cuatro meses no es posible:
+ * no hay nada que acordar con quien ya se fue. Presentarlo en la vista
+ * operativa como algo sobre lo que actuar es prometer una acción que no existe.
+ *
+ * Así que la vista operativa exige que **los dos** sean accionables (vigente o
+ * futuro, en cualquier combinación). La relación **no se borra**: sigue en la
+ * base, sale en el histórico, y vuelve entera al consultar la fecha en que los
+ * dos estaban vivos.
+ *
+ * ══ Y EL TERCER VALOR ═════════════════════════════════════════════════════
+ *
+ * Si alguno de los dos NO SE PUEDE SITUAR en el tiempo, la respuesta no es «no
+ * accionable»: es «no se sabe». Se devuelve `NO_EVALUABLE`, que ni la esconde
+ * ni la presenta como algo sobre lo que actuar.
+ */
+export function relevanciaDeRelacion(rel, porId, ref) {
+  const a = porId?.get(rel.idA), b = porId?.get(rel.idB);
+  // Sin poder mirar los extremos no se afirma nada en ninguna dirección.
+  if (!a || !b) return RELEVANCIA.NO_EVALUABLE;
+  if (!seSitua(a, ref) || !seSitua(b, ref)) return RELEVANCIA.NO_EVALUABLE;
+  return (esAccionable(a, ref) && esAccionable(b, ref))
+    ? RELEVANCIA.ACCIONABLE : RELEVANCIA.NO_ACCIONABLE;
+}
+
+/**
+ * ¿Debe verse esta relación en la vista operativa?
+ *
+ * Se descarta SOLO lo que se ha comprobado que no es accionable. Lo que no se
+ * puede evaluar **se conserva**, con su etiqueta: esconder lo desconocido es la
+ * misma afirmación sin fundamento, del otro lado.
  */
 export function coincidenciaAccionable(rel, porId, ref) {
-  const a = porId.get(rel.idA), b = porId.get(rel.idB);
-  if (!a || !b) return true;            // sin poder comprobarlo, no se esconde
-  return esOperativo(a, ref) || esOperativo(b, ref);
+  return relevanciaDeRelacion(rel, porId, ref) !== RELEVANCIA.NO_ACCIONABLE;
 }
 
 /**
@@ -257,12 +319,24 @@ export function repartirPorSituacion(filas, ref) {
   const r = { vigentes: 0, futuros: 0, historicos: 0, sinVigencia: 0, operativos: 0, total: filas.length };
   for (const x of filas) {
     switch (situacionDe(x, ref)) {
-      case SITUACION.VIGENTE: r.vigentes++; r.operativos++; break;
-      case SITUACION.FUTURO: r.futuros++; r.operativos++; break;
+      case SITUACION.VIGENTE: r.vigentes++; break;
+      case SITUACION.FUTURO: r.futuros++; break;
       case SITUACION.HISTORICO: r.historicos++; break;
-      default: r.sinVigencia++; r.operativos++; break;
+      default: r.sinVigencia++; break;
     }
   }
+  // ══ «OPERATIVO» TIENE QUE SER EXPLICABLE DESDE SUS SUMANDOS ═════════════
+  //
+  // Antes esto sumaba también `sinVigencia`, y el resultado era una cifra que
+  // no cuadraba con ninguna categoría visible: 174 + 8 = 182, pero decía 183.
+  // Quien lo leyera no podía reconstruir de dónde salía el número, y un número
+  // que no se puede reconstruir no se puede comprobar.
+  //
+  // Operativo = lo que se puede atender = VIGENTE + FUTURO. Ni uno más.
+  r.operativos = r.vigentes + r.futuros;
+  // Las cuatro categorías son EXCLUYENTES y CUBREN el total. Si algún día
+  // dejaran de hacerlo, es un defecto, no un detalle: hay prueba y compuerta.
+  r.cuadra = (r.vigentes + r.futuros + r.historicos + r.sinVigencia) === r.total;
   return r;
 }
 

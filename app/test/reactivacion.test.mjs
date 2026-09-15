@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 
 import * as Id from '../nucleo/identidad-pmt.js';
 import * as T from '../nucleo/temporalidad.js';
+import { estadoDocumental, ESTADO_DOC } from '../../motor/src/modelo/documental.js';
 
 const dia = (a, m, d) => Date.UTC(a, m - 1, d);
 const txt = (ms) => new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
@@ -64,20 +65,61 @@ test('B · reactivar reutiliza la geometría EXACTAMENTE, coordenada a coordenad
   assert.equal(origen.geometria.coordinates[0][0], -75.6, 'la original quedó intacta');
 });
 
-test('B · reactivar hereda la identidad y NO hereda los documentos', () => {
+test('B · reactivar hereda la identidad y NO DECIDE sobre los documentos', () => {
   const origen = pmt('base_a', { resolucionPmt: 'RES-1', permisoRotura: 'PR-1' });
   const r = Id.prepararReactivacion(origen, { inicio: txt(dia(2025, 5, 1)), fin: txt(dia(2025, 5, 20)) });
   for (const k of ['contrato', 'contratista', 'proyecto', 'frente', 'municipio', 'direccion', 'tipoCierre']) {
     assert.equal(r.datos[k], origen[k], `no heredó «${k}»`);
   }
   assert.equal(r.datos.idBase, 'base_a');
-  // Una resolución ampara unas fechas concretas: copiar el número a una
-  // vigencia nueva haría pasar por tramitado algo que no lo está.
-  assert.equal(r.datos.resolucionPmt, null);
+
+  // ══ NI SE COPIA NI SE BORRA ═══════════════════════════════════════════
+  //
+  // No sabemos si la resolución anterior ampara la vigencia nueva (P21).
+  // Copiarla afirmaría que sí; no guardar nada afirmaría que no y además
+  // perdería una evidencia que alguien tendrá que mirar para decidir.
+  assert.equal(r.datos.resolucionPmt, null, 'sin código PROPIO: nadie ha tramitado nada aquí');
   assert.equal(r.datos.permisoRotura, null);
-  // Salvo que se pida explícitamente.
-  const c = Id.prepararReactivacion(origen, { copiarDocumentos: true });
-  assert.equal(c.datos.resolucionPmt, 'RES-1');
+  assert.deepEqual(r.datos.documentosPrevios,
+    { resolucionPmt: 'RES-1', permisoRotura: 'PR-1', cierrePermisoRotura: null },
+    'pero la evidencia de la activación anterior SE CONSERVA, en su propio sitio');
+
+  // Y el estado derivado dice exactamente lo que se sabe.
+  const e = estadoDocumental(r.datos);
+  const res = e.detalle.find((d) => d.clave === 'resolucionPmt');
+  assert.equal(res.estado, ESTADO_DOC.HEREDADO_POR_CONFIRMAR);
+  assert.equal(res.codigo, null, 'no tiene código propio');
+  assert.equal(res.codigoPrevio, 'RES-1', 'y el anterior viaja con su propio nombre');
+  assert.equal(e.registrados, 0, 'un documento por confirmar NO cuenta como registrado');
+  assert.equal(e.porConfirmar, 2);
+  assert.equal(e.resumen, '0/3');
+  assert.equal(e.completo, false);
+});
+
+test('B · un documento por confirmar no se puede hacer pasar por tramitado', () => {
+  // La evidencia va en `documentosPrevios`, nunca en el campo del código. Si
+  // ocupara el campo, en la siguiente lectura sería indistinguible de uno
+  // tramitado para esta vigencia, y la decisión quedaría tomada por accidente.
+  const origen = pmt('base_a', { resolucionPmt: 'RES-1' });
+  const r = Id.prepararReactivacion(origen, {});
+  assert.ok(!('resolucionPmt' in r.datos) || r.datos.resolucionPmt === null);
+  // Y si alguien SÍ tramita uno nuevo, manda el suyo y el previo desaparece
+  // de la vista: ya no hay nada que confirmar.
+  const conPropio = estadoDocumental({ ...r.datos, resolucionPmt: 'RES-2' });
+  const d = conPropio.detalle.find((x) => x.clave === 'resolucionPmt');
+  assert.equal(d.estado, ESTADO_DOC.REGISTRADO);
+  assert.equal(d.codigo, 'RES-2');
+  assert.equal(d.codigoPrevio, null);
+});
+
+test('B · el estado documental sin historia previa se comporta como siempre', () => {
+  // Un PMT que viene de un KMZ no tiene `documentosPrevios`: nada cambia.
+  const e = estadoDocumental({ resolucionPmt: 'RES-9' });
+  assert.equal(e.registrados, 1);
+  assert.equal(e.porConfirmar, 0);
+  assert.equal(e.resumen, '1/3');
+  assert.deepEqual(e.pendientes, ['permisoRotura', 'cierrePermisoRotura']);
+  assert.deepEqual(e.clavesPorConfirmar, []);
 });
 
 test('B · un PMT sin trazado NO se puede reactivar, y se dice por qué', () => {
@@ -156,12 +198,18 @@ test('C · vigente, futuro e histórico son RESPECTO DE una fecha', () => {
   assert.equal(T.situacionDe(x, T.referencia({ ahora: dia(2025, 1, 10) })), T.SITUACION.VIGENTE);
 });
 
-test('C · «sin vigencia utilizable» NO es «vencido», y no se esconde', () => {
+test('C · «vigencia no determinada» no es vencido NI accionable: es desconocido', () => {
   const x = pmt('x', { vigenciaValida: false, inicioMs: null, finMs: null });
   const ref = T.referencia({ ahora: dia(2026, 9, 14) });
   assert.equal(T.situacionDe(x, ref), T.SITUACION.SIN_VIGENCIA);
-  assert.equal(T.esOperativo(x, ref), true,
-    'no se puede afirmar que haya terminado, así que esconderlo sería afirmarlo');
+  // NO EVALUABLE ≠ VERDADERO ≠ FALSO. Esconderlo afirma que terminó; contarlo
+  // como accionable afirma que no ha terminado. Las dos son afirmaciones sobre
+  // algo que no se sabe, y la respuesta correcta es no responder que sí.
+  assert.equal(T.esAccionable(x, ref), false, 'no se puede afirmar que se pueda atender');
+  assert.equal(T.seSitua(x, ref), false, 'y no se puede situar en el tiempo');
+  assert.notEqual(T.situacionDe(x, ref), T.SITUACION.HISTORICO, 'tampoco es «vencido»');
+  // Pero se CONSERVA: sigue en el conjunto y sale en «Todo».
+  assert.equal(enAlcance(x, { alcance: T.ALCANCE.TODO }, ref), true);
 });
 
 test('C · el origen de la fecha de referencia es siempre explícito', () => {
@@ -229,13 +277,72 @@ test('E · una coincidencia SOLO entre vencidos no es alerta operativa hoy', () 
   assert.equal(T.coincidenciaAccionable(rel('A', 'B'), porId, entonces), true);
 });
 
-test('E · basta con que UNO siga operativo para que la coincidencia sea útil', () => {
+test('E · una coincidencia con UN extremo vencido NO es accionable hoy', () => {
+  // Para coordinar hacen falta DOS partes. Con un contrato cuya obra terminó
+  // hace meses no hay nada que acordar: presentarlo como algo sobre lo que
+  // actuar promete una acción que no existe. El contexto histórico del lugar
+  // es otra pregunta, y para eso está el histórico.
   const a = pmt('A');                                             // 2025, vencido
   const c = pmt('C', { contrato: 'CW2', inicioMs: dia(2026, 9, 1), finMs: dia(2026, 12, 1) });
   const porId = new Map([['A', a], ['C', c]]);
   const hoy = T.referencia({ ahora: dia(2026, 9, 14) });
-  assert.equal(T.coincidenciaAccionable(rel('A', 'C'), porId, hoy), true,
-    'que donde hoy trabaja alguien hubo otra intervención es contexto útil');
+  assert.equal(T.relevanciaDeRelacion(rel('A', 'C'), porId, hoy), T.RELEVANCIA.NO_ACCIONABLE);
+  assert.equal(T.coincidenciaAccionable(rel('A', 'C'), porId, hoy), false);
+
+  // Y la relación NO se ha borrado. En enero de 2025, A estaba en obra y C era
+  // una intervención PROGRAMADA en el mismo sitio: eso sí se podía coordinar,
+  // y por eso desde aquella fecha vuelve a ser accionable. La regla compone
+  // sola: vigente + futuro = SÍ, se mire desde donde se mire.
+  const entonces = T.referencia({ origen: T.ORIGEN.ELEGIDA, ms: dia(2025, 1, 20) });
+  assert.equal(T.situacionDe(a, entonces), T.SITUACION.VIGENTE);
+  assert.equal(T.situacionDe(c, entonces), T.SITUACION.FUTURO);
+  assert.equal(T.relevanciaDeRelacion(rel('A', 'C'), porId, entonces), T.RELEVANCIA.ACCIONABLE,
+    'la relación nunca se borró: vuelve entera al mirar la fecha pertinente');
+});
+
+test('E · la matriz completa de accionabilidad, combinación por combinación', () => {
+  const hoy = T.referencia({ ahora: dia(2026, 9, 14) });
+  const HIST = pmt('H', { inicioMs: dia(2025, 3, 1), finMs: dia(2025, 3, 20),
+    inicio: txt(dia(2025, 3, 1)), fin: txt(dia(2025, 3, 20)) });
+  const VIG = pmt('V', { contrato: 'CW2', inicioMs: dia(2026, 9, 1), finMs: dia(2026, 12, 1),
+    inicio: txt(dia(2026, 9, 1)), fin: txt(dia(2026, 12, 1)) });
+  const FUT = pmt('F', { contrato: 'CW3', inicioMs: dia(2027, 1, 10), finMs: dia(2027, 2, 10),
+    inicio: txt(dia(2027, 1, 10)), fin: txt(dia(2027, 2, 10)) });
+  const SINV = pmt('S', { contrato: 'CW4', vigenciaValida: false, inicioMs: null, finMs: null });
+  const porId = new Map([['H', HIST], ['V', VIG], ['F', FUT], ['S', SINV]]);
+
+  const casos = [
+    ['H', 'F', T.RELEVANCIA.NO_ACCIONABLE, 'histórico + futuro → NO alerta operativa'],
+    ['H', 'V', T.RELEVANCIA.NO_ACCIONABLE, 'histórico + vigente → NO'],
+    ['H', 'H', T.RELEVANCIA.NO_ACCIONABLE, 'histórico + histórico → NO'],
+    ['V', 'F', T.RELEVANCIA.ACCIONABLE, 'vigente + futuro → SÍ'],
+    ['F', 'F', T.RELEVANCIA.ACCIONABLE, 'futuro + futuro → SÍ'],
+    ['V', 'V', T.RELEVANCIA.ACCIONABLE, 'vigente + vigente → SÍ'],
+    // Lo desconocido no se convierte en ninguna de las dos respuestas.
+    ['V', 'S', T.RELEVANCIA.NO_EVALUABLE, 'vigente + no determinada → no se sabe'],
+    ['H', 'S', T.RELEVANCIA.NO_EVALUABLE, 'histórico + no determinada → no se sabe'],
+  ];
+  for (const [a, b, esperado, porQue] of casos) {
+    assert.equal(T.relevanciaDeRelacion(rel(a, b), porId, hoy), esperado, porQue);
+    // Y es simétrica: A/B = B/A.
+    assert.equal(T.relevanciaDeRelacion(rel(b, a), porId, hoy), esperado, porQue + ' (al revés)');
+  }
+});
+
+test('E · lo NO EVALUABLE se conserva en la vista operativa, con su etiqueta', () => {
+  const v = pmt('V', { inicioMs: dia(2026, 9, 1), finMs: dia(2026, 12, 1) });
+  const s = pmt('S', { contrato: 'CW4', vigenciaValida: false, inicioMs: null, finMs: null });
+  const porId = new Map([['V', v], ['S', s]]);
+  const hoy = T.referencia({ ahora: dia(2026, 9, 14) });
+  const r = rel('V', 'S', { hayTraslapeTemporal: false });
+
+  // No se esconde: esconder lo desconocido es la misma afirmación sin
+  // fundamento, del otro lado.
+  assert.equal(T.coincidenciaAccionable(r, porId, hoy), true);
+  const [marcada] = marcarVigenciaDeRelaciones([r], hoy, porId);
+  assert.equal(marcada.relevanciaTemporal, T.RELEVANCIA.NO_EVALUABLE);
+  assert.equal(lecturaOperativaEnContexto(marcada), OPERATIVO.NO_EVALUABLE,
+    'ni «articulación requerida» ni «sin coincidencia»: no se pudo comprobar');
 });
 
 test('E · una articulación cuyo traslape YA PASÓ no se puede coordinar', () => {
@@ -258,17 +365,47 @@ test('E · si el traslape no se puede situar, NO se esconde', () => {
     'no poder comprobarlo nunca puede convertirse en ocultarlo');
 });
 
-test('E · el reparto por situación dice SIEMPRE de qué conjunto se habla', () => {
+test('E · los contadores CUADRAN y «operativo» se explica desde sus sumandos', () => {
   const hoy = T.referencia({ ahora: dia(2026, 9, 14) });
   const r = T.repartirPorSituacion([
     pmt('A'),                                                               // histórico
     pmt('C', { inicioMs: dia(2026, 9, 1), finMs: dia(2026, 12, 1) }),        // vigente
     pmt('D', { inicioMs: dia(2027, 1, 1), finMs: dia(2027, 2, 1) }),         // futuro
-    pmt('E', { vigenciaValida: false, inicioMs: null, finMs: null }),        // sin vigencia
+    pmt('E', { vigenciaValida: false, inicioMs: null, finMs: null }),        // no determinada
   ], hoy);
   assert.deepEqual(r, {
-    vigentes: 1, futuros: 1, historicos: 1, sinVigencia: 1, operativos: 3, total: 4,
+    vigentes: 1, futuros: 1, historicos: 1, sinVigencia: 1,
+    // 1 + 1 = 2. NO 3: «vigencia no determinada» no entra en «operativo».
+    operativos: 2, total: 4, cuadra: true,
   });
+  // Las cuatro categorías son excluyentes y cubren el total.
+  assert.equal(r.vigentes + r.futuros + r.historicos + r.sinVigencia, r.total);
+  // Y «operativo» se reconstruye exactamente desde dos de ellas.
+  assert.equal(r.operativos, r.vigentes + r.futuros);
+});
+
+test('E · los contadores cuadran con cualquier mezcla, en cantidad', () => {
+  const hoy = T.referencia({ ahora: dia(2026, 9, 14) });
+  const filas = [];
+  for (let i = 0; i < 40; i++) filas.push(pmt('h' + i));                     // históricos
+  for (let i = 0; i < 17; i++) {
+    filas.push(pmt('v' + i, { inicioMs: dia(2026, 9, 1), finMs: dia(2026, 12, 1) }));
+  }
+  for (let i = 0; i < 5; i++) {
+    filas.push(pmt('f' + i, { inicioMs: dia(2027, 1, 1), finMs: dia(2027, 2, 1) }));
+  }
+  for (let i = 0; i < 3; i++) {
+    filas.push(pmt('s' + i, { vigenciaValida: false, inicioMs: null, finMs: null }));
+  }
+  const r = T.repartirPorSituacion(filas, hoy);
+  assert.equal(r.total, 65);
+  assert.deepEqual([r.historicos, r.vigentes, r.futuros, r.sinVigencia], [40, 17, 5, 3]);
+  assert.equal(r.operativos, 22);
+  assert.equal(r.cuadra, true);
+  // Y el alcance operativo enseña EXACTAMENTE esos 22.
+  const vistos = filtrarPmts(filas, { ...filtrosVacios(), alcance: T.ALCANCE.OPERATIVO }, hoy);
+  assert.equal(vistos.length, r.operativos,
+    'lo que se cuenta como operativo y lo que se enseña tiene que ser lo mismo');
 });
 
 test('E · el contexto se describe con palabras, no con un color', () => {
@@ -290,7 +427,7 @@ import * as Proyecto from '../nucleo/proyecto.js';
 import { VERSION_REGLAS } from '../../motor/src/nucleo/config.js';
 import { filtrosVacios, filtrarPmts, filtrarRelaciones, enAlcance,
   marcarVigenciaDeRelaciones } from '../nucleo/filtrado.js';
-import { lecturaOperativa, OPERATIVO } from '../nucleo/modelo.js';
+import { lecturaOperativa, lecturaOperativaEnContexto, OPERATIVO } from '../nucleo/modelo.js';
 
 const CONFIG_OK = {
   umbralMetros: 120, granularidadTemporal: 'instante', toleranciaMinutos: 0,
@@ -627,4 +764,117 @@ test('L · agrupar y revisar 5.000 activaciones sigue siendo instantáneo', () =
   // Se repintan en cada cambio de filtro, así que tienen que ser baratos. El
   // margen es amplio a propósito: esto vigila un derrumbe, no una décima.
   assert.ok(ms < 1500, `tardaron ${ms} ms con 5.000 activaciones`);
+});
+
+/* ═══════ M · EL HISTÓRICO NO SE PIERDE NUNCA (corrección final) ═══════
+ *
+ * Siete afirmaciones que tienen que seguir siendo ciertas pase lo que pase.
+ * No son variaciones de una: cada una cierra una forma distinta de perder
+ * información sin que nadie se entere.
+ */
+
+test('M1 · ocultar un vencido NO lo elimina', () => {
+  const filas = escenario();
+  const hoy = T.referencia({ ahora: HOY });
+  const fuera = filtrarPmts(filas, { ...filtrosVacios(), alcance: T.ALCANCE.OPERATIVO }, hoy);
+  assert.ok(!fuera.some((x) => x.id === 'A'), 'A no sale en operativo');
+  // El objeto sigue en el conjunto de origen, intacto, con su geometría.
+  const a = filas.find((x) => x.id === 'A');
+  assert.ok(a && a.geometria && a.inicioMs && a.finMs);
+  assert.equal(filas.length, 4, 'nada se ha quitado del conjunto');
+});
+
+test('M2 · cambiar de año lo recupera', () => {
+  const filas = escenario();
+  const ref = T.referencia({ origen: T.ORIGEN.PERIODO, ...T.limitesDelAnio(2025) });
+  const v = filtrarPmts(filas, { ...filtrosVacios(), alcance: T.ALCANCE.HISTORICO, anio: 2025 }, ref);
+  assert.deepEqual(v.map((x) => x.id).sort(), ['A', 'B']);
+});
+
+test('M3 · mover la referencia al pasado recupera PMT Y relaciones', () => {
+  const filas = escenario();
+  const porId = new Map(filas.map((x) => [x.id, x]));
+  const r = rel('A', 'B', {
+    hayTraslapeTemporal: true,
+    traslapeInicio: txt(dia(2025, 3, 5)), traslapeFin: txt(dia(2025, 3, 20)),
+  });
+  const ref = T.referencia({ origen: T.ORIGEN.ELEGIDA, ms: dia(2025, 3, 10) });
+  const f = { ...filtrosVacios(), alcance: T.ALCANCE.OPERATIVO };
+  const ids = new Set(filtrarPmts(filas, f, ref).map((x) => x.id));
+  assert.ok(ids.has('A') && ids.has('B'));
+  const vistas = filtrarRelaciones(marcarVigenciaDeRelaciones([r], ref, porId), f, ids, ref, porId);
+  assert.equal(vistas.length, 1);
+  assert.equal(lecturaOperativaEnContexto(vistas[0]), OPERATIVO.ARTICULACION_REQUERIDA);
+});
+
+test('M4 · una reactivación nueva NO sobrescribe la anterior', () => {
+  const [a1] = tresActivaciones();
+  const r = Id.prepararReactivacion(a1, { inicio: txt(dia(2027, 1, 1)), fin: txt(dia(2027, 2, 1)) });
+  const nueva = { ...a1, ...r.datos, id: 'act_nueva',
+    inicioMs: dia(2027, 1, 1), finMs: dia(2027, 2, 1) };
+  const juntas = Id.numerarActivaciones([a1, nueva]);
+  assert.equal(juntas.length, 2, 'las DOS existen');
+  const vieja = juntas.find((x) => x.id === a1.id);
+  assert.equal(vieja.inicio, a1.inicio, 'la anterior conserva su vigencia');
+  assert.equal(vieja.activacion.numero, 1);
+  assert.equal(juntas.find((x) => x.id === 'act_nueva').activacion.numero, 2);
+});
+
+test('M5 · editar la activación 3 no modifica la 1 ni la 2', () => {
+  const [a1, a2, a3] = tresActivaciones();
+  const editada = { ...a3, inicio: txt(dia(2026, 6, 1)), inicioMs: dia(2026, 6, 1),
+    resolucionPmt: 'RES-NUEVA' };
+  const juntas = Id.numerarActivaciones([a1, a2, editada]);
+  const v1 = juntas.find((x) => x.id === 'act_1'), v2 = juntas.find((x) => x.id === 'act_2');
+  assert.equal(v1.inicio, txt(dia(2024, 3, 1)));
+  assert.equal(v2.inicio, txt(dia(2025, 5, 1)));
+  assert.equal(v1.resolucionPmt, undefined);
+  assert.equal(v2.resolucionPmt, undefined);
+  assert.equal(Id.mismaGeometria(v1.geometria, a1.geometria), true);
+});
+
+test('M6 · el PMT base mantiene TODAS sus activaciones', () => {
+  const filas = tresActivaciones();
+  const bases = Id.agruparPorBase(Id.numerarActivaciones(filas));
+  assert.equal(bases.size, 1);
+  assert.equal(Id.historialDeBase(bases.get('base_a')).veces, 3);
+});
+
+test('M7 · la geometría es IDÉNTICA en todas las activaciones', () => {
+  const [a1] = tresActivaciones();
+  let actual = a1;
+  for (let i = 0; i < 5; i++) {
+    const r = Id.prepararReactivacion(actual, { inicio: txt(dia(2027 + i, 1, 1)), fin: txt(dia(2027 + i, 2, 1)) });
+    assert.equal(r.ok, true, r.motivo);
+    // Cadena de cinco reactivaciones seguidas: el trazado no puede derivar ni
+    // un decimal, ni siquiera acumulando copias de copias.
+    assert.deepEqual(r.datos.geometria, a1.geometria, `derivó en la reactivación ${i + 1}`);
+    actual = { ...actual, ...r.datos, id: 'act_' + i };
+  }
+});
+
+test('M8 · el histórico sobrevive a guardar y abrir, con la evidencia documental', () => {
+  const [a1] = tresActivaciones();
+  const conDoc = { ...a1, resolucionPmt: 'RES-VIEJA' };
+  const r = Id.prepararReactivacion(conDoc, { inicio: txt(dia(2027, 1, 1)), fin: txt(dia(2027, 2, 1)) });
+  const nueva = { ...conDoc, ...r.datos, id: 'act_nueva',
+    inicioMs: dia(2027, 1, 1), finMs: dia(2027, 2, 1),
+    inicio: txt(dia(2027, 1, 1)), fin: txt(dia(2027, 2, 1)) };
+
+  const p = Proyecto.crearProyecto({
+    filas: [conDoc, nueva], relaciones: [], noEvaluables: [], archivos: [],
+    config: CONFIG_OK, filtros: null, nombre: 'P', versionReglas: VERSION_REGLAS,
+  });
+  const leido = Proyecto.leerProyecto(Proyecto.serializar(p));
+  assert.equal(leido.ok, true, leido.motivo);
+
+  const v = leido.proyecto.trazados.find((x) => x.id === 'act_nueva');
+  assert.equal(v.resolucionPmt, null, 'la nueva sigue sin código propio');
+  assert.equal(v.documentosPrevios.resolucionPmt, 'RES-VIEJA',
+    'y la EVIDENCIA de la anterior sobrevive a guardar y abrir');
+  assert.equal(estadoDocumental(v).porConfirmar, 1);
+  // La anterior conserva el suyo, registrado de verdad.
+  const vieja = leido.proyecto.trazados.find((x) => x.id === 'act_1');
+  assert.equal(vieja.resolucionPmt, 'RES-VIEJA');
+  assert.equal(estadoDocumental(vieja).registrados, 1);
 });

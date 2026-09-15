@@ -1107,7 +1107,7 @@ function aplicarFiltros() {
   const ids = new Set(visibles.map((x) => x.id));
   // Se marca la vigencia de la articulación ANTES de filtrar y de contar, para
   // que tarjetas, tablas, informe y exportaciones lean todas lo mismo.
-  const marcadas = Filtro.marcarVigenciaDeRelaciones(estado.relaciones, ref);
+  const marcadas = Filtro.marcarVigenciaDeRelaciones(estado.relaciones, ref, estado.porId);
   const relVisibles = Filtro.filtrarRelaciones(marcadas, f, ids, ref, estado.porId);
   // Los pares que NO se pudieron evaluar siguen el mismo filtro: si desaparecen
   // en silencio, el usuario cree que no hay nada que revisar.
@@ -1168,9 +1168,13 @@ function aplicarFiltros() {
   // BANDA DE CONTEXTO: lo primero que se repinta, porque decide como hay que
   // leer todo lo que viene debajo. El reparto se cuenta sobre TODO lo cargado,
   // no sobre lo visible: la pregunta que responde es «¿y los otros 460?».
+  // UN SOLO reparto por repintado: la banda y el aviso tienen que hablar de
+  // exactamente las mismas cifras. Calcularlo dos veces es barato pero deja
+  // abierta la puerta a que un día diverjan.
+  const reparto = Temporal.repartirPorSituacion(estado.filas, ref);
   Periodo.pintarBanda(
     Temporal.describirContexto(ref, f.alcance ?? Temporal.ALCANCE.OPERATIVO, f.anio ?? null),
-    Temporal.repartirPorSituacion(estado.filas, ref));
+    reparto);
 
   // Si el alcance operativo ha escondido TODO lo cargado, se dice y se ofrece
   // el histórico de un clic. Una pantalla vacia sin explicacion se lee como un
@@ -1180,7 +1184,7 @@ function aplicarFiltros() {
       Controles.fijarFiltros({ ...Controles.actuales(), alcance: Temporal.ALCANCE.TODO, anio: null });
       montarSelectorDePeriodo();
       aplicarFiltros();
-    });
+    }, reparto.sinVigencia);
 
   pintarTarjetas();
   pintarAlcancePestana();
@@ -1331,7 +1335,9 @@ function pintarAlcanceExportar() {
 
 function conectarExportaciones() {
   $('expPmtCsv').onclick = () => descargar(nombreExportado('PMT', 'csv'),
-    Export.pmtsACsv(estado.visibles), 'text/csv;charset=utf-8');
+    // Se exporta lo visible CON SU SITUACIÓN ya derivada, para que el CSV use
+    // exactamente la misma fecha de referencia que la pantalla.
+    Export.pmtsACsv(estado.visiblesConSituacion ?? estado.visibles), 'text/csv;charset=utf-8');
   $('expRelCsv').onclick = () => descargar(nombreExportado('Relaciones_PMT', 'csv'),
     Export.relacionesACsv(estado.relVisibles, estado.porId), 'text/csv;charset=utf-8');
   $('expGeoJson').onclick = () => descargar(nombreExportado('PMT', 'geojson'),

@@ -1948,8 +1948,13 @@ test('CONTEXTO: la banda dice con PALABRAS qué se está viendo', saltar, async 
 
   const banda = await txt(p, '#bandaContexto');
   assert.ok(/Operativo/.test(banda), 'la banda nombra el contexto: ' + banda);
-  assert.ok(/5 PMT cargados/.test(banda), 'y dice SIEMPRE de cuántos habla: ' + banda);
-  assert.ok(/hist[oó]rico/i.test(banda), 'incluido el número que no se ve: ' + banda);
+  // LA CUENTA VA ESCRITA: «N operativos = V vigentes + F programados». Quien
+  // quiera comprobar de dónde sale el número lo ve sin abrir nada.
+  const m = banda.match(/(\d+)\s*operativos\s*=\s*(\d+)\s*vigentes\s*\+\s*(\d+)\s*programados/);
+  assert.ok(m, 'la banda tiene que enseñar la suma: ' + banda);
+  assert.equal(+m[1], +m[2] + +m[3], 'y la suma tiene que cuadrar: ' + banda);
+  assert.ok(/vencido/i.test(banda), 'y nombrar los vencidos, que son los que no se ven: ' + banda);
+  assert.ok(/5\s*en total/.test(banda), 'y el total: ' + banda);
 
   // Y no es solo un color: el texto cambia al cambiar de alcance.
   await elegirAlcance(p, 'historico');
@@ -2157,6 +2162,143 @@ test('INFORME: un informe histórico se titula y se lee en pasado', saltar, asyn
   const inf2 = await txt(p, '#informe');
   assert.ok(/Informe operativo de PMTs/.test(inf2), inf2.slice(0, 200));
   assert.ok(!/consulta del pasado/.test(inf2));
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+/* ═══════════ CORRECCIÓN SEMÁNTICA FINAL ═══════════
+ *
+ * Las tres reglas que se corrigieron antes de la prueba de usuaria, conducidas
+ * en la aplicación empaquetada.
+ */
+
+/** Un KMZ con un vencido y un vigente MUY cerca, y uno con vigencia ilegible. */
+const KMZ_SEMANTICA = escribir('semantica.kmz', F.kmz([
+  // VENCIDO: terminó hace tres meses.
+  F.placemark('YA-TERMINO', F.descripcion({
+    inicio: selloFecha(AHORA - 150 * D, '06:00:00'), fin: selloFecha(AHORA - 90 * D, '18:00:00'),
+    contrato: 'CWX1', municipio: 'Medellin', tipo: 'total',
+  }), F.linea([[-75.6000, 6.2000], [-75.5990, 6.2000]])),
+  // VIGENTE, a pocos metros del anterior: comparten sitio, pero el otro se fue.
+  F.placemark('EN-OBRA-AHORA', F.descripcion({
+    inicio: selloFecha(AHORA - D, '06:00:00'), fin: selloFecha(AHORA + 30 * D, '18:00:00'),
+    contrato: 'CWX2', municipio: 'Medellin', tipo: 'parcial',
+  }), F.linea([[-75.5999, 6.2001], [-75.5989, 6.2001]])),
+  // Otro VIGENTE, también cerca: con este SÍ hay algo que coordinar.
+  F.placemark('TAMBIEN-EN-OBRA', F.descripcion({
+    inicio: selloFecha(AHORA, '06:00:00'), fin: selloFecha(AHORA + 20 * D, '18:00:00'),
+    contrato: 'CWX3', municipio: 'Medellin', tipo: 'total',
+  }), F.linea([[-75.5998, 6.2002], [-75.5988, 6.2002]])),
+  // VIGENCIA ILEGIBLE: no se puede situar en el tiempo.
+  F.placemark('SIN-FECHAS', 'fecha_inicio: no definida | fecha_fin: tampoco | ' +
+    'tipo_cierre: total | direccion: x | municipio: Medellin | contrato: CWX4 | ' +
+    'contratista: Y | proyecto: Z', F.linea([[-75.5700, 6.2600], [-75.5690, 6.2600]])),
+]));
+
+test('SEMÁNTICA: una coincidencia con un extremo VENCIDO no es alerta de hoy', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_SEMANTICA]);
+  await p.waitForTimeout(600);
+
+  // En la vista operativa, YA-TERMINO no sale: terminó hace tres meses.
+  const tabla = await txt(p, '#pest_pmt');
+  assert.ok(!tabla.includes('YA-TERMINO'), 'un PMT vencido no es operativo');
+  assert.ok(tabla.includes('EN-OBRA-AHORA') && tabla.includes('TAMBIEN-EN-OBRA'));
+
+  // Y ninguna relación visible puede tocar a un vencido: para coordinar hacen
+  // falta DOS partes, y con quien ya se fue no hay nada que acordar.
+  await p.click('[data-pest="rel"]');
+  await p.waitForTimeout(500);
+  const rels = await txt(p, '#pest_rel');
+  assert.ok(!rels.includes('CWX1'),
+    'una relación con el contrato vencido no puede presentarse como accionable: ' + rels.slice(0, 300));
+  // Pero entre los dos vigentes SÍ la hay.
+  assert.ok(+(await txt(p, '#cuentaRel')) >= 1, 'entre los dos vigentes sí hay qué coordinar');
+
+  // Y NO se ha borrado: en «Todo» vuelve entera.
+  await elegirAlcance(p, 'todo');
+  await p.waitForTimeout(600);
+  assert.ok((await txt(p, '#pest_pmt')).includes('YA-TERMINO'), 'el vencido sigue existiendo');
+  await p.click('[data-pest="rel"]');
+  await p.waitForTimeout(400);
+  assert.ok((await txt(p, '#pest_rel')).includes('CWX1'),
+    'y su relación también: ocultar no es borrar');
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('SEMÁNTICA: «vigencia no determinada» no cuenta como operativa, y se dice', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_SEMANTICA]);
+  await p.waitForTimeout(600);
+
+  // No entra en el alcance operativo.
+  assert.ok(!(await txt(p, '#pest_pmt')).includes('SIN-FECHAS'),
+    'no se puede presentar como atendible algo cuya vigencia no se sabe');
+
+  // Pero NO desaparece en silencio: se anuncia, con un botón para verlo.
+  assert.ok(await p.isVisible('#avisoVistaVacia'), 'tiene que avisarse');
+  const aviso = await txt(p, '#avisoVistaVacia');
+  assert.ok(/vigencia no se pudo determinar/i.test(aviso), aviso);
+  assert.ok(/no se sabe/i.test(aviso), 'y decir que es desconocido, no vencido: ' + aviso);
+
+  // La cuenta de la banda CUADRA y no lo mete dentro de «operativos».
+  const banda = await txt(p, '#bandaContexto');
+  const m = banda.match(/(\d+)\s*operativos\s*=\s*(\d+)\s*vigentes\s*\+\s*(\d+)\s*programados/);
+  assert.ok(m, banda);
+  assert.equal(+m[1], +m[2] + +m[3], banda);
+  assert.ok(/1\s*con vigencia no determinada/.test(banda),
+    'y se nombra aparte, con esas palabras: ' + banda);
+  assert.equal(+m[1], +(await txt(p, '#cuentaPmt')),
+    'lo que se cuenta como operativo y lo que se enseña tiene que ser lo mismo');
+
+  // El botón lleva a verlo entero.
+  await p.click('#btnVerHistorico');
+  await p.waitForTimeout(700);
+  assert.ok((await txt(p, '#pest_pmt')).includes('SIN-FECHAS'), 'y se puede ir a corregirlo');
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('SEMÁNTICA: reactivar NO decide si el documento anterior sigue valiendo', saltar, async () => {
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_DOC]);
+  await p.waitForTimeout(600);
+
+  // Se selecciona el PMT que tiene los tres documentos y se reactiva.
+  await p.$$eval('#tablaPmt tbody tr', (filas) => {
+    const f = filas.find((x) => x.textContent.includes('DOC-COMPLETO'));
+    if (f) f.click();
+  });
+  await p.waitForTimeout(600);
+  await p.click('#btnReactivarPmt');
+  await p.waitForSelector('#panelEditor:not(.oculto)', { timeout: 15000 });
+
+  // La casilla está VACÍA: nadie ha tramitado nada para esta vigencia.
+  assert.equal(await p.inputValue('#ed_resolucionPmt'), '',
+    'precargar el código haría que quedara registrado sin que nadie lo comprobara');
+
+  // Pero el documento anterior SE ENSEÑA, como evidencia y con su etiqueta.
+  const cuerpo = await txt(p, '#panelEditor');
+  assert.ok(/RES-1001-2026/.test(cuerpo), 'la evidencia anterior tiene que verse: ' + cuerpo.slice(0, 400));
+  assert.ok(/Previo disponible/i.test(cuerpo), cuerpo.slice(0, 400));
+  assert.ok(/por confirmar/i.test(cuerpo),
+    'y decir que su aplicabilidad está por confirmar, no que vale ni que no vale');
+
+  // Se guarda SIN tocar los documentos.
+  await p.fill('#edInicio', `${diaRel(60)}T07:00`);
+  await p.fill('#edFin', `${diaRel(80)}T18:00`);
+  await p.waitForFunction(() => !document.querySelector('#edGuardar').disabled, null, { timeout: 15000 });
+  await p.click('#edGuardar');
+  await p.waitForFunction(() => document.querySelector('#cuentaPmt').textContent === '4',
+    null, { timeout: 30000 });
+
+  // La activación nueva NO cuenta el documento anterior como registrado.
+  await p.click('[data-pest="doc"]');
+  await p.waitForTimeout(600);
+  const doc = await txt(p, '#pest_doc');
+  assert.ok(/por confirmar/i.test(doc),
+    'el seguimiento documental tiene que distinguir el tercer estado: ' + doc.slice(0, 300));
   assert.deepEqual(p.erroresJs, []);
   await p.close();
 });

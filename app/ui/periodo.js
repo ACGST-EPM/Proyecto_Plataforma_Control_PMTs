@@ -80,7 +80,16 @@ export function montar(filtros, inventario, onCambio) {
              ${anios.length
     ? anios.map((a) => `<option value="${a.anio}"${a.anio === anioValido ? ' selected' : ''}>${a.anio} · ${num(a.pmts)} PMT</option>`).join('')
     : '<option value="">sin datos con fecha</option>'}
-           </select></label>`
+           </select></label>` +
+        // UN PMT SIN VIGENCIA NO PERTENECE A NINGÚN AÑO, así que no sale en
+        // ninguna consulta histórica. Es correcto —no se puede situar— pero
+        // callarlo lo haría desaparecer de la vista SIN QUE NADIE LO SUPIERA:
+        // no estaría en operativo, no estaría en ningún año, y solo aparecería
+        // en «Todo», que casi nadie abre. Se dice aquí, donde se elige el año.
+        (inventario?.sinAnio
+          ? `<span class="periodo-nota">⚠ ${num(inventario.sinAnio)} PMT no salen en ningún año:
+               su vigencia no se pudo determinar. Están en «Todo» y en Calidad de los datos.</span>`
+          : '')
       : '');
 
   for (const [v] of OPCIONES) {
@@ -112,7 +121,7 @@ export function pintarBanda(contexto, reparto) {
   banda.innerHTML =
     `<span class="bc-icono" aria-hidden="true">${icono}</span>` +
     `<span class="bc-texto"><b>${esc(contexto.etiqueta)}</b> · ${esc(contexto.detalle)}</span>` +
-    `<span class="bc-cifras">${esc(frase(reparto))}</span>`;
+    desglose(reparto);
 }
 
 /**
@@ -137,17 +146,31 @@ export function pintarBanda(contexto, reparto) {
  * @param {number} visibles  PMT que pasan el alcance y los filtros
  * @param {Function} onVerTodo  qué hacer al pulsar «Ver todo el histórico»
  */
-export function avisarVistaVacia(cargados, visibles, alcance, onVerTodo) {
+export function avisarVistaVacia(cargados, visibles, alcance, onVerTodo, sinVigencia = 0) {
   const caja = $('avisoVistaVacia');
   if (!caja) return;
-  const escondeTodo = cargados > 0 && visibles === 0 && alcance === ALCANCE.OPERATIVO;
-  caja.classList.toggle('oculto', !escondeTodo);
-  if (!escondeTodo) { caja.innerHTML = ''; return; }
-  caja.innerHTML =
-    `<span><b>Ninguno de los ${num(cargados)} PMT cargados está vigente ni programado hoy.</b> ` +
-    `No es que no se hayan leído: es que todos terminaron antes de la fecha de referencia, así que ` +
-    `ya no hay nada que coordinar sobre ellos. Siguen enteros en el histórico.</span>` +
-    `<button type="button" class="b-nar b-mini" id="btnVerHistorico">Ver todo el histórico</button>`;
+  const operativa = alcance === ALCANCE.OPERATIVO;
+  const escondeTodo = cargados > 0 && visibles === 0 && operativa;
+  // ══ LO QUE NO SE PUEDE SITUAR TAMBIÉN SE ANUNCIA ══════════════════════
+  //
+  // Queda fuera del alcance operativo porque no se sabe si está vigente. Pero
+  // sacarlo de la vista SIN DECIRLO sería esconder un problema de datos: nadie
+  // iría a corregirlo, y la resta «460 − 182 − 277 = 1» no la podría explicar.
+  const hayPerdidos = operativa && sinVigencia > 0;
+
+  caja.classList.toggle('oculto', !escondeTodo && !hayPerdidos);
+  if (!escondeTodo && !hayPerdidos) { caja.innerHTML = ''; return; }
+
+  caja.innerHTML = (escondeTodo
+    ? `<span><b>Ninguno de los ${num(cargados)} PMT cargados está vigente ni programado hoy.</b> ` +
+      `No es que no se hayan leído: es que todos terminaron antes de la fecha de referencia, así que ` +
+      `ya no hay nada que coordinar sobre ellos. Siguen enteros en el histórico.</span>`
+    : `<span><b>${num(sinVigencia)} PMT no entran en esta vista porque su vigencia no se pudo ` +
+      `determinar.</b> No están vencidos ni vigentes: <b>no se sabe</b>, así que no se pueden ` +
+      `presentar como algo que se pueda atender. Se conservan enteros; conviene revisar sus fechas ` +
+      `en «Calidad de los datos».</span>`) +
+    `<button type="button" class="b-nar b-mini" id="btnVerHistorico">${
+      escondeTodo ? 'Ver todo el histórico' : 'Verlos todos'}</button>`;
   const b = $('btnVerHistorico');
   if (b && onVerTodo) b.onclick = () => onVerTodo();
 }
@@ -157,7 +180,39 @@ export function frase(r) {
   const partes = [];
   if (r.vigentes) partes.push(`${r.vigentes} vigente(s)`);
   if (r.futuros) partes.push(`${r.futuros} programado(s)`);
-  if (r.historicos) partes.push(`${r.historicos} histórico(s)`);
-  if (r.sinVigencia) partes.push(`${r.sinVigencia} sin vigencia utilizable`);
+  if (r.historicos) partes.push(`${r.historicos} vencido(s)`);
+  // «Vigencia no determinada» SIEMPRE se nombra si la hay, y con esas palabras:
+  // es el único que no entra en «operativo», y callarlo dejaría una resta que
+  // nadie puede explicar.
+  if (r.sinVigencia) partes.push(`${r.sinVigencia} con vigencia no determinada`);
   return `${r.total} PMT cargados: ${partes.join(' · ')}`;
+}
+
+/**
+ * Desglose con la CUENTA EXPLICADA.
+ *
+ * ══ POR QUÉ NO SON CINCO TARJETAS GRANDES ════════════════════════════════
+ *
+ * Cinco tarjetas del mismo tamaño dicen que las cinco cifras importan igual, y
+ * no es verdad: la que se mira todos los días es «operativo». Las otras cuatro
+ * son el desglose que permite comprobarla.
+ *
+ * Así que va en UNA línea, con la suma escrita: quien quiera comprobar de dónde
+ * sale el número lo ve sin abrir nada, y quien no, no tiene que esquivar cinco
+ * cajas para llegar al mapa.
+ */
+export function desglose(r) {
+  if (!r || !r.total) return '';
+  const celda = (n, etq, clase = '') =>
+    `<span class="desg-item ${clase}"><b>${num(n)}</b> ${esc(etq)}</span>`;
+  return `<div class="desglose">
+      <span class="desg-suma">${celda(r.operativos, 'operativos', 'fuerte')}
+        <span class="desg-igual">=</span>
+        ${celda(r.vigentes, 'vigentes')}<span class="desg-mas">+</span>${celda(r.futuros, 'programados')}</span>
+      <span class="desg-sep"></span>
+      ${celda(r.historicos, 'vencidos', 'tenue')}
+      ${r.sinVigencia ? celda(r.sinVigencia, 'con vigencia no determinada', 'aviso') : ''}
+      <span class="desg-sep"></span>
+      ${celda(r.total, 'en total', 'tenue')}
+    </div>`;
 }

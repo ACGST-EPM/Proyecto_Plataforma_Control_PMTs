@@ -238,5 +238,12 @@ export function filaDePmtCreado(pmt, catalogo, { normalizarVigencia, ahora = Dat
     avisos: vig.avisos ?? [],
     duplicadoExacto: false, idRepetidoEnOrigen: false,
     ...docs,
+    // ══ EVIDENCIA DE LA ACTIVACIÓN ANTERIOR ══════════════════════════════
+    //
+    // Solo viaja si la hay, y NUNCA ocupa el sitio de un código propio. No
+    // afirma que el documento anterior valga para esta vigencia ni que no
+    // valga: eso es la pregunta P21 y no la tenemos respondida. Lo único que
+    // dice es que existe y que alguien tendrá que mirarlo.
+    ...(completo.documentosPrevios ? { documentosPrevios: completo.documentosPrevios } : {}),
   };
 }

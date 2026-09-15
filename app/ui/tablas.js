@@ -8,7 +8,7 @@
  * tabla y exportarla son treinta lineas propias.
  */
 import { $, esc, num, fechaLegible } from './dom.js';
-import { estadoEspacial, estadoTemporal, lecturaOperativa, ESPACIAL, TEMPORAL, OPERATIVO,
+import { estadoEspacial, estadoTemporal, lecturaOperativaEnContexto, ESPACIAL, TEMPORAL, OPERATIVO,
   ETIQUETA_ESPACIAL, ETIQUETA_TEMPORAL, ETIQUETA_OPERATIVO, EXPLICACION_OPERATIVO,
   LECTURA, simbologiaDe } from '../nucleo/modelo.js';
 import { ETIQUETA_SITUACION } from '../nucleo/temporalidad.js';
@@ -186,10 +186,15 @@ function celdaPmt(x, clave) {
       const clase = d.completo ? 'p-ok' : d.sinNinguno ? 'p-gris' : 'p-parcial';
       return `<td><span class="pastilla ${clase}" title="${esc(d.detalle.map((y) => y.etiqueta + ': ' + y.estado).join(' · '))}">${esc(d.resumen)}</span></td>`;
     }
-    case 'resolucionPmt': case 'permisoRotura': case 'cierrePermisoRotura':
-      return x[clave]
-        ? `<td class="mono"><small>${esc(x[clave])}</small></td>`
+    case 'resolucionPmt': case 'permisoRotura': case 'cierrePermisoRotura': {
+      if (x[clave]) return `<td class="mono"><small>${esc(x[clave])}</small></td>`;
+      const previo = x.documental?.detalle?.find((d) => d.clave === clave)?.codigoPrevio;
+      // Un documento de la activación anterior NO se enseña como si fuera de
+      // esta: lleva su propia pastilla y dice que está por confirmar.
+      return previo
+        ? `<td><span class="pastilla p-porconfirmar" title="De una activación anterior de este mismo PMT. Nadie ha decidido si ampara también estas fechas.">${esc(previo)} · por confirmar</span></td>`
         : '<td><span class="doc-pendiente">Pendiente</span></td>';
+    }
     case 'origenArchivo': return `<td><small>${esc(x.origenArchivo ?? '—')}</small></td>`;
     case 'tipoGeometria': return `<td>${esc(x.tipoGeometria ?? 'sin geometria')}</td>`;
     default: return `<td>${esc(x[clave] ?? '—')}</td>`;
@@ -233,12 +238,13 @@ export function pintarPmts(filas, { onFila, seleccionado, columnas } = {}) {
 export function pintarDocumental(filas, { onFila } = {}) {
   const caja = $('panelDocumental');
   if (!caja) return;
-  const conteo = { completos: 0, sinNinguno: 0, resolucionPmt: 0, permisoRotura: 0, cierrePermisoRotura: 0 };
+  const conteo = { completos: 0, sinNinguno: 0, resolucionPmt: 0, permisoRotura: 0, cierrePermisoRotura: 0, porConfirmar: 0 };
   for (const x of filas) {
     const d = x.documental;
     if (!d) continue;
     if (d.completo) conteo.completos++;
     if (d.sinNinguno) conteo.sinNinguno++;
+    if ((d.porConfirmar ?? 0) > 0) conteo.porConfirmar++;
     for (const p of d.pendientes) conteo[p]++;
   }
   const t = (n, txt, clase = '') =>
@@ -247,9 +253,16 @@ export function pintarDocumental(filas, { onFila } = {}) {
   const pendientes = filas.filter((x) => !x.documental?.completo);
   const filasHtml = pendientes.slice(0, 400).map((x) => {
     const d = x.documental;
-    const celda = (clave) => x[clave]
-      ? `<td class="mono"><small>${esc(x[clave])}</small></td>`
-      : '<td><span class="doc-pendiente">Pendiente</span></td>';
+    const celda = (clave) => {
+      if (x[clave]) return `<td class="mono"><small>${esc(x[clave])}</small></td>`;
+      // TERCER ESTADO: viene de una activación anterior del mismo PMT. Ni
+      // registrado (nadie ha comprobado que ampare estas fechas) ni pendiente
+      // a secas (existe, y alguien tiene que decidir sobre él).
+      const previo = d?.detalle?.find((y) => y.clave === clave)?.codigoPrevio;
+      return previo
+        ? `<td><span class="pastilla p-porconfirmar" title="De una activación anterior de este mismo PMT. Su aplicabilidad a esta vigencia está por confirmar.">${esc(previo)} · por confirmar</span></td>`
+        : '<td><span class="doc-pendiente">Pendiente</span></td>';
+    };
     return `<tr data-id="${esc(x.id)}">
       <td>${esc(x.frente ?? '—')}</td>
       <td class="mono">${esc(x.contrato ?? '—')}</td>
@@ -265,6 +278,11 @@ export function pintarDocumental(filas, { onFila } = {}) {
       la casilla queda <b>vacía</b> y el estado es <b>Pendiente</b>: escribir «Pendiente» como si fuera
       el número de la resolución haría imposible distinguirlo de un código de verdad.
     </p>
+    ${conteo.porConfirmar ? `<p class="frase atencion" style="font-size:.86rem">
+      <b>${num(conteo.porConfirmar)} PMT tienen documentos de una activación anterior.</b>
+      Aparecen como <b>«por confirmar»</b>: existen, pero <b>nadie ha decidido todavía</b> si amparan
+      también la vigencia nueva. Esa regla la tiene que fijar EPM; la plataforma no la inventa.
+    </p>` : ''}
     <div class="tarjetas" style="margin-bottom:16px">
       ${t(conteo.completos, 'con los 3 documentos', conteo.completos ? 'verde' : 'gris')}
       ${t(conteo.resolucionPmt, 'sin Resolución PMT', conteo.resolucionPmt ? 'nar' : '')}
@@ -301,7 +319,7 @@ export function pintarRelaciones(relaciones, { onFila } = {}) {
 
   const conEstado = relaciones.map((r) => ({
     ...r, _espacial: ETIQUETA_ESPACIAL[estadoEspacial(r)], _temporal: ETIQUETA_TEMPORAL[estadoTemporal(r)],
-    _operativo: ETIQUETA_OPERATIVO[lecturaOperativa(r)],
+    _operativo: ETIQUETA_OPERATIVO[lecturaOperativaEnContexto(r)],
   }));
   const todos = ordenar(conEstado, orden.rel.col, orden.rel.asc);
   const info = recortar(todos, 'rel');
@@ -313,7 +331,7 @@ export function pintarRelaciones(relaciones, { onFila } = {}) {
     return;
   }
   cuerpo.innerHTML = datos.map((r, i) => {
-    const e = estadoEspacial(r), t = estadoTemporal(r), o = lecturaOperativa(r);
+    const e = estadoEspacial(r), t = estadoTemporal(r), o = lecturaOperativaEnContexto(r);
     return `<tr data-i="${i}">
       <td><span class="pastilla ${CLASE_OPERATIVO[o]}" title="${esc(EXPLICACION_OPERATIVO[o])}">${esc(ETIQUETA_OPERATIVO[o])}</span></td>
       <td class="mono">${esc(r.contratoA)}</td><td>${esc(r.frenteA ?? '—')}</td>
