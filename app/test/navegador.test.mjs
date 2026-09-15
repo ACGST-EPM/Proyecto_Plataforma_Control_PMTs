@@ -1448,6 +1448,78 @@ test('TAREA F: la ficha de una relación explica el motivo sin jerga', saltar, a
   await p.close();
 });
 
+/* ═══════════════════ GESTION DE FUENTES ═══════════════════ */
+
+// Mismos trazados que alfa.kmz mas uno: es la MISMA fuente, corregida.
+// Va en una subcarpeta porque tiene que llamarse IGUAL que el original: lo que
+// se compara es el nombre del archivo y su contenido, no la ruta del disco.
+fs.mkdirSync(path.join(TMP, 'alfa_v2'), { recursive: true });
+const KMZ_A_V2 = escribir('alfa_v2/alfa.kmz', F.kmz([
+  F.placemark('A-TOTAL', desc('CW1', { tipo: 'total' }), F.linea([[-75.6000, 6.2000], [-75.5990, 6.2000]])),
+  F.placemark('A-PARCIAL', desc('CW1', { tipo: 'parcial' }), F.punto([-75.5980, 6.2000])),
+  F.placemark('A-TERCERO', desc('CW1', { tipo: 'total' }), F.punto([-75.5978, 6.2002])),
+]));
+// Copia byte a byte de beta.kmz, con otro nombre.
+const KMZ_B_COPIA = escribir('beta_copia.kmz', fs.readFileSync(KMZ_B));
+
+test('FUENTES: identico, corregido y copia se distinguen, y queda constancia', saltar, async () => {
+  // Las tres preguntas que no se pueden mezclar: ¿mismos bytes? ¿mismo archivo,
+  // mas nuevo? ¿el mismo contenido en otro sitio? Desde la etapa de evolucion
+  // las decide `app/fuentes/`, la misma tuberia que usa la maqueta de datos.
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  assert.equal(await txt(p, '#cuentaPmt'), '4');
+  assert.equal(await txt(p, '#cuentaFuentes'), '2');
+
+  // 1 · EL MISMO ARCHIVO otra vez: no duplica nada.
+  await p.setInputFiles('#entradaAnadir', [KMZ_A]);
+  await p.waitForTimeout(1200);
+  assert.equal(await txt(p, '#cuentaPmt'), '4', 'lo identico no se duplica');
+  assert.equal(await txt(p, '#cuentaFuentes'), '2');
+
+  // 2 · MISMO NOMBRE, OTRO CONTENIDO: es una version corregida, reemplaza.
+  await p.setInputFiles('#entradaAnadir', [KMZ_A_V2]);
+  await p.waitForTimeout(1200);
+  assert.equal(await txt(p, '#cuentaPmt'), '5', 'la version nueva sustituye, no se suma');
+  assert.equal(await txt(p, '#cuentaFuentes'), '2');
+
+  // 3 · OTRO NOMBRE, MISMO CONTENIDO: es una COPIA y NO entra.
+  //     Si entrara, sus dos PMT se contarian dos veces, con sus distancias y
+  //     sus relaciones. El invariante lo dice: si la ruta anterior sigue ahi,
+  //     es una copia y no se procesa.
+  await p.setInputFiles('#entradaAnadir', [KMZ_B_COPIA]);
+  await p.waitForTimeout(1200);
+  assert.equal(await txt(p, '#cuentaPmt'), '5', 'una copia no infla el recuento');
+  assert.equal(await txt(p, '#cuentaFuentes'), '2');
+
+  // Y NO se descarta en silencio: se dice, y queda en el historial.
+  await p.$eval('#detalleBitacora', (d) => { d.open = true; });
+  await p.waitForTimeout(200);
+  const bit = await txt(p, '#bitacoraFuentes');
+  assert.ok(/es una copia/.test(bit), bit.slice(0, 300));
+  assert.ok(/alfa\.kmz: modificada/.test(bit), 'el historial conserva el reemplazo');
+  assert.ok(/equipo-local/.test(bit), 'sin identidad corporativa, el actor se dice tal cual');
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
+test('FUENTES: «Empezar de nuevo» tambien olvida lo observado', saltar, async () => {
+  // Si el inventario sobreviviera, el siguiente archivo se compararia contra un
+  // origen que ya no existe y se anunciarian bajas de cosas que nadie quito.
+  const p = await abrir({ sinRed: true });
+  await cargar(p, [KMZ_A, KMZ_B]);
+  await p.click('#btnEmpezarDeNuevo');
+  await p.waitForTimeout(500);
+  assert.equal(await txt(p, '#bitacoraFuentes'), '', 'el historial se vacia con el analisis');
+  await cargar(p, [KMZ_A]);
+  await p.$eval('#detalleBitacora', (d) => { d.open = true; });
+  await p.waitForTimeout(200);
+  const bit = await txt(p, '#bitacoraFuentes');
+  assert.ok(!/eliminada/.test(bit), `no puede anunciar bajas: ${bit.slice(0, 200)}`);
+  assert.deepEqual(p.erroresJs, []);
+  await p.close();
+});
+
 test('TABLA REL: las columnas se eligen, pero la lectura nunca se queda sola', saltar, async () => {
   // La tabla de relaciones gana el mismo selector que la de PMT. Con un limite
   // que NO es de interfaz sino del producto: la lectura operativa y los dos

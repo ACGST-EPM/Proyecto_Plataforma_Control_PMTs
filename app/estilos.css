@@ -963,3 +963,14 @@ details.tecnico pre {
    los trazados: seis familias de color peleando. Se baja la saturacion del
    fondo, no la de los datos. Solo afecta a la capa de teselas. */
 #mapa.fondo-tenue .leaflet-tile-pane { filter: saturate(.38) brightness(1.08) contrast(.92); }
+
+/* ── BITACORA DE FUENTES ───────────────────────────────────────────────────
+   Una linea por hecho, con su hora. No compite con nada: vive plegada. */
+.bitacora { margin-top: 8px; max-height: 320px; overflow-y: auto; }
+.bit-fila {
+  display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+  padding: 5px 0; border-bottom: 1px solid var(--linea); font-size: .84rem;
+}
+.bit-fila:last-child { border-bottom: none; }
+.bit-hora { color: var(--tenue); font-size: .78rem; white-space: nowrap; }
+.bit-actor { white-space: nowrap; }

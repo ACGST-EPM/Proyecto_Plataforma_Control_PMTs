@@ -23,6 +23,7 @@ import * as Periodo from './ui/periodo.js';
 import * as Bandeja from './ui/bandeja.js';
 import { estadoDocumental } from '../motor/src/modelo/documental.js';
 import * as Ingesta from './nucleo/ingesta.js';
+import * as Fuentes from './fuentes/index.js';
 import * as Filtro from './nucleo/filtrado.js';
 import * as Export from './nucleo/exportar.js';
 import * as Proyecto from './nucleo/proyecto.js';
@@ -64,6 +65,14 @@ const estado = {
   // Lo visible con su SITUACION ya derivada, para que los tres repintados de la
   // tabla enseñen exactamente lo mismo.
   visiblesConSituacion: [],
+  /**
+   * INVENTARIO de las fuentes tal como se vieron la ultima vez, y BITACORA de
+   * lo que ha ido pasando con ellas. Los dos vienen de `app/fuentes/`, la misma
+   * tuberia que usa la maqueta de datos: una sola regla decide si un archivo es
+   * nuevo, es otra version, es una copia o se fue.
+   */
+  inventario: null,
+  bitacora: null,
 };
 
 /**
@@ -93,18 +102,6 @@ function fechaReferencia() {
     return Temporal.referencia({ origen: Temporal.ORIGEN.PERIODO, ...Temporal.limitesDelAnio(f.anio) });
   }
   return Temporal.referencia();
-}
-
-/** Huella de contenido de un archivo, para reconocer el mismo dato con otro nombre. */
-function huellaBytes(datos) {
-  const b = datos instanceof Uint8Array ? datos
-    : typeof datos === 'string' ? new TextEncoder().encode(datos) : new Uint8Array(0);
-  let h1 = 0x811c9dc5, h2 = 0x01000193;
-  for (let i = 0; i < b.length; i++) {
-    h1 = Math.imul(h1 ^ b[i], 0x01000193) >>> 0;
-    h2 = Math.imul(h2 + b[i] + i, 0x85ebca6b) >>> 0;
-  }
-  return b.length + '-' + h1.toString(16) + h2.toString(16);
 }
 
 /* ───────────────────────── Carga y gestion de archivos ───────────────────────── */
@@ -169,8 +166,13 @@ function reiniciar() {
     fuentes: [], filas: [], relaciones: [], noEvaluables: [], porId: new Map(),
     archivos: [], analisis: null, visibles: [], relVisibles: [],
     seleccionado: null, relacionSeleccionada: null, instanteRecorrido: null, nombreProyecto: '',
+    // «Empezar de nuevo» tambien olvida lo observado: si no, el siguiente
+    // archivo se compararia contra un origen que ya no existe y se anunciarian
+    // bajas de cosas que nadie quito.
+    inventario: null, bitacora: null,
   });
   $('listaFuentes').innerHTML = '';
+  const bit = $('bitacoraFuentes'); if (bit) bit.innerHTML = '';
   $('cuentaFuentes').textContent = '0';
   ocultarAviso();
   for (const p of ['panelFuentes', 'panelResumen', 'panelExplorar', 'panelDetalle', 'panelExportar', 'panelInforme']) mostrar(p, false);
@@ -235,42 +237,183 @@ if (typeof window !== 'undefined') {
  *   · mismo nombre + otro contenido   -> es una version corregida. Se REEMPLAZA
  *                                        y se avisa, porque perder la version
  *                                        nueva en silencio seria peor.
- *   · otro nombre  + mismo contenido  -> se avisa de que es un duplicado, pero
- *                                        se conserva: puede ser deliberado
- *                                        (una copia de otro contratista).
+ *   · otro nombre  + mismo contenido  -> es una COPIA y NO se incorpora. Se
+ *                                        dice por que, con el nombre del que
+ *                                        ya estaba.
  *
  * Se identifica por nombre y no por ruta porque el navegador no da la ruta, y
  * no por el contenido solo porque el nombre es lo que la usuaria reconoce.
+ *
+ * ══ QUIEN DECIDE ESTO, DESDE LA ETAPA DE EVOLUCION ════════════════════════
+ *
+ * Ya no lo decide este archivo. Lo decide `app/fuentes/`, la misma tuberia que
+ * usa la maqueta de datos: proveedor -> observar -> comparar -> plan.
+ *
+ * Por que se cambio algo que funcionaba: habia DOS implementaciones de la
+ * misma regla, una aqui y otra en `inventario.js`. Dos copias de una regla se
+ * separan; y la de aqui era la mas pobre —no distinguia MOVIDA de DUPLICADA ni
+ * sabia decir «no se puede comparar»—. Ademas `app/fuentes/` tenia un solo uso
+ * real, y una abstraccion con un solo uso es deuda. Ahora tiene dos, y la
+ * aplicacion gana la huella SHA-256 (con respaldo declarado) en vez de un FNV
+ * de 64 bits propio.
+ *
+ * ══ LO QUE SI CAMBIA, Y POR QUE ══════════════════════════════════════════
+ *
+ * Un archivo con OTRO nombre y EXACTAMENTE el mismo contenido ya no se suma.
+ * Antes se conservaba, razonando que podia ser «una copia deliberada de otro
+ * contratista». Pero si los bytes son identicos no es otra obra: es el MISMO
+ * KMZ, con los mismos trazados y los mismos identificadores. Sumarlo contaba
+ * cada uno de esos PMT dos veces, y con ellos sus distancias y sus relaciones.
+ * Medido: con dos archivos de 2 trazados y una copia de uno de ellos, la
+ * aplicacion decia 7 PMT donde hay 5.
+ *
+ * Ademas contradecia un invariante ya escrito: «si el contenido ya se conocia y
+ * su ruta anterior sigue ahi, es una copia y NO se procesa». La regla estaba
+ * aprobada; lo que fallaba era que la aplicacion no la aplicaba.
+ *
+ * No se descarta en silencio: se dice cual es el archivo que ya estaba, y queda
+ * en la bitacora.
  */
 async function anadirArchivos(files, acumular) {
   const preparados = await Ingesta.prepararArchivos(files);
-  const nuevos = acumular ? [...estado.fuentes] : [];
-  const notas = [];
 
-  for (const p of preparados) {
-    const fuente = { clase: 'archivo', nombre: p.nombre, datos: p.datos, rechazado: p.rechazado,
-      huella: p.datos ? huellaBytes(p.datos) : null };
-    const i = nuevos.findIndex((x) => x.clase === 'archivo' && x.nombre === fuente.nombre);
-    if (i >= 0) {
-      if (nuevos[i].huella === fuente.huella) {
-        notas.push(`«${p.nombre}» ya estaba cargado y es idéntico: no se duplicó.`);
-        continue;
-      }
-      notas.push(`«${p.nombre}» ya estaba cargado con otro contenido: se reemplazó por la versión nueva.`);
-      nuevos[i] = fuente;
-      continue;
+  // Lo que la usuaria pide ver es la UNION de lo que ya habia con lo que acaba
+  // de elegir, y lo nuevo manda cuando coincide el nombre. Se observa esa union
+  // entera porque la tuberia compara un origen COMPLETO contra el anterior: si
+  // solo se le pasara lo nuevo, daria por eliminado todo lo demas.
+  const previas = acumular ? estado.fuentes.filter((x) => x.clase === 'archivo') : [];
+  const porNombre = new Map();
+  for (const f of previas) porNombre.set(f.nombre, { nombre: f.nombre, datos: f.datos, rechazado: f.rechazado });
+  for (const p of preparados) porNombre.set(p.nombre, { nombre: p.nombre, datos: p.datos, rechazado: p.rechazado });
+
+  // Un archivo que ni siquiera se pudo leer no tiene contenido que comparar, y
+  // no se le inventa una huella: va aparte, conservando su motivo.
+  const conDatos = [...porNombre.values()].filter((x) => x.datos);
+  const sinDatos = [...porNombre.values()].filter((x) => !x.datos);
+
+  const proveedor = Fuentes.proveedorLocal(conDatos.map((x) => ({ name: x.nombre, datos: x.datos })));
+  const { observadas, rechazadas } = await Fuentes.observarTodo(proveedor);
+  const comparacion = Fuentes.compararInventarios(estado.inventario, observadas);
+
+  const notas = [];
+  // Las copias no entran en el analisis. Se recogen aqui para poder excluirlas.
+  const copias = new Set();
+  for (const c of comparacion.cambios) {
+    const n = c.fuente?.nombre ?? c.antes?.nombre ?? '—';
+    if (c.tipo === Fuentes.CAMBIO.MODIFICADA) {
+      notas.push(`«${n}» ya estaba cargado con otro contenido: se reemplazó por la versión nueva.`);
+    } else if (c.tipo === Fuentes.CAMBIO.DUPLICADA) {
+      copias.add(c.fuente.ruta);
+      notas.push(`«${n}»: ${c.motivo}. No se incorporó: contaría los mismos PMT dos veces.`);
+    } else if (c.tipo === Fuentes.CAMBIO.MOVIDA) {
+      notas.push(`«${n}»: ${c.motivo}.`);
+    } else if (c.tipo === Fuentes.CAMBIO.INDETERMINADA) {
+      notas.push(`«${n}»: ${c.motivo}.`);
     }
-    const gemelo = nuevos.find((x) => x.huella && x.huella === fuente.huella);
-    if (gemelo) notas.push(`«${p.nombre}» tiene el mismo contenido que «${gemelo.nombre}». Se conserva igualmente.`);
-    nuevos.push(fuente);
   }
+  // «Ya estaba y es idéntico» solo se dice de lo que la usuaria ACABA de
+  // elegir: repetirlo de todo lo que ya tenia cargado seria ruido.
+  const elegidosAhora = new Set(preparados.map((p) => p.nombre));
+  for (const c of comparacion.cambios) {
+    if (c.tipo === Fuentes.CAMBIO.SIN_CAMBIO && elegidosAhora.has(c.fuente.nombre)) {
+      notas.push(`«${c.fuente.nombre}» ya estaba cargado y es idéntico: no se duplicó.`);
+    }
+  }
+  for (const r of rechazadas) notas.push(`«${r.nombre}» no se pudo leer: ${r.motivo}`);
+
+  // Una copia no entra ni en el analisis ni en el inventario: nunca se
+  // incorporo, asi que la proxima vez que aparezca vuelve a ser una copia.
+  const observadasUtiles = observadas.filter((o) => !copias.has(o.ruta));
+  const porRuta = new Map(observadasUtiles.map((o) => [o.ruta, o]));
+  const nuevos = [
+    ...conDatos.filter((x) => !copias.has(x.nombre)).map((x) => ({
+      clase: 'archivo', nombre: x.nombre, datos: x.datos, rechazado: null,
+      huella: porRuta.get(x.nombre)?.huella?.valor ?? null,
+      huellaDetalle: porRuta.get(x.nombre)?.huella ?? null,
+    })),
+    ...sinDatos.map((x) => ({ clase: 'archivo', nombre: x.nombre, datos: null, rechazado: x.rechazado, huella: null })),
+  ];
+  // Los proyectos abiertos no son archivos del origen y no pasan por aqui.
+  if (acumular) nuevos.push(...estado.fuentes.filter((x) => x.clase !== 'archivo'));
+
+  estado.inventario = Fuentes.crearInventario(observadasUtiles);
+  anotarEnBitacora(comparacion, 'Archivos de este equipo');
   await reanalizar(nuevos, { notas });
+}
+
+/**
+ * BITACORA: qué entró, qué se reemplazó y qué se fue, con su hora.
+ *
+ * La aplicacion ya avisaba de cada cosa, pero el aviso se iba con la siguiente
+ * accion. Media hora despues nadie puede decir si ese KMZ se reemplazo o se
+ * añadio dos veces. La bitacora lo conserva.
+ *
+ * NO inventa quién lo hizo: sin identidad corporativa, el actor es
+ * `equipo-local`, y asi se enseña.
+ */
+function anotarEnBitacora(comparacion, proveedor) {
+  // `anotarSincronizacion` NO muta: devuelve una bitacora nueva. Hay que
+  // quedarse con la que devuelve o no se anota nada.
+  estado.bitacora = Fuentes.anotarSincronizacion(estado.bitacora ?? Fuentes.crearBitacora(), {
+    proveedor, comparacion,
+    plan: Fuentes.planDeActualizacion(comparacion),
+    difRegistros: null,
+  });
+  pintarBitacora();
+}
+
+/** Etiquetas en castellano llano para los hechos de la bitacora. */
+const ETIQUETA_HECHO = {
+  [Fuentes.HECHO.SINCRONIZACION]: 'Revisión',
+  [Fuentes.HECHO.FUENTE_NUEVA]: 'Entró',
+  [Fuentes.HECHO.FUENTE_MODIFICADA]: 'Cambió',
+  [Fuentes.HECHO.FUENTE_RETIRADA]: 'Se quitó',
+  [Fuentes.HECHO.FUENTE_MOVIDA]: 'Cambió de sitio',
+  [Fuentes.HECHO.FUENTE_RECHAZADA]: 'No se procesó',
+  [Fuentes.HECHO.ERROR]: 'Error',
+};
+
+/**
+ * Pinta la bitacora. Va PLEGADA: no es lo que se viene a mirar, pero tiene que
+ * poder consultarse sin volver a cargar nada.
+ */
+function pintarBitacora() {
+  const caja = $('bitacoraFuentes');
+  if (!caja) return;
+  const b = estado.bitacora;
+  const anotaciones = b ? Fuentes.ultimas(b, 60) : [];
+  if (!anotaciones.length) { caja.innerHTML = ''; return; }
+  const hora = (iso) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'medium' });
+  };
+  caja.innerHTML = `<details class="mas-detalle" id="detalleBitacora">
+    <summary>Historial de cambios en las fuentes (${num(anotaciones.length)})</summary>
+    <p class="pista-campo">Lo hecho en este equipo, en esta sesión. Sin identidad corporativa
+      conectada no se puede saber quién fue, así que el autor consta como <b>equipo-local</b>.</p>
+    <div class="bitacora">${anotaciones.map((a) => `<div class="bit-fila">
+      <span class="bit-hora mono">${esc(hora(a.momento))}</span>
+      <span class="pastilla p-gris">${esc(ETIQUETA_HECHO[a.hecho] ?? a.hecho)}</span>
+      <span class="crece">${esc(a.resumen)}</span>
+      <span class="bit-actor pista-campo">${esc(a.actor)}</span>
+    </div>`).join('')}</div>
+  </details>`;
 }
 
 /** Quita una fuente del conjunto y vuelve a analizar, sin recargar la pagina. */
 async function quitarArchivo(nombre) {
   const quedan = estado.fuentes.filter((x) => x.nombre !== nombre);
   if (!quedan.length) return reiniciar();
+  // Quitar es un cambio del origen como cualquier otro: se compara la union
+  // que queda contra el inventario anterior, y la baja se anota.
+  const conDatos = quedan.filter((x) => x.clase === 'archivo' && x.datos);
+  if (estado.inventario) {
+    const proveedor = Fuentes.proveedorLocal(conDatos.map((x) => ({ name: x.nombre, datos: x.datos })));
+    const { observadas } = await Fuentes.observarTodo(proveedor);
+    const comparacion = Fuentes.compararInventarios(estado.inventario, observadas);
+    estado.inventario = Fuentes.crearInventario(observadas);
+    anotarEnBitacora(comparacion, 'Archivos de este equipo');
+  }
   await reanalizar(quedan, { notas: [`Se quitó «${nombre}» del análisis.`] });
 }
 
