@@ -40,6 +40,10 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
 - `INVESTIGACION_MICROSOFT_EPM.md` — qué es posible con SharePoint, Graph, Power Automate, SPFx,
   Teams y Azure, con documentación oficial; cuatro arquitecturas comparadas y una recomendación.
 - `DESCUBRIMIENTO_EPM.md` — las 22 preguntas exactas para TI y para el área que gobierna la contratación, cada una con qué decisión desbloquea.
+- `INFORME_ETAPA_EVOLUCION.md` — el informe de cierre de la etapa integral de evolución: qué se
+  encontró en la experiencia de uso, qué se cambió, qué NO se decidió y por qué, el comparador
+  espacial, el diagnóstico cartográfico, el rendimiento medido y un **recorrido manual de 8 pruebas**
+  para Leydi. Con resumen en lenguaje no técnico al final.
 - `MODELO_INFORMACION_Y_PUBLICACION.md` — a dónde tiene que llegar el modelo de datos (PMT base,
   activaciones, documentos como objetos, geometría versionada) **y qué no puede cambiar al migrar**;
   y la publicación corporativa en cuatro ejes que NO son el mismo: técnicamente posible ·
