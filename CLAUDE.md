@@ -40,6 +40,10 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
 - `INVESTIGACION_MICROSOFT_EPM.md` — qué es posible con SharePoint, Graph, Power Automate, SPFx,
   Teams y Azure, con documentación oficial; cuatro arquitecturas comparadas y una recomendación.
 - `DESCUBRIMIENTO_EPM.md` — las 22 preguntas exactas para TI y para el área que gobierna la contratación, cada una con qué decisión desbloquea.
+- `MODELO_INFORMACION_Y_PUBLICACION.md` — a dónde tiene que llegar el modelo de datos (PMT base,
+  activaciones, documentos como objetos, geometría versionada) **y qué no puede cambiar al migrar**;
+  y la publicación corporativa en cuatro ejes que NO son el mismo: técnicamente posible ·
+  licenciado · permitido por TI · confirmado en EPM.
 - `ESCALABILIDAD.md` — medida real de 460 a 10.000 PMT, a partir de cuándo hay que actuar, y
   (§4 bis) por qué el modelo de zonas **no** es más lento: lo que crece es la salida, no el cálculo.
 - `INFORME_ETAPA3.md` — qué se entregó en la Etapa 3, qué defectos se cerraron, qué NO se hizo y por
@@ -235,7 +239,43 @@ Carpeta local: `C:\Users\lmarinza\PLATAFORMA_PMTs` (subcarpetas: `01_KMZ_Entrada
   **O** ocultar históricos nunca borra un hecho · **P** una coincidencia operativa exige DOS partes
   coordinables · **Q** lo que no se puede situar no se cuenta como atendible · **R** reactivar no
   decide si un documento anterior sigue valiendo.
-- Pruebas: **259 motor + 258 app + 77 de navegador real + 18 compuertas**.
+- Pruebas: **259 motor + 258 app + 85 de navegador real + 18 compuertas**.
+
+### Etapa de evolución (integral: producto, UX, cartografía, fuentes) — ENTREGADA, no aprobada
+> Principio que la ordena: **la plataforma no debe mostrar todo lo que sabe, sino lo necesario en
+> cada contexto para poder decidir.** Reducir ruido NUNCA es quitar capacidades ni rigor: lo que
+> sale de la vista principal sigue existiendo, a un clic.
+
+- **Una cifra que no se puede pulsar es un cartel.** `app/ui/bandeja.js`: tres cifras que SON el
+  filtro (articulación · coincidencia espacial · no evaluable). La cifra y el filtro son la misma
+  cosa, así que no pueden contradecirse. Una ficha en cero **no se esconde**: se atenúa.
+- **Un ajuste activo escondido = un filtro activo invisible.** Todo lo que se pliegue tiene que
+  delatarse en su rótulo cuando está puesto (el recorte del recorrido lo hace; la línea de alcance
+  vive FUERA del plegable y aparece en cuanto hay filtro o día).
+- **El recorrido es el MANDO del mapa**, no otro panel: va pegado a él. Arriba lo de cada uso;
+  velocidad, ir-a-fecha y tramo en «Ajustar el recorrido».
+- **El cierre parcial es LÍNEA CONTINUA** con núcleo claro (confirmado por la responsable
+  funcional). La discontinua sugería «tramo incompleto». La forma distingue, no solo el color.
+- **El mapa va limpio por defecto**: sin zonas de influencia ni conectores de medición. Al elegir
+  una relación AÍSLA los dos, dibuja sus zonas y el disco inscrito de la superposición, y encuadra
+  a los dos. `dejarDeInspeccionar()` lo devuelve todo.
+- **Una acción sobre «esto de aquí» no puede tirar el encuadre.** Crear o reactivar conserva zoom y
+  centro (`conservarVista`); hay prueba que compara antes/después.
+- **Las tres columnas de relación son FIJAS y ni se ofrecen** en el selector de columnas: la
+  lectura operativa no puede quedarse sola afirmando. Un selector no deshace una garantía.
+- **Una sola regla decide qué es un archivo nuevo.** `app/fuentes/` (vía `app/fuentes/index.js`)
+  es ahora el único sitio: la copia que había en `app.js` se borró. Huella **SHA-256** con respaldo
+  declarado. **Una copia byte a byte NO se incorpora** — antes se sumaba y contaba sus PMT dos
+  veces (7 donde había 5). No se descarta en silencio: se dice y queda en la **bitácora**, cuyo
+  actor es `equipo-local` porque no hay identidad corporativa.
+- **El texto de un archivo nunca es marcado.** Había HTML literal en una tarjeta; la insignia pasó
+  a ser un parámetro propio. Hay prueba que recorre la pantalla buscando marcado a la vista.
+- `npm run comparador <carpeta-o-zip>` reproduce la comparación 120 m vs zonas 240 m. Sobre los 8
+  KMZ reales: **174 / 247 / 248** (vigente / candidato / QGIS histórico), 0 solo-vigente, 73
+  añadidas (16 con traslape). **Sigue sin haber ganador: es decisión de negocio de EPM.**
+- `npm run demo` genera un KMZ de demostración con datos inventados (gitignored).
+- Rendimiento medido en navegador real con los 460 PMT: abrir 190 ms · cargar y analizar 1058 ms ·
+  filtrar 93 ms · aislar una relación 68 ms · informe 101 ms. Cero errores de JavaScript.
 
 ### Otras reglas de la 2.4
 - `motor/src/geo/plano-local.js` añade `desproyectar()` (inverso del plano ENU, iterando
