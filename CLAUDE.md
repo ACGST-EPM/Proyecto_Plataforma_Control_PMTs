@@ -34,10 +34,15 @@ Automatizar el control de los Planes de Manejo de Tránsito (PMTs): capturar dat
   confundirse con la aplicación.
 
 ### Documentos de referencia (leer antes de decidir algo grande)
-- `TRASPASO_A_COPILOT_COWORK.md` — **LÉELO PRIMERO SI ESTÁS RETOMANDO EL PROYECTO EN OTRA
-  HERRAMIENTA.** Qué es la plataforma, en qué estado quedó, qué falta, qué archivos hacen falta de
-  verdad (3,8 MB sin `node_modules` ni `.git`), qué puede salir mal y cómo seguir. Incluye el prompt
-  de arranque y la comprobación del primer día.
+- `TRASPASO_Y_CONTINUIDAD.md` — **LÉELO PRIMERO SI ESTÁS RETOMANDO EL PROYECTO EN UNA SESIÓN
+  NUEVA.** Qué es la plataforma, en qué estado quedó, qué falta, qué archivos hacen falta de verdad
+  (3,8 MB sin `node_modules` ni `.git`), qué puede salir mal y cómo seguir. Incluye el prompt de
+  arranque y la comprobación posterior a la mudanza.
+  ⚠️ **El desarrollo se traslada al repositorio personal `LJMARINZA/Proyecto_Plataforma_Control_PMTs`**
+  (clon en `C:\Users\Leidy Marin Zapata\DESARROLLOS_EPM\...`), por una restricción corporativa
+  sobre GitHub. El repositorio nuevo **empieza sin historia y sin `01_KMZ_Entrada.zip`**: es la única
+  forma limpia de no arrastrar el riesgo de datos reales. En él la rama principal es la que GitHub
+  Desktop cree por defecto (`main`), no `Proyecto_Plataforma_Control_PMTs`.
 - `BASELINE.md` — qué versión produjo qué, con qué reglas, y cómo reproducirlo desde un clon limpio.
 - `ARQUITECTURA_OPERATIVA.md` — proceso AS-IS y TO-BE, modelo de fuentes, estrategia incremental,
   persistencia y flujo de automatización. Todo marcado CONFIRMADO / HIPÓTESIS / VALIDAR EPM.

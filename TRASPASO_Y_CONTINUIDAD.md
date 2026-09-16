@@ -1,14 +1,37 @@
-# Traspaso del desarrollo a Copilot · Cowork
+# Traspaso y continuidad del desarrollo
 
 > **Para qué sirve este archivo.** Es el único documento que hay que leer para retomar este
-> proyecto en otra herramienta. Contiene qué se construyó, en qué punto quedó, qué falta, qué puede
-> salir mal y cómo seguir. Está escrito para que lo lea una persona **y** para que lo lea la IA que
-> vaya a continuar el trabajo.
+> proyecto, en la herramienta que sea. Contiene qué se construyó, en qué punto quedó, qué falta, qué
+> puede salir mal y cómo seguir. Está escrito para que lo lea una persona **y** para que lo lea la
+> IA que vaya a continuar el trabajo.
 >
-> **Fecha de corte:** 15 de septiembre de 2026 · **Último commit:** `31e9150`
-> **Origen:** rama `Proyecto_Plataforma_Control_PMTs` del repositorio
-> `ACGST-EPM/Proyecto_Plataforma_Control_PMTs`
-> **Destino:** `D:\OneDrive - Grupo EPM\Leydi Marin EPM\PROYECTOS_COPILOT\PLATAFORMA_PMTs`
+> **Fecha de corte:** 16 de septiembre de 2026 · **Último commit del origen:** `b10082c`
+
+## Por qué existe este documento
+
+El desarrollo se hizo en Claude Code sobre el repositorio corporativo
+`ACGST-EPM/Proyecto_Plataforma_Control_PMTs`. Ese repositorio dejó de estar disponible para el
+trabajo diario por una restricción corporativa sobre el uso de GitHub.
+
+Hubo un intento de trasladarlo a Copilot · Cowork sobre una carpeta de OneDrive corporativo. **Ese
+traslado se abortó.**
+
+**Destino definitivo:** repositorio personal `LJMARINZA/Proyecto_Plataforma_Control_PMTs`, clonado
+en el PC personal en `C:\Users\Leidy Marin Zapata\DESARROLLOS_EPM\Proyecto_Plataforma_Control_PMTs`.
+
+## Lo que este cambio arregla, y no es menor
+
+El repositorio anterior es **PÚBLICO** y su historia contiene `01_KMZ_Entrada.zip` con datos de obra
+reales (commit `4de5969`). Ese ha sido el **riesgo abierto número 1** desde la Etapa 3, y no se
+podía cerrar: borrar la historia exige autorización expresa y, además, **no bastaría** — lo que
+estuvo público hay que darlo por copiado.
+
+**Un repositorio nuevo empieza sin historia.** Es la única forma limpia de dejar atrás ese problema.
+Por eso el paquete de arranque que acompaña a este documento **no incluye ese archivo**, y por eso
+el repositorio nuevo **debe ser privado**.
+
+Lo que NO cambia: el riesgo histórico del repositorio antiguo sigue existiendo mientras ese
+repositorio siga público. Lo que se consigue es **no arrastrarlo**.
 
 ---
 
@@ -290,13 +313,14 @@ Las 22 preguntas completas están en `DESCUBRIMIENTO_EPM.md`.
 
 | # | Riesgo | Estado |
 |---|---|---|
-| **1** | **El repositorio de GitHub es PÚBLICO y contiene datos de obra reales** (`01_KMZ_Entrada.zip`, commit `4de5969`) | **abierto.** Borrar la historia exige autorización expresa y **no bastaría**: lo que estuvo público hay que darlo por copiado |
+| **1** | **El repositorio ANTERIOR es PÚBLICO y su historia contiene datos de obra reales** (`01_KMZ_Entrada.zip`, commit `4de5969`) | **abierto, y no se cierra mudándose.** Lo que estuvo público hay que darlo por copiado. Lo que sí se consigue: **el repositorio nuevo no lo arrastra**, porque empieza sin historia. Decisión pendiente de EPM: ¿se hace privado el antiguo, o se acepta por escrito? |
 | **2** | **No hay autenticación, y un sitio estático no puede darla** | **abierto.** Una clave escrita en HTML o JavaScript no es una protección débil: **no es una protección** |
 | **3** | **El desfase cartográfico (eje E) no se pudo comprobar** | **abierto.** Requiere el PC de EPM |
 | **4** | La lectura operativa sigue siendo provisional | abierto a propósito |
 | **5** | El modelo vigente deja fuera 74 relaciones que el anterior veía | abierto — decisión 1 de §5.1 |
 | **6** | El catálogo de contratos viaja embebido | abierto |
-| **7** | **NUEVO — al salir de GitHub se pierde el control de versiones** | ver §8.4 |
+| **7** | **El repositorio nuevo es personal, no corporativo** | **a validar con EPM.** Trabajar el desarrollo en una cuenta personal resuelve la restricción de herramienta, pero no es lo mismo que tener el visto bueno para que el código de un proceso de EPM viva ahí. Conviene decirlo y que quede dicho, no descubrirlo después |
+| **8** | **Los KMZ reales quedan fuera del repositorio** | **es lo correcto**, pero significa que hay que guardarlos aparte y no perderlos. Carpeta propia, fuera del clon |
 
 ---
 
@@ -343,7 +367,7 @@ Generador_KMZ.html            ← captura estandarizada, autocontenido
 | Archivo | Por qué |
 |---|---|
 | `CLAUDE.md` | **el más importante.** Memoria del proyecto: todas las decisiones y sus motivos |
-| `TRASPASO_A_COPILOT_COWORK.md` | este archivo |
+| `TRASPASO_Y_CONTINUIDAD.md` | este archivo |
 | `GUIA_LEYDI.md` | la guía sin tecnicismos |
 | `BASELINE.md` | qué versión produjo qué · **la compuerta L lo exige** |
 | `INFORME_ETAPA_EVOLUCION.md` | el cierre de la última etapa, con el recorrido de 8 pruebas |
@@ -393,71 +417,108 @@ trabajo queda limpia.
 | **Comparador espacial** y **generador de demo** | **SÍ** |
 | Pruebas de **navegador real** | no (hace falta Playwright + Chromium) |
 
-Si Cowork deja ejecutar `npm ci` dentro de `motor/`, se recupera todo. Si no, se pierde la
-comprobación de navegador — que es la que atrapa los defectos que solo se ven al abrir la
-aplicación, así que **conviene intentarlo**.
+Con `npm ci` dentro de `motor/` se recupera todo, incluida la comprobación de navegador — que es la
+que atrapa los defectos que solo se ven al abrir la aplicación. En un PC personal con Node
+instalado no hay obstáculo para hacerlo, así que **conviene hacerlo**.
 
 ---
 
-# PARTE 8 · CÓMO CONTINUAR EN COWORK
+# PARTE 8 · CÓMO PONER TODO EN EL PC Y SEGUIR
 
-## 8.1 · Estructura recomendada de la carpeta
+## 8.1 · Los cuatro pasos de la mudanza
 
-```
-PLATAFORMA_PMTs\
-├── app\                  (fuente)
-├── motor\                (sin node_modules)
-├── herramientas\
-├── dist\
-│   └── Plataforma_PMTs.html
-├── _archivo\             ← aquí los documentos históricos
-├── CLAUDE.md
-├── TRASPASO_A_COPILOT_COWORK.md
-├── ... (documentos vivos)
-├── package.json
-├── contratos_db.json
-├── proceso_pmt_qgis.py
-└── Generador_KMZ.html
-```
-
-Los datos reales, **aparte**:
-```
-...\PLATAFORMA_PMTs_DATOS\      ← KMZ reales, proyectos .pmt.json
-```
-
-## 8.2 · Comprobación del primer día
-
-**No empieces a desarrollar sin hacer esto.** Son cinco preguntas cuya respuesta cambia la forma de
-trabajar, y solo se pueden responder probando. Pídele a la IA de Cowork, una por una:
-
-| # | Pídele esto | Qué estás averiguando |
+| # | Paso | Detalle |
 |---|---|---|
-| **1** | «Lista los archivos de la carpeta y dime cuántos hay» | si **ve** los archivos |
-| **2** | «Muéstrame las primeras 30 líneas de `CLAUDE.md`» | si **lee** archivos |
-| **3** | «Ejecuta `node --version`» | si puede **ejecutar** comandos |
-| **4** | «Ejecuta `npm run test:app` y dime cuántas pruebas pasan» | si la **red de seguridad funciona** → debe decir **258 · 258 pasan** |
-| **5** | «Ejecuta `node herramientas/compuertas.mjs`» | si las compuertas corren → **15 o 18 de 18** |
+| **1** | **Poner el repositorio nuevo en privado** | En GitHub: *Settings* → abajo del todo, *Change repository visibility* → **Private**. Hazlo **antes** de subir nada |
+| **2** | **Descomprimir el paquete de arranque** dentro de la carpeta del clon | `C:\Users\Leidy Marin Zapata\DESARROLLOS_EPM\Proyecto_Plataforma_Control_PMTs` |
+| **3** | **Publicar con GitHub Desktop** | Aparecerán ~144 archivos como cambios. Mensaje: `Punto de partida: continuidad del desarrollo desde el repositorio anterior` → *Commit* → *Push origin* |
+| **4** | **Comprobar que quedó bien** | Ver §8.3 |
 
-### Según lo que salga
+> **La rama.** El repositorio anterior usaba una rama llamada `Proyecto_Plataforma_Control_PMTs`, no
+> `main`, porque el PC corporativo no manejaba bien ramas secundarias. **Esa razón ya no aplica.**
+> En el repositorio personal, usa la rama que GitHub Desktop te haya dado por defecto —
+> normalmente `main`— y no crees una rama con el nombre del proyecto. Una sola rama, la principal.
+> Si en algún documento ves referencias a la rama antigua, es historia, no una instrucción.
 
-- **Si 4 y 5 funcionan** → estás en el mejor escenario. Se puede desarrollar con la misma red de
-  seguridad que hasta ahora.
-- **Si 3 funciona pero 4 no** → falta algo de la copia. Revisa que estén `app/test/`, `motor/src/` y
-  `package.json`.
-- **Si 3 no funciona** (no hay Node) → **esto es lo importante de saber pronto.** Sin Node no se
-  puede regenerar `dist/Plataforma_PMTs.html`, así que **cualquier cambio en `app/` no llegaría a la
-  aplicación**. En ese caso ver §8.5.
+## 8.2 · Si el paquete de arranque no te llegara
 
-## 8.3 · El ciclo de trabajo, y por qué este orden
+El repositorio anterior es **público**, así que se puede descargar desde cualquier PC, sin
+credenciales corporativas:
+
+```
+https://github.com/ACGST-EPM/Proyecto_Plataforma_Control_PMTs/archive/refs/heads/Proyecto_Plataforma_Control_PMTs.zip
+```
+
+**Si usas esta vía, borra `01_KMZ_Entrada.zip` antes de publicar.** Es el archivo con datos de obra
+reales, y el objetivo de empezar de cero es precisamente no volver a meterlo en un repositorio.
+
+## 8.3 · Comprobación después de mudarte
+
+Abre **`dist\Plataforma_PMTs.html`** con doble clic. Debería:
+
+- abrir sin errores;
+- dejarte cargar un KMZ y ver los trazados en el mapa;
+- enseñar las tres cifras arriba, y que al pulsarlas filtren.
+
+Si además puedes ejecutar comandos, la comprobación completa es:
+
+| Comando | Qué debe decir |
+|---|---|
+| `node --version` | v18 o superior |
+| `npm run test:app` | **258 · 258 pasan · 0 fallan** |
+| `node herramientas/compuertas.mjs` | **18 de 18** |
+
+**La compuerta I debería pasar ahora**, y por un motivo que importa: comprueba que no haya datos
+operativos versionados, y en el repositorio nuevo ya no los hay.
+
+## 8.4 · Cómo trabajo yo a partir de ahora
+
+Hay dos formas, y **la primera es claramente mejor**.
+
+### A · Claude Code en tu PC personal — recomendada
+
+Instalas Claude Code en tu PC y abres la carpeta del proyecto. A partir de ahí trabajo
+**directamente sobre tus archivos locales**: leo, edito, ejecuto las pruebas, reconstruyo la
+aplicación y te digo qué salió. Exactamente como hasta ahora, pero sin que nada tenga que pasar por
+GitHub.
+
+Ventajas frente a lo que teníamos:
+
+- **Todo queda en tu PC**, que es lo que pediste.
+- **GitHub deja de ser necesario para trabajar.** Pasa a ser solo tu copia de seguridad: subes
+  cuando quieras, con GitHub Desktop.
+- **Más rápido**: no hay un contenedor remoto de por medio.
+- Sin restricciones corporativas: es tu equipo y tu cuenta.
+
+Claude Code existe como **aplicación de escritorio para Windows**, además de como herramienta de
+terminal. Con la aplicación de escritorio **no necesitas usar la terminal**.
+
+### B · Claude Code en la web, apuntando a tu repositorio personal
+
+Conectas tu cuenta **personal** de GitHub en claude.ai (Ajustes → Conectores) y abres una sesión
+nueva contra `LJMARINZA/Proyecto_Plataforma_Control_PMTs`. Funciona, pero:
+
+- sigue dependiendo de GitHub para todo;
+- el trabajo vive en un contenedor remoto, no en tu PC;
+- cada sesión empieza sin memoria: hay que darle este documento.
+
+### Lo que NO se puede hacer
+
+**La sesión donde se hizo todo este desarrollo no se puede reapuntar** a otro repositorio. Está
+atada al repositorio corporativo desde que se creó. Cualquier continuación es una **sesión nueva**,
+y por eso existe este documento: para que una sesión nueva no empiece a ciegas.
+
+## 8.5 · El ciclo de trabajo, y por qué este orden
 
 ```
 1. PEDIR el cambio, describiendo el PROBLEMA, no la solución
-2. La IA lo implementa en app/ o motor/
+2. Se implementa en app/ o motor/
 3. npm run test:app        ← ¿rompí algo?
 4. npm run construir:app   ← llevar el cambio a la aplicación
 5. node herramientas/compuertas.mjs   ← ¿rompí una garantía del producto?
 6. Abrir dist/Plataforma_PMTs.html y MIRARLO
 7. Solo entonces, dar por bueno
+8. GitHub Desktop: Commit + Push
 ```
 
 **El paso 4 es el que más se olvida y el que más problemas causa.** `dist/Plataforma_PMTs.html` es
@@ -465,43 +526,9 @@ un archivo **generado**: cambiar `app/app.js` no cambia la aplicación hasta que
 
 **El paso 6 tampoco se puede saltar.** Varios defectos de este proyecto —el mapa en blanco, el HTML
 literal en una tarjeta, el botón de quitar filtros escondido— **solo se ven abriendo la aplicación**.
-Las pruebas de Node no los detectan.
 
-## 8.4 · El control de versiones
-
-Al salir de GitHub se pierde el poder volver atrás. Tres opciones, de mejor a peor:
-
-**A. `git` en local (recomendada).** `git` y GitHub **no son lo mismo**: GitHub es un servicio web
-externo; `git` es un programa que guarda versiones **en tu propio disco**, sin conectarse a nada.
-Si el PC corporativo lo permite:
-```
-git init
-git add .
-git commit -m "Punto de partida: traspaso desde Claude Code"
-```
-Y después de cada cambio que funcione, otro `commit`. **Recupera la compuerta I** (que comprueba
-que no haya datos operativos versionados) y te deja volver atrás en cualquier momento.
-
-**B. El historial de versiones de OneDrive.** Ya lo tienes, sin hacer nada. Es por archivo, no por
-conjunto de cambios, pero sirve para deshacer un desastre puntual.
-
-**C. Copias fechadas.** Antes de un cambio grande, duplicar la carpeta como
-`PLATAFORMA_PMTs_2026-09-15`. Rudimentario pero funciona.
-
-> **Hagas lo que hagas, ten al menos una de las tres antes de tocar código.**
-
-## 8.5 · Si no hay Node en Cowork
-
-Sería la limitación más seria, pero **no bloquea todo**:
-
-| Sí se puede | No se puede |
-|---|---|
-| Diseñar, auditar, revisar código, escribir documentación | regenerar `dist/Plataforma_PMTs.html` |
-| Preparar los cambios en `app/` para aplicarlos después | ejecutar pruebas |
-| Analizar los datos y preparar decisiones | ejecutar las compuertas |
-
-Alternativa: hacer los cambios en Cowork y **una vez a la semana** reconstruir y probar en un
-entorno que sí tenga Node. No es cómodo, pero conserva la red de seguridad.
+**El paso 8 es tu red.** Con GitHub Desktop, cada `Commit` es un punto al que puedes volver. Haz uno
+cada vez que algo funcione, no solo al final del día.
 
 ## 8.6 · Cómo pedir las cosas
 
@@ -511,15 +538,14 @@ Lo que mejor ha funcionado en todo este proyecto:
 - ✅ «Cuando filtro por contrato no veo cuántos PMT quedaron fuera, y me confunde.»
 - ❌ «Añade un contador a la derecha del filtro.»
 
-La primera deja que quien implementa encuentre la causa; la segunda ya decidió el remedio y a veces
-el remedio equivocado.
+La primera deja encontrar la causa; la segunda ya decidió el remedio, y a veces el equivocado.
 
 **Di qué te pasó, no qué crees que falla.**
 - ✅ «Creé una vigencia nueva y el mapa se fue a ver todo Medellín; tuve que buscar la obra otra vez.»
 
 **Cuando confirmes una regla del negocio, dilo con esas palabras.** Tu frase *«cada PMT y sus
-reactivaciones tienen una resolución independiente»* se implementó y quedó **citada literalmente** en
-el código. Así, dentro de seis meses, se sabe de dónde salió la regla.
+reactivaciones tienen una resolución independiente»* se implementó y quedó **citada literalmente**
+en el código. Así, dentro de seis meses, se sabe de dónde salió la regla.
 
 **Exige que te digan qué NO se hizo.** Una entrega que solo cuenta lo que funcionó es una entrega a
 medias.
@@ -548,11 +574,11 @@ medias.
 
 | # | Paso | Por qué primero |
 |---|---|---|
-| **1** | Organizar la carpeta según §8.1 y mover lo histórico a `_archivo\` | trabajar sobre algo limpio |
-| **2** | Hacer la comprobación del primer día (§8.2) | sin saber qué se puede ejecutar, no se puede planear |
-| **3** | Establecer control de versiones (§8.4) | **antes** de tocar código |
-| **4** | Hacer el recorrido de 8 pruebas de `INFORME_ETAPA_EVOLUCION.md` §19 | comprobar que lo entregado funciona en el PC corporativo |
-| **5** | Decidir el punto 1 de §5.1 (la regla de 120 m) | es la única decisión que cambia cifras |
+| **1** | **Poner el repositorio nuevo en PRIVADO** | antes de subir nada. Es la única de las cinco que es irreversible si se hace mal |
+| **2** | **Descomprimir el paquete y publicar** con GitHub Desktop (§8.1) | tener el punto de partida guardado |
+| **3** | **Abrir `dist\Plataforma_PMTs.html` y comprobar que funciona** (§8.3) | confirmar que la mudanza no rompió nada |
+| **4** | Hacer el **recorrido de 8 pruebas** de `INFORME_ETAPA_EVOLUCION.md` §19 | comprobar lo entregado con los ojos, no solo con las pruebas |
+| **5** | Decidir el punto 1 de §5.1 (**la regla de 120 m**) | es la única decisión pendiente que cambia cifras |
 
 **No empieces por añadir funcionalidad.** Lo entregado está probado pero **no aprobado**, y hay una
 auditoría independiente pendiente. Construir encima de algo sin revisar multiplica el trabajo si
@@ -562,22 +588,22 @@ aparece un defecto de fondo.
 
 # PARTE 11 · PROMPT DE ARRANQUE
 
-Copia esto tal cual en tu primer mensaje en Cowork:
+Copia esto tal cual en el primer mensaje de cualquier sesión nueva:
 
 ```
 Vas a continuar el desarrollo de la Plataforma de Control y Articulación de PMTs
 del Grupo EPM. Todo el contexto está en esta carpeta.
 
 ANTES DE HACER O PROPONER NADA:
-1. Lee TRASPASO_A_COPILOT_COWORK.md completo. Es el documento de traspaso.
+1. Lee TRASPASO_Y_CONTINUIDAD.md completo. Es el documento de traspaso.
 2. Lee CLAUDE.md. Es la memoria del proyecto: cada decisión y su motivo.
 3. Confírmame que leíste los dos y dime en tus palabras:
    - qué hace la plataforma
    - en qué estado está
    - cuáles son los tres invariantes que te parecen más fáciles de romper sin darse cuenta
 
-DESPUÉS, ejecuta la comprobación del primer día (sección 8.2) y dime el resultado
-de las cinco pruebas, sin adornarlo: si algo no funciona, quiero saberlo.
+DESPUÉS, ejecuta la comprobación de la sección 8.3 y dime el resultado sin
+adornarlo: si algo no funciona, quiero saberlo.
 
 CÓMO TRABAJAMOS:
 - Respóndeme siempre en español. No soy programadora: explícame cada cambio en
@@ -602,8 +628,8 @@ el auditor** de lo que se construya allí.
 | Rol | Qué significa | Cómo pedírmelo |
 |---|---|---|
 | **Diseñador** | convertir un problema en un plan que respete los invariantes | «Necesito que la plataforma haga X. ¿Cómo lo plantearías sin romper nada?» |
-| **Auditor** | revisar lo que produzca Cowork buscando el defecto, no la confirmación | pégame el código o el resumen: «¿esto rompe algo?» |
-| **Redactor de instrucciones** | escribirte la petición exacta para Cowork | «Prepárame la instrucción para pedir esto» |
+| **Auditor** | revisar lo que se produzca buscando el defecto, no la confirmación | pégame el código o el resumen: «¿esto rompe algo?» |
+| **Redactor de instrucciones** | escribirte la petición exacta para la sesión que ejecute | «Prepárame la instrucción para pedir esto» |
 | **Memoria** | por qué se tomó cada decisión | «¿por qué la línea del cierre parcial es continua?» |
 | **Traductor** | explicarte qué significa lo que te respondieron | pégame la respuesta |
 
@@ -611,7 +637,7 @@ el auditor** de lo que se construya allí.
 
 ```
 1. Me cuentas el problema
-2. Te devuelvo un PLAN y la INSTRUCCIÓN exacta para Cowork
+2. Te devuelvo un PLAN y la INSTRUCCIÓN exacta para la sesión que ejecute
 3. La ejecutas allí
 4. Me traes el resultado: qué cambió, qué dijeron las pruebas, qué viste en pantalla
 5. Lo AUDITO y te digo si está bien, si falta algo o si rompió una garantía
